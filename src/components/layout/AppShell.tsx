@@ -1,4 +1,6 @@
+import { Suspense } from "react";
 import { NavLink, Outlet } from "react-router-dom";
+import { Loader2 } from "lucide-react";
 import {
   Activity,
   Award,
@@ -100,7 +102,15 @@ export function AppShell() {
 
         <main className="flex-1 overflow-y-auto">
           <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <Outlet />
+            <Suspense
+              fallback={
+                <div className="flex h-64 items-center justify-center text-muted-foreground">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                </div>
+              }
+            >
+              <Outlet />
+            </Suspense>
           </div>
         </main>
       </div>

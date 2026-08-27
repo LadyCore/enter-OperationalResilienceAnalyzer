@@ -1,13 +1,27 @@
+import { lazy } from "react";
 import { AppShell } from "@/components/layout/AppShell";
-import { AnalysisPage } from "@/pages/AnalysisPage";
-import { CompetenciesPage } from "@/pages/CompetenciesPage";
-import { Dashboard } from "@/pages/Dashboard";
-import { OrganizationPage } from "@/pages/OrganizationPage";
-import { PeoplePage } from "@/pages/PeoplePage";
-import { ProcessesPage } from "@/pages/ProcessesPage";
-import { SimulationPage } from "@/pages/SimulationPage";
-import { TasksPage } from "@/pages/TasksPage";
 import NotFound from "./pages/NotFound";
+
+// Route-level code splitting: each page is loaded on demand, keeping the
+// initial module graph (and first paint) small.
+const Dashboard = lazy(() => import("@/pages/Dashboard").then((m) => ({ default: m.Dashboard })));
+const OrganizationPage = lazy(() =>
+  import("@/pages/OrganizationPage").then((m) => ({ default: m.OrganizationPage }))
+);
+const ProcessesPage = lazy(() =>
+  import("@/pages/ProcessesPage").then((m) => ({ default: m.ProcessesPage }))
+);
+const TasksPage = lazy(() => import("@/pages/TasksPage").then((m) => ({ default: m.TasksPage })));
+const CompetenciesPage = lazy(() =>
+  import("@/pages/CompetenciesPage").then((m) => ({ default: m.CompetenciesPage }))
+);
+const PeoplePage = lazy(() => import("@/pages/PeoplePage").then((m) => ({ default: m.PeoplePage })));
+const AnalysisPage = lazy(() =>
+  import("@/pages/AnalysisPage").then((m) => ({ default: m.AnalysisPage }))
+);
+const SimulationPage = lazy(() =>
+  import("@/pages/SimulationPage").then((m) => ({ default: m.SimulationPage }))
+);
 
 export const routers = [
   {
