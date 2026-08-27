@@ -63,13 +63,24 @@ export default {
 					border: 'hsl(var(--sidebar-border))',
 					ring: 'hsl(var(--sidebar-ring))'
 				}
-			},
-			borderRadius: {
-				lg: 'var(--radius)',
-				md: 'calc(var(--radius) - 2px)',
-				sm: 'calc(var(--radius) - 4px)'
-			},
-			keyframes: {
+				},
+				fontFamily: {
+					sans: ['var(--font-sans)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+					display: ['var(--font-display)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+					mono: ['var(--font-mono)', 'ui-monospace', 'monospace'],
+				},
+				risk: {
+					low: 'hsl(var(--risk-low))',
+					medium: 'hsl(var(--risk-medium))',
+					high: 'hsl(var(--risk-high))',
+					critical: 'hsl(var(--risk-critical))',
+				},
+				borderRadius: {
+					lg: 'var(--radius)',
+					md: 'calc(var(--radius) - 2px)',
+					sm: 'calc(var(--radius) - 4px)'
+				},
+				keyframes: {
 				'accordion-down': {
 					from: {
 						height: '0'
