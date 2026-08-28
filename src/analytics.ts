@@ -56,7 +56,14 @@ async function loadEventDefinitions(): Promise<EventDefinition[]> {
 }
 
 export function bootstrapGeneratedSiteAnalytics(): void {
-  bootstrapEnterAnalytics();
+  // Telemetry bootstrap is non-essential: if it ever fails it must never throw
+  // into main.tsx and prevent the app from mounting (blank preview, empty #root).
+  try {
+    bootstrapEnterAnalytics();
+  } catch (err) {
+    console.error("Failed to bootstrap analytics:", err);
+    return;
+  }
 
   void loadEventDefinitions().then((definitions) => {
     if (definitions.length > 0) {
