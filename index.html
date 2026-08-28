@@ -25,7 +25,28 @@
 </head>
 
 <body>
-  <div id="root"></div>
+  <div id="root">
+    <!-- Static loading shell: visible immediately so the page never appears
+         blank while the app bundle is being served/loaded. React replaces it
+         on first render. -->
+    <div
+      style="display:flex;min-height:100vh;align-items:center;justify-content:center;background:#f7f8fb;color:#182437;font-family:'IBM Plex Sans',ui-sans-serif,system-ui,sans-serif;"
+    >
+      <div style="text-align:center;">
+        <div
+          style="width:28px;height:28px;margin:0 auto 14px;border:3px solid rgba(24,36,55,0.15);border-top-color:#182437;border-radius:50%;animation:ora-spin 0.8s linear infinite;"
+        ></div>
+        <p style="margin:0;font-size:13px;font-weight:600;letter-spacing:0.03em;">ORA &middot; Loading&hellip;</p>
+      </div>
+    </div>
+    <style>
+      @keyframes ora-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </div>
   <!-- IMPORTANT: DO NOT REMOVE THIS SCRIPT TAG OR THIS VERY COMMENT! -->
   <script type="module" src="/src/main.tsx"></script>
 </body>
