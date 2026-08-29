@@ -3,146 +3,178 @@
 ## Context
 
 ORA hoy es una demo de una sola organización (Meridian Group) persistida en `localStorage`
-(clave `ora-data-v1`), sin concepto de "organización activa"; "Reset Demo Data" reemplaza
-todo el dataset. El objetivo es que ORA funcione como prototipo aplicable a organizaciones
-reales: incorporar organizaciones desde archivos Excel/CSV (flujo `archivo → carga → mapeo →
-validación → creación → análisis`) sin tocar la organización demo.
+(`ora-data-v1`), sin "organización activa"; "Reset Demo Data" reemplaza todo el dataset. Objetivo:
+ORA deja de ser una demo y se convierte en un prototipo que trabaja con organizaciones reales.
+Flujo principal: `archivo Excel/CSV → carga → mapeo → validación → normalización → creación de
+organización → análisis ORA`. La organización demo permanece como dataset independiente: nunca se
+modifica ni elimina por operaciones sobre organizaciones reales.
 
-Decisiones confirmadas con el usuario:
-1. **Persistencia en Enter Cloud (backend) desde el inicio** — no localStorage para los datos.
-2. **Login email y contraseña** — cada usuario tiene sus organizaciones; al primer login se crea
-   automáticamente su organización demo (Meridian Group). "Reset Demo Data" resetea solo esa demo.
-3. **Entidad Área completa** — nueva entidad `Area`; personas y tareas pueden pertenecer a un área.
-4. **Relaciones jerárquicas** — campo `Person.managerId` (responsable/superior).
-5. **Estructura de importación: tabla plana** — una fila por persona; listas múltiples separadas
-   por `;` en la celda (tareas, competencias, funciones, procesos).
+Decisiones confirmadas (spec del usuario):
+1. **Persistencia Enter Cloud desde el inicio** (no localStorage como almacenamiento principal).
+2. **Auth email + contraseña** (login y signup, auto-confirmación).
+3. **Multi-organización**: cada usuario tiene sus organizaciones y selecciona cuál analizar.
+4. **Demo**: al primer login sin organizaciones, se crea automáticamente Meridian Group (por usuario).
+5. **Reset Demo Data**: actúa solo sobre la demo. **Demo nunca eliminable** (también en la capa de datos).
+6. **Área** como entidad independiente. **Jerarquía**: `Person.managerId` refiere a persona de la misma org.
+7. **Importación tabla plana** (una fila = una persona; listas múltiples separadas por `;`).
 
-Principio rector: la demo queda intacta como dataset independiente y protegida (nunca eliminable).
+Sin ampliar alcance: sin SAP/Workday/APIs externas/SSO/roles complejos/múltiples hojas. La arquitectura
+(importer + capa `api.ts`) queda preparada para esas extensiones, sin implementarlas.
 
 ---
 
-## 1. Esquema de datos (migración Enter Cloud)
+## 1. Esquema de datos (una única migración)
 
-Una sola migración (tool `supabase_migration`). Todas las tablas en `public`, con **RLS habilitada
-en la misma migración** y políticas que aíslan por usuario. Ids `text` generados en el cliente
-(reutilizando `uid()` de `src/lib/id.ts`); `organization_id` con `on delete cascade`.
+Tablas en `public`, **RLS habilitada en la misma migración**, ids `text` generados en cliente con
+`uid()` (`src/lib/id.ts`), `organization_id` con `on delete cascade`:
 
-- `profiles` (id uuid PK → auth.users, email, created_at) + **trigger `handle_new_user`** que inserta
-  el perfil al hacer signup (convención Enter Cloud).
-- `organizations` (id text PK, name, description, is_demo bool, owner_id uuid → auth.users, created_at).
-- `areas` (id text PK, organization_id, name, description).
-- `competencies` (id text PK, organization_id, name, description).
-- `roles` (id text PK, organization_id, name, description, competency_ids text[]).
-- `people` (id text PK, organization_id, name, role_id → roles, area_id → areas, manager_id → people,
-  is_active bool, competency_ids text[], task_ids text[]).
+- `profiles` (id uuid PK → auth.users, email, created_at) + **trigger `handle_new_user`** (inserta
+  perfil al signup).
+- `organizations` (id text PK, name, description, **is_demo bool**, owner_id uuid → auth.users, created_at).
+- `areas`, `competencies`, `roles` (id text PK, organization_id, name, description; roles con
+  competency_ids text[]).
+- `people` (id text PK, organization_id, name, **employee_id text**, role_id → roles, area_id → areas,
+  manager_id → people, is_active bool, competency_ids text[], task_ids text[]).
 - `processes` (id text PK, organization_id, name, description, criticality).
-- `org_functions` (id text PK, organization_id, process_id → processes, name, description, criticality)
-  — nombre `org_functions` para evitar choque conceptual con funciones SQL; el frontend sigue usando
-  `db.functions`.
+- `org_functions` (id text PK, organization_id, process_id → processes, name, description, criticality).
 - `tasks` (id text PK, organization_id, function_id → org_functions, area_id → areas, name, description,
   criticality, is_documented bool, system_name, required_competency_ids text[]).
 
-**RLS:** función security-definer `user_org_ids()` → ids de organizaciones con `owner_id = auth.uid()`.
+**Protecciones de datos (demo y concurrencia):**
+- Trigger **`prevent_demo_org_delete`**: `BEFORE DELETE ON organizations` lanza excepción si
+  `is_demo = true` → la demo no puede eliminarse ni por UI ni por API/consulta directa.
+- Índice único parcial **`organizations_one_demo_per_owner`**:
+  `CREATE UNIQUE INDEX ... ON organizations (owner_id) WHERE is_demo IS TRUE;` → garantiza a nivel de
+  base que cada usuario tiene a lo sumo una demo (bloquea carreras por pestañas/procesos simultáneos).
+
+**RLS:** función security-definer `user_org_ids()` → `SELECT id FROM organizations WHERE owner_id = auth.uid()`.
 Políticas: `organizations` → `owner_id = auth.uid()`; tablas hijas → `organization_id = any(user_org_ids())`;
 `profiles` → `id = auth.uid()`.
 
-**Nota clave sobre PK:** los ids del seed son fijos (`org_meridian`, `p_ana`…). Como las PK son globales,
-la demo por usuario se crea **re-mapeando todos los ids del seed** (nueva util `remapSeedIds`) para evitar
-conflictos entre usuarios. La importación ya genera ids frescos con `uid()`.
+**Auth:** `supabase_configure_auth` — signup email con auto-confirmación.
 
-**Auth:** `supabase_configure_auth` — habilitar signup por email con auto-confirmación (para no depender
-de verificar email en pruebas).
-
-**Verificación post-migración:** `supabase_get_table_schema` sobre cada tabla nueva confirmando RLS
-habilitada y políticas listadas (chequeo obligatorio de la guía Enter Cloud).
+**Verificación obligatoria post-migración:** `supabase_get_table_schema` sobre cada tabla nueva →
+existencia, columnas, FK, RLS habilitada y políticas listadas. Corregir en el mismo turno si falta.
 
 ---
 
 ## 2. Modelo y seed (frontend)
 
-- `src/types/index.ts`: nueva interfaz `Area`; `Db.areas: Area[]`; `CollectionKey` += `"areas"`;
-  `Person.managerId?: string; areaId?: string`; `Task.areaId?: string`; `Organization.isDemo?: boolean`.
-- `src/data/seed.ts`: `seedDb.areas = []`; `SEED_ORG.isDemo = true`; nueva util
-  `remapSeedIds(seedDb): Db` que reasigna todos los ids y referencias (org, procesos, funciones,
-  tareas, roles, personas, competencias) preservando nombres/relaciones.
-- `src/integrations/supabase/client.ts` y `types.ts` **no se tocan** (los reescribe el framework tras
-  la migración; las queries se tipan contra el `Database` regenerado).
+- `src/types/index.ts`: interfaz `Area`; `Db.areas: Area[]`; `CollectionKey` += `"areas"`;
+  `Person.managerId?: string; areaId?: string; employeeId?: string`; `Task.areaId?: string`;
+  `Organization.isDemo?: boolean`.
+- `src/data/seed.ts`: `seedDb.areas = []`; `SEED_ORG.isDemo = true`; util **`remapSeedIds(seedDb)`**
+  que reasigna TODOS los ids y referencias internas (org, procesos, funciones, tareas, roles, personas,
+  competencias) preservando nombres y relaciones — los ids fijos del seed nunca se insertan tal cual.
+- `src/integrations/supabase/client.ts` y `types.ts` no se editan (los reescribe el framework).
 
 ---
 
-## 3. Store: multi-organización + backend (`src/store/OraContext.tsx`)
+## 3. Capa de datos `src/integrations/ora/api.ts`
 
-Refactor manteniendo el API actual **sincrónico** para que los formularios existentes no cambien:
+Capa entre el modelo `Db` de ORA y las tablas del backend:
+- Mapeo colección ↔ tabla; serialización/deserialización; inyección de `organization_id`.
+- CRUD por fila; carga completa de una organización; creación respetando FKs en orden
+  **processes → org_functions → tasks → areas → competencies → roles → people**.
+- Personas: insert inicial con `manager_id` nulo + **segundo pase** para resolver jerarquías.
+- **`removeOrganization(id)`**: en esta capa, si la org es `is_demo` → rechazar (no depende solo de UI).
+- **`ensureDemoOrgIfNeeded(userId)`**: crea la demo solo si el usuario no tiene ninguna; la creación
+  es idempotente (el índice único parcial protege contra carreras; ante error de unicidad se relee).
 
-- **Sesión:** `supabase.auth.onAuthStateChange` registrado **antes** de `getSession` (regla auth.md);
-  estado `user`, `session`, `isLoading`. Sin callbacks async en el listener; llamadas a `supabase`
-  dentro del callback diferidas con `setTimeout(…, 0)`.
-- **Estado:** `organizations` (resumen `{id, name, isDemo}` del usuario), `activeOrganizationId`
-  (persistido en `localStorage` clave `ora-active-org`), y el `Db` completo de la org activa en memoria.
-- **Demo por usuario:** al cargar sesión, si el usuario no tiene organizaciones → `addOrganization(remapSeedIds(seedDb))`.
-- **Mutaciones (API existente, sin cambios para los llamadores):** `setOrganization`, `upsert`,
-  `remove`, `resetToSeed` aplican en memoria y persisten en backend mediante **cola de escrituras
+---
+
+## 4. Store `src/store/OraContext.tsx` (refactor)
+
+- **Sesión:** `supabase.auth.onAuthStateChange` registrado **antes** de `getSession`; sin callbacks
+  async dentro del listener; llamadas a `supabase` dentro del callback diferidas con `setTimeout(…,0)`.
+  Estado: `user`, `session`, `isLoading`.
+- **Estado de orgs:** `organizations` (resumen `{id, name, isDemo}`), `activeOrganizationId`
+  (persistido solo como preferencia de UI en `localStorage` clave `ora-active-org`; los datos de las
+  organizaciones viven exclusivamente en backend), `db` = org activa cargada en memoria.
+- **API actual sincrónico mantenido** (formularios existentes no cambian): `setOrganization`, `upsert`,
+  `remove`, `resetToSeed` → aplican en memoria y persisten vía `api.ts` con **cola de escrituras
   encadenada** (preserva orden; toast de error si falla).
-- **Nuevas acciones:** `addOrganization(db)` (inserta org + filas en orden de FKs y activa),
-  `setActiveOrganization(id)` (carga filas de la org), `removeOrganization(id)` (rechaza `isDemo`),
-  `signOut`.
-- **`resetToSeed`:** borra la org demo del usuario (cascade) y la recrea desde `remapSeedIds(seedDb)`;
-  si la org activa no es la demo no hace nada.
-- Nuevo módulo `src/integrations/ora/api.ts`: mapeo colección↔tabla, serialización (inyecta
-  `organization_id`), CRUD por fila, load de org completa, y orden de insert para `addOrganization`
-  (procesos → funciones → tareas → áreas → competencias → roles → personas con `manager_id` nulo y
-  segundo pase de update para las jerarquías).
+- **Nuevas acciones:** `addOrganization(db)` (crea en backend y activa), `setActiveOrganization(id)`
+  (carga filas), `removeOrganization(id)` (rechaza demo), `signOut`.
+- **Demo al primer login:** tras restaurar sesión, si `organizations` está vacío →
+  `ensureDemoOrgIfNeeded` (crea `remapSeedIds(seedDb)`) y la activa.
+- **`resetToSeed`:** solo si la org activa es demo → elimina la demo del usuario (borrado + recreación
+  con nuevos ids vía `remapSeedIds`) y **actualiza `activeOrganizationId` al nuevo id**; nunca toca
+  organizaciones importadas.
 
 ---
 
-## 4. Auth UI
+## 5. Auth UI
 
-- `src/components/auth/AuthGate.tsx`: mientras restaura sesión → loader; sin sesión → `LoginPage`;
-  con sesión → la app (envuelve el router en `src/App.tsx`).
-- `src/components/auth/LoginPage.tsx`: email + contraseña con tabs login/signup;
+- `src/components/auth/AuthGate.tsx`: restaurando → loader; sin sesión → `LoginPage`; con sesión → app
+  (envuelve el router en `src/App.tsx`).
+- `src/components/auth/LoginPage.tsx`: email + contraseña, tabs login/signup;
   `signUp` con `emailRedirectTo: ${window.location.origin}/`; `signInWithPassword`.
 - `AppShell`: dropdown de usuario (email) con "Cerrar sesión".
 
 ---
 
-## 5. Importación Excel/CSV (nuevo)
+## 6. Importación (nuevo)
 
-- **Dependencia:** agregar `xlsx` (parsea xlsx y csv).
-- `src/lib/importer/types.ts`: campos ORA mapeables (`persona`, `area`, `responsable`, `rol`,
-  `proceso`, `funcion`, `tarea`, `competencia`, `documentada`, `activo`, `criticidad`);
-  `ColumnMapping`; `ParsedFile`; `ValidationSummary`; `ImportIssue`.
-- `src/lib/importer/parseFile.ts`: lee el archivo (ArrayBuffer → `XLSX.read`), primera hoja,
-  header row → `{ columns, rows }`.
-- `src/lib/importer/mapping.ts`: `suggestMapping(columns)` con coincidencia por palabras clave
-  es/en (ej. "empleado|persona|nombre"→persona, "sector|área|departamento"→area,
-  "responsable|superior|manager|jefe"→responsable, "puesto|rol|cargo"→rol…) + mapeo manual editable.
-- `src/lib/importer/validate.ts`: dado rows+mapeo → resumen con: cantidad de registros, personas
-  detectadas, áreas, roles/puestos, relaciones jerárquicas (personas con responsable), registros
-  incompletos (fila sin nombre, o persona sin ningún atributo), posibles duplicados (mismo nombre
-  normalizado en varias filas), y columnas de origen sin mapear / valores no utilizables.
-- `src/lib/importer/buildOrganization.ts`: datos normalizados + `{name, description}` → `Db` completo
-  (ids con `uid()`); procesos/funciones default `important`, tareas default `standard` salvo columna
-  `criticidad` mapeada; personas → `taskIds` desde la columna tareas de cada fila.
-- `src/pages/ImportOrganizationPage.tsx` (wizard 4 pasos, ruta `/import` lazy en `router.tsx`):
-  1. nombre + descripción + archivo; 2. mapeo de columnas (select por campo ORA, sugerencia automática);
-  3. validación (resumen + issues, botón "volver al mapeo" para corregir); 4. confirmar →
-  `addOrganization(db)` → navega al dashboard (la org queda activa y usa todo el análisis existente).
+**Dependencia:** `xlsx`.
+
+Módulos `src/lib/importer/`:
+- `types.ts`: campos ORA mapeables: `persona`, `employeeId` (identificador de persona), `area`,
+  `responsable`, `managerId` (identificador del responsable), `rol`, `roleId`, `proceso`, `funcion`,
+  `tarea`, `competencia`, `documentada`, `activo`, `criticidad`. `ColumnMapping`, `ParsedFile`,
+  `ValidationSummary`, `ImportIssue`.
+- `parseFile.ts`: `XLSX.read(ArrayBuffer)` → primera hoja → header row → `{columns, rows}`.
+- `mapping.ts`: **`suggestMapping(columns)`** por palabras clave es/en, p. ej.:
+  `empleado|persona|nombre`→persona; `legajo|employee id|employeeid|identificador`→employeeId;
+  `sector|área|departamento|department`→area; `responsable|superior|manager|jefe`→responsable;
+  `responsableid|managerid`→managerId; `puesto|rol|cargo|job title`→rol; etc. Edición manual total.
+  No asumir que todas las columnas existen.
+- `validate.ts`: construye el resumen de validación (ver §8) a partir de rows+mapeo; aplica la
+  **regla estricta una fila = una persona** (filas con mismo nombre → posibles duplicados marcados,
+  nunca ignorados silenciosamente ni fusionados).
+- `buildOrganization.ts`: normalización `archivo → datos normalizados → entidades ORA → relaciones`:
+  - Una única entidad por valor dentro de la org (áreas, roles, procesos, funciones, tareas,
+    competencias) — sin duplicados porque el mismo valor aparezca en varias filas.
+  - **Resolución de responsables:** si hay `managerId` de origen → resolver por identificador; si no,
+    por nombre; **varias coincidencias → marca "ambigua" (bloqueante, exige revisión antes de
+    importar)**; responsable inexistente → problema de validación. Nunca resolver silenciosamente.
+  - Ids nuevos con `uid()`; procesos/funciones default `important`, tareas default `standard` salvo
+    columna `criticidad`; valores de `criticidad` no reconocidos → "valores no utilizables".
 
 ---
 
-## 6. UI de organización activa
+## 7. Wizard `/import` (4 pasos)
 
-- `src/components/layout/AppShell.tsx`: **switcher de organizaciones** en el header del sidebar
-  (dropdown con las orgs del usuario + "Incorporar organización" → `/import`).
-- `src/pages/OrganizationPage.tsx`: listado de organizaciones con selector activo, botón
-  "Incorporar organización", eliminar org no-demo (con diálogo de confirmación reutilizando
-  `ConfirmDeleteDialog`), y conteo de áreas en "Model in numbers".
-- `src/pages/Dashboard.tsx`: botón "Reset demo data" visible **solo cuando la org activa es la demo**
-  (garantiza que nunca toca datos reales).
-- `src/pages/PeoplePage.tsx` + `src/components/entities/PersonFormDialog.tsx`: columnas/campos
-  "Área" y "Responsable" (select de personas, sin auto-referencia).
-- `src/components/entities/TaskFormDialog.tsx`: campo "Área" (para no perder `areaId` al editar
-  tareas importadas).
+`src/pages/ImportOrganizationPage.tsx` (ruta lazy en `router.tsx`):
+1. Nombre + descripción + archivo Excel/CSV.
+2. Mapeo de columnas (sugerencias automáticas + edición manual).
+3. **Validación y resumen** (ver §8) + resolución de referencias ambiguas/inexistentes mediante
+   selección manual; botón "volver al mapeo".
+4. Confirmación → `buildOrganization` → `addOrganization(db)` → activa org → dashboard.
+
+---
+
+## 8. Validación (resumen mostrado antes de crear)
+
+- Cantidad de registros; personas detectadas; áreas; roles; procesos; funciones; tareas; competencias;
+  relaciones jerárquicas; registros incompletos (filas sin nombre → **excluidas de la creación** y
+  contabilizadas); posibles duplicados; referencias inexistentes; referencias ambiguas; columnas sin
+  mapear; valores no utilizables.
+- Problemas bloqueantes (duplicados marcados, referencias inexistentes/ambiguas) impiden confirmar
+  hasta resolverse; el resto se muestra informativo.
+
+---
+
+## 9. UI multi-organización y personas/tareas
+
+- `AppShell`: **selector de organización** (dropdown en sidebar) con las orgs del usuario +
+  "+ Incorporar organización" (`/import`); la org activa determina los datos que muestra ORA.
+- `OrganizationPage`: listar organizaciones; cambiar org activa; incorporar; eliminar orgs no-demo
+  (la demo no ofrece opción de eliminación). Conteo de áreas en "Model in numbers".
+- `Dashboard`: "Reset demo data" visible solo cuando la org activa es la demo.
+- `PeoplePage` + `PersonFormDialog`: columnas/campos **Área** y **Responsable** (select entre personas
+  de la misma org, excluye a la propia persona).
+- `TaskFormDialog`: campo **Área** (no perder `areaId` al editar tareas importadas).
 
 ---
 
@@ -150,66 +182,53 @@ Refactor manteniendo el API actual **sincrónico** para que los formularios exis
 
 | Archivo | Acción |
 |---|---|
-| Migración Enter Cloud (`supabase_migration`) | crear 9 tablas + RLS + trigger profiles + `user_org_ids()` |
+| Migración (`supabase_migration`) | 9 tablas + RLS + `user_org_ids()` + trigger `handle_new_user` + trigger `prevent_demo_org_delete` + índice único parcial demo |
 | `supabase_configure_auth` | signup email auto-confirm |
-| `src/types/index.ts`, `src/data/seed.ts` | tipos (Area, managerId, areaId, isDemo) + `remapSeedIds` |
-| `src/store/OraContext.tsx` | refactor multi-org + sesión + persistencia backend |
-| `src/integrations/ora/api.ts` | nuevo: capa CRUD ↔ tablas |
+| `src/types/index.ts`, `src/data/seed.ts` | Area, employeeId, managerId, areaId, isDemo + `remapSeedIds` |
+| `src/integrations/ora/api.ts` | nuevo: CRUD ↔ tablas, orden FKs, protección demo, `ensureDemoOrgIfNeeded` |
+| `src/store/OraContext.tsx` | refactor sesión + multi-org + persistencia + cola de escrituras |
 | `src/components/auth/{AuthGate,LoginPage}.tsx` | nuevos |
 | `src/lib/importer/*` (5 archivos) | nuevos |
 | `src/pages/ImportOrganizationPage.tsx` + `src/components/import/*` | nuevos |
 | `src/router.tsx`, `src/App.tsx` | rutas `/login`, `/import`, AuthGate |
-| `src/components/layout/AppShell.tsx`, `src/pages/OrganizationPage.tsx`, `src/pages/Dashboard.tsx`, `src/pages/PeoplePage.tsx`, `src/components/entities/{PersonFormDialog,TaskFormDialog}.tsx` | ajustes UI |
-| `package.json` | agregar `xlsx` |
+| `src/components/layout/AppShell.tsx`, `src/pages/{OrganizationPage,Dashboard,PeoplePage}.tsx`, `src/components/entities/{PersonFormDialog,TaskFormDialog}.tsx` | ajustes UI |
+| `package.json` | `xlsx` |
 
 Reutilizados: `uid()` (`src/lib/id.ts`), `cloneDb` (`src/data/seed.ts`), `ConfirmDeleteDialog`,
-`PageHeader`, `MultiSelect`, `Field`, componentes shadcn existentes, `useOra()` (mismo API para
-formularios), funciones de análisis (`src/lib/analysis.ts`) sin cambios.
+`PageHeader`, `MultiSelect`, `Field`, componentes shadcn, `useOra()` (mismo API para formularios),
+análisis (`src/lib/analysis.ts`, `src/lib/simulation.ts`) sin cambios funcionales.
 
 ---
 
 ## Implementation checklist
 
-- [ ] Migración única: crear `profiles`, `organizations`, `areas`, `competencies`, `roles`, `people`,
-      `processes`, `org_functions`, `tasks` + trigger `handle_new_user` + `user_org_ids()` + RLS en cada
-      tabla con políticas por usuario.
-- [ ] Verificar con `supabase_get_table_schema` que RLS está habilitada y las políticas existen en cada
-      tabla nueva; corregir en el mismo turno si falta.
-- [ ] `supabase_configure_auth`: email signup habilitado con auto-confirmación.
-- [ ] `src/types/index.ts`: `Area`, `Db.areas`, `CollectionKey`+`areas`, `Person.managerId`/`areaId`,
-      `Task.areaId`, `Organization.isDemo`.
-- [ ] `src/data/seed.ts`: `areas: []`, `isDemo: true`, util `remapSeedIds` (re-mapea todos los ids y
-      referencias).
-- [ ] `src/integrations/ora/api.ts`: mapeo colección↔tabla, CRUD por fila, load de org, `addOrganization`
-      con orden de FKs (manager_id en segundo pase).
-- [ ] `src/store/OraContext.tsx`: sesión (listener antes de getSession), multi-org, org activa persistida
-      (`ora-active-org`), API sincrónico + cola de escrituras, demo automática en primer login,
-      `resetToSeed` solo sobre la demo.
-- [ ] Auth UI: `AuthGate` (loader / login / app) + `LoginPage` (login y signup) + signOut en AppShell.
-- [ ] Dep `xlsx` agregada; `src/lib/importer/*` implementado (parse, mapping con sugerencia, validate,
-      buildOrganization).
-- [ ] `ImportOrganizationPage` wizard 4 pasos funcional de punta a punta (archivo → mapeo → validación
-      → creación) + ruta `/import` lazy.
-- [ ] Switcher de organizaciones en AppShell; OrganizationPage con listado/switch/import/eliminar
-      no-demo; Dashboard con "Reset demo data" solo en demo.
-- [ ] PeoplePage/PersonFormDialog (Área, Responsable) y TaskFormDialog (Área) actualizados.
+- [ ] Migración única con 9 tablas + `handle_new_user` + `user_org_ids()` + `prevent_demo_org_delete` + índice único parcial demo + RLS con políticas por usuario en cada tabla.
+- [ ] `supabase_get_table_schema` por tabla: existencia, columnas, FK, RLS y políticas verificadas; corregir en el turno si falta.
+- [ ] `supabase_configure_auth`: signup email auto-confirm.
+- [ ] Tipos y seed: `Area`, `Db.areas`, `CollectionKey`+areas, `Person.employeeId/managerId/areaId`, `Task.areaId`, `Organization.isDemo`, `remapSeedIds`.
+- [ ] `api.ts`: mapeo colección↔tabla, CRUD, load org, create ordenado por FKs (manager en 2º pase), `removeOrganization` rechaza demo, `ensureDemoOrgIfNeeded` idempotente.
+- [ ] Store: sesión (listener antes de getSession, sin async en callback), multi-org, `activeOrganizationId` como preferencia local, API sincrónico + cola de escrituras, demo al primer login, `resetToSeed` (solo demo, actualiza activeOrganizationId).
+- [ ] AuthGate + LoginPage (login/signup) + signOut en AppShell.
+- [ ] Dep `xlsx`; `src/lib/importer/*` completo (parse, mapping es/en, validate con regla fila=persona, buildOrganization con normalización y resolución de responsables sin ambigüedad).
+- [ ] Wizard `/import` 4 pasos de punta a punta (incluye resolución de referencias en paso 3 y bloqueo por issues bloqueantes).
+- [ ] Switcher en AppShell; OrganizationPage (listar/cambiar/incorporar/eliminar no-demo); Dashboard "Reset demo data" solo en demo.
+- [ ] PeoplePage/PersonFormDialog (Área, Responsable sin auto-referencia) y TaskFormDialog (Área).
 - [ ] `pnpm run check` y `pnpm run build` en verde.
 
 ## Verification checklist
 
-- [ ] Positivo: al primer login se crea la org demo (Meridian Group) y el dashboard se ve idéntico a la
-      demo actual; cambiar nombre/descripción persiste en backend (recargar la página conserva el dato).
-- [ ] Positivo: importar un xlsx/csv de ejemplo (columnas `Empleado, Sector, Responsable, Puesto,
-      Tareas, Competencias`) crea la org, queda activa y el dashboard/analysis/simulation la procesan.
-- [ ] Mapeo: con columnas con nombres distintos a los de ORA la sugerencia acierta o permite corregir
-      manualmente antes de importar.
-- [ ] Validación: el resumen muestra registros, personas, áreas, roles, relaciones jerárquicas,
-      incompletos, duplicados y columnas sin mapear; volver al mapeo y reintentar funciona.
-- [ ] Separación: la org demo nunca puede eliminarse; `removeOrganization` sobre una importada la borra
-      sin afectar a la demo; "Reset demo data" visible solo en demo y restaura solo Meridian Group.
-- [ ] Multi-usuario: con una segunda cuenta, las organizaciones de la primera no son visibles (RLS).
-- [ ] Negativo: email inválido o contraseña corta muestran error en login/signup; archivo corrupto o sin
-      hoja muestra error claro en el paso 1.
-- [ ] Límite: archivo con filas sin nombre → excluidas y contadas como incompletas; duplicados de nombre
-      → marcados, no silenciados.
-- [ ] Build: `pnpm run build` y `pnpm run check` (lint + tsc) pasan en verde.
+- [ ] `supabase_get_table_schema` en las 9 tablas nuevas: columnas, FK, RLS habilitada, políticas listadas.
+- [ ] Auth: signup/login con email; contraseña corta/email inválido muestran error; auto-confirmación permite entrar sin verificar email.
+- [ ] Primer usuario: primer login crea automáticamente Meridian Group y el dashboard se ve igual al actual.
+- [ ] Persistencia: editar nombre/descripción → recargar → persiste (backend).
+- [ ] Importación: cargar Excel/CSV de prueba con `Empleado;Sector;Responsable;Puesto;Tareas;Competencias`, mapear, validar, crear → org activa; dashboard/analysis/simulation funcionan con ella.
+- [ ] Identificadores: filas con `employeeId`/`managerId` resuelven relaciones por id antes que por nombre.
+- [ ] Referencias: responsable inexistente → problema; varias coincidencias por nombre → ambigua y bloqueante hasta revisión; nunca se resuelve silenciosamente.
+- [ ] Normalización: mismo área/rol/proceso/función/tarea/competencia en varias filas → una sola entidad por valor en la org.
+- [ ] Duplicados: dos filas con el mismo nombre de persona → marcados como posibles duplicados; filas sin nombre → excluidas y contabilizadas como incompletas.
+- [ ] Separación: eliminar una org importada deja la demo intacta; la demo no ofrece eliminación; `removeOrganization`/delete por datos rechazan `is_demo` (trigger).
+- [ ] Unicidad demo: dos inits/escenarios concurrentes no producen una segunda demo (índice único parcial).
+- [ ] Reset: estando en demo, reset restaura solo Meridian Group y deja activa la nueva demo con su nuevo id; las orgs importadas no cambian.
+- [ ] Multi-usuario: segunda cuenta no ve organizaciones de la primera (RLS).
+- [ ] Errores: archivo corrupto o sin hoja → error claro en paso 1.
+- [ ] Build: `pnpm run build` y `pnpm run check` en verde.
