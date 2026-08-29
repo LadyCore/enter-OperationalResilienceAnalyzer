@@ -1,18 +1,32 @@
 import { Suspense } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import {
   Activity,
   Award,
   Building2,
   CalendarClock,
+  Check,
+  ChevronsUpDown,
+  CircleUserRound,
   LayoutDashboard,
   ListChecks,
+  LogOut,
+  Plus,
   ShieldCheck,
   Users,
   Workflow,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { useOra } from "@/store/OraContext";
 
 const nav = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
@@ -41,12 +55,75 @@ function Brand() {
   );
 }
 
+function OrganizationSwitcher() {
+  const { organizations, activeOrganizationId, setActiveOrganization } = useOra();
+  const navigate = useNavigate();
+  const active = organizations.find((o) => o.id === activeOrganizationId);
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="flex w-full items-center justify-between gap-2 rounded-md border border-sidebar-border bg-sidebar-accent/40 px-2.5 py-2 text-left text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent/70"
+        >
+          <span className="min-w-0 truncate">{active?.name ?? "Organization"}</span>
+          <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 opacity-60" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" sideOffset={6} className="w-64">
+        {organizations.map((o) => (
+          <DropdownMenuItem key={o.id} onSelect={() => void setActiveOrganization(o.id)}>
+            <span className="min-w-0 flex-1 truncate">{o.name}</span>
+            {o.isDemo && (
+              <Badge variant="secondary" className="ml-2 shrink-0 px-1.5 text-[10px] font-medium">
+                Demo
+              </Badge>
+            )}
+            {o.id === activeOrganizationId && <Check className="ml-1 h-4 w-4 shrink-0 text-primary" />}
+          </DropdownMenuItem>
+        ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => navigate("/import")}>
+          <Plus className="h-4 w-4" />
+          Import organization
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function UserMenu() {
+  const { user, signOut } = useOra();
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent/70 hover:text-sidebar-foreground"
+        >
+          <CircleUserRound className="h-4 w-4 shrink-0" />
+          <span className="min-w-0 truncate">{user?.email}</span>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" sideOffset={6}>
+        <DropdownMenuItem onSelect={() => void signOut()}>
+          <LogOut className="h-4 w-4" />
+          Sign out
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export function AppShell() {
   return (
     <div className="flex h-full w-full bg-background">
       <aside className="hidden w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground lg:flex">
-        <div className="px-4 py-5">
+        <div className="space-y-4 px-4 py-5">
           <Brand />
+          <OrganizationSwitcher />
         </div>
         <nav className="flex flex-1 flex-col gap-1 px-3">
           {nav.map((item) => (
@@ -68,16 +145,22 @@ export function AppShell() {
             </NavLink>
           ))}
         </nav>
-        <div className="border-t border-sidebar-border px-4 py-4">
+        <div className="space-y-3 border-t border-sidebar-border px-4 py-4">
           <p className="text-[11px] leading-relaxed text-sidebar-foreground/55">
             Analyzes operational dependency and capability coverage — never individual performance.
           </p>
+          <UserMenu />
         </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center border-b border-sidebar-border bg-sidebar px-4 py-3 text-sidebar-foreground lg:hidden">
-          <Brand />
+        <header className="flex items-center gap-3 border-b border-sidebar-border bg-sidebar px-4 py-3 text-sidebar-foreground lg:hidden">
+          <div className="min-w-0 flex-1">
+            <Brand />
+          </div>
+          <div className="w-44 shrink-0">
+            <OrganizationSwitcher />
+          </div>
         </header>
         <nav className="flex gap-1 overflow-x-auto border-b border-sidebar-border bg-sidebar px-3 py-2 text-sidebar-foreground lg:hidden">
           {nav.map((item) => (

@@ -1,0 +1,174 @@
+create table if not exists public.profiles (
+  id uuid primary key references auth.users (id) on delete cascade,
+  email text,
+  created_at timestamptz not null default now()
+);
+alter table public.profiles enable row level security;
+
+create table if not exists public.organizations (
+  id text primary key,
+  name text not null,
+  description text not null default '',
+  is_demo boolean not null default false,
+  owner_id uuid not null references auth.users (id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+alter table public.organizations enable row level security;
+
+create unique index if not exists organizations_one_demo_per_owner
+  on public.organizations (owner_id) where is_demo;
+
+-- Helper: organization ids owned by the current user (security definer to avoid recursive RLS)
+create or replace function public.user_org_ids()
+returns text[]
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select coalesce(array_agg(id), '{}') from public.organizations where owner_id = auth.uid();
+$$;
+
+grant execute on function public.user_org_ids() to authenticated, anon;
+
+-- Demo organizations can never be deleted, at any layer
+create or replace function public.prevent_demo_org_delete()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if old.is_demo then
+    raise exception 'The demo organization cannot be deleted.';
+  end if;
+  return old;
+end;
+$$;
+
+drop trigger if exists prevent_demo_org_delete on public.organizations;
+create trigger prevent_demo_org_delete
+  before delete on public.organizations
+  for each row execute function public.prevent_demo_org_delete();
+
+grant execute on function public.prevent_demo_org_delete() to authenticated, anon;
+
+-- Auto-create a profile on signup
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.profiles (id, email) values (new.id, new.email);
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
+
+grant execute on function public.handle_new_user() to authenticated, anon;
+
+create policy "profiles_select_own" on public.profiles for select using (id = auth.uid());
+create policy "profiles_update_own" on public.profiles for update using (id = auth.uid());
+
+create policy "orgs_owner_all" on public.organizations for all
+  using (owner_id = auth.uid())
+  with check (owner_id = auth.uid());
+
+create table if not exists public.areas (
+  id text primary key,
+  organization_id text not null references public.organizations (id) on delete cascade,
+  name text not null,
+  description text not null default ''
+);
+alter table public.areas enable row level security;
+create policy "areas_org_scoped" on public.areas for all
+  using (organization_id = any(user_org_ids()))
+  with check (organization_id = any(user_org_ids()));
+
+create table if not exists public.competencies (
+  id text primary key,
+  organization_id text not null references public.organizations (id) on delete cascade,
+  name text not null,
+  description text not null default ''
+);
+alter table public.competencies enable row level security;
+create policy "competencies_org_scoped" on public.competencies for all
+  using (organization_id = any(user_org_ids()))
+  with check (organization_id = any(user_org_ids()));
+
+create table if not exists public.roles (
+  id text primary key,
+  organization_id text not null references public.organizations (id) on delete cascade,
+  name text not null,
+  description text not null default '',
+  competency_ids text[] not null default '{}'
+);
+alter table public.roles enable row level security;
+create policy "roles_org_scoped" on public.roles for all
+  using (organization_id = any(user_org_ids()))
+  with check (organization_id = any(user_org_ids()));
+
+create table if not exists public.processes (
+  id text primary key,
+  organization_id text not null references public.organizations (id) on delete cascade,
+  name text not null,
+  description text not null default '',
+  criticality text not null default 'important'
+);
+alter table public.processes enable row level security;
+create policy "processes_org_scoped" on public.processes for all
+  using (organization_id = any(user_org_ids()))
+  with check (organization_id = any(user_org_ids()));
+
+create table if not exists public.org_functions (
+  id text primary key,
+  organization_id text not null references public.organizations (id) on delete cascade,
+  process_id text not null references public.processes (id) on delete cascade,
+  name text not null,
+  description text not null default '',
+  criticality text not null default 'important'
+);
+alter table public.org_functions enable row level security;
+create policy "org_functions_org_scoped" on public.org_functions for all
+  using (organization_id = any(user_org_ids()))
+  with check (organization_id = any(user_org_ids()));
+
+create table if not exists public.tasks (
+  id text primary key,
+  organization_id text not null references public.organizations (id) on delete cascade,
+  function_id text not null references public.org_functions (id) on delete cascade,
+  area_id text references public.areas (id) on delete set null,
+  name text not null,
+  description text not null default '',
+  criticality text not null default 'standard',
+  is_documented boolean not null default false,
+  system_name text,
+  required_competency_ids text[] not null default '{}'
+);
+alter table public.tasks enable row level security;
+create policy "tasks_org_scoped" on public.tasks for all
+  using (organization_id = any(user_org_ids()))
+  with check (organization_id = any(user_org_ids()));
+
+create table if not exists public.people (
+  id text primary key,
+  organization_id text not null references public.organizations (id) on delete cascade,
+  name text not null,
+  employee_id text,
+  role_id text references public.roles (id) on delete set null,
+  area_id text references public.areas (id) on delete set null,
+  manager_id text references public.people (id) on delete set null,
+  is_active boolean not null default true,
+  competency_ids text[] not null default '{}',
+  task_ids text[] not null default '{}'
+);
+alter table public.people enable row level security;
+create policy "people_org_scoped" on public.people for all
+  using (organization_id = any(user_org_ids()))
+  with check (organization_id = any(user_org_ids()));

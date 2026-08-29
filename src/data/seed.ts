@@ -1,10 +1,12 @@
 import type { Competency, Db, OrgFunction, Person, Process, Role, Task } from "@/types";
+import { uid } from "@/lib/id";
 
 export const SEED_ORG = {
   id: "org_meridian",
   name: "Meridian Group",
   description:
     "A mid-sized services organization that runs customer operations, IT infrastructure, finance and internal support functions. This fictional dataset demonstrates how ORA surfaces hidden operational dependencies — where critical capability concentrates in a single person or role.",
+  isDemo: true,
 };
 
 export const SEED_PROCESSES: Process[] = [
@@ -95,6 +97,7 @@ export const SEED_PEOPLE: Person[] = [
 
 export const seedDb: Db = {
   organization: SEED_ORG,
+  areas: [],
   processes: SEED_PROCESSES,
   functions: SEED_FUNCTIONS,
   tasks: SEED_TASKS,
@@ -106,4 +109,60 @@ export const seedDb: Db = {
 /** Deep clone helper used to avoid mutating shared seed objects. */
 export function cloneDb(db: Db): Db {
   return JSON.parse(JSON.stringify(db)) as Db;
+}
+
+/**
+ * Reassign every id in a seed Db to fresh uid()s, preserving all internal
+ * relations (process → function → task, role/person/competency references).
+ * The seed uses fixed ids (org_meridian, p_ana…) that would collide across
+ * users because primary keys are global, so each user's demo gets its own set.
+ */
+export function remapSeedIds(db: Db): Db {
+  const map = new Map<string, string>();
+  const remap = (id: string, prefix: string): string => {
+    const existing = map.get(id);
+    if (existing) return existing;
+    const next = uid(prefix);
+    map.set(id, next);
+    return next;
+  };
+
+  const organization = { ...db.organization, id: remap(db.organization.id, "org") };
+  const processes = db.processes.map((p) => ({
+    ...p,
+    id: remap(p.id, "proc"),
+    organizationId: organization.id,
+  }));
+  const functions = db.functions.map((f) => ({
+    ...f,
+    id: remap(f.id, "fn"),
+    organizationId: organization.id,
+    processId: remap(f.processId, "proc"),
+  }));
+  const areas = db.areas.map((a) => ({ ...a, id: remap(a.id, "area") }));
+  const competencies = db.competencies.map((c) => ({ ...c, id: remap(c.id, "comp") }));
+  const roles = db.roles.map((r) => ({
+    ...r,
+    id: remap(r.id, "role"),
+    competencyIds: r.competencyIds.map((c) => remap(c, "comp")),
+  }));
+  const tasks = db.tasks.map((t) => ({
+    ...t,
+    id: remap(t.id, "task"),
+    organizationId: organization.id,
+    functionId: remap(t.functionId, "fn"),
+    areaId: t.areaId ? remap(t.areaId, "area") : undefined,
+    requiredCompetencyIds: t.requiredCompetencyIds.map((c) => remap(c, "comp")),
+  }));
+  const people = db.people.map((p) => ({
+    ...p,
+    id: remap(p.id, "p"),
+    roleId: remap(p.roleId, "role"),
+    areaId: p.areaId ? remap(p.areaId, "area") : undefined,
+    managerId: p.managerId ? remap(p.managerId, "p") : undefined,
+    competencyIds: p.competencyIds.map((c) => remap(c, "comp")),
+    taskIds: p.taskIds.map((t) => remap(t, "task")),
+  }));
+
+  return { organization, areas, processes, functions, tasks, roles, people, competencies };
 }

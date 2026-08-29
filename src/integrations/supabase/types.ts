@@ -3360,13 +3360,340 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      areas: {
+        Row: {
+          description: string
+          id: string
+          name: string
+          organization_id: string
+        }
+        Insert: {
+          description?: string
+          id: string
+          name: string
+          organization_id: string
+        }
+        Update: {
+          description?: string
+          id?: string
+          name?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "areas_organization_id_fkey"
+            columns: ["organization_id"]
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      competencies: {
+        Row: {
+          description: string
+          id: string
+          name: string
+          organization_id: string
+        }
+        Insert: {
+          description?: string
+          id: string
+          name: string
+          organization_id: string
+        }
+        Update: {
+          description?: string
+          id?: string
+          name?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "competencies_organization_id_fkey"
+            columns: ["organization_id"]
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      org_functions: {
+        Row: {
+          criticality: string
+          description: string
+          id: string
+          name: string
+          organization_id: string
+          process_id: string
+        }
+        Insert: {
+          criticality?: string
+          description?: string
+          id: string
+          name: string
+          organization_id: string
+          process_id: string
+        }
+        Update: {
+          criticality?: string
+          description?: string
+          id?: string
+          name?: string
+          organization_id?: string
+          process_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_functions_organization_id_fkey"
+            columns: ["organization_id"]
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_functions_process_id_fkey"
+            columns: ["process_id"]
+            referencedRelation: "processes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organizations: {
+        Row: {
+          created_at: string
+          description: string
+          id: string
+          is_demo: boolean
+          name: string
+          owner_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string
+          id: string
+          is_demo?: boolean
+          name: string
+          owner_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          id?: string
+          is_demo?: boolean
+          name?: string
+          owner_id?: string
+        }
+        Relationships: []
+      }
+      people: {
+        Row: {
+          area_id: string | null
+          competency_ids: string[]
+          employee_id: string | null
+          id: string
+          is_active: boolean
+          manager_id: string | null
+          name: string
+          organization_id: string
+          role_id: string | null
+          task_ids: string[]
+        }
+        Insert: {
+          area_id?: string | null
+          competency_ids?: string[]
+          employee_id?: string | null
+          id: string
+          is_active?: boolean
+          manager_id?: string | null
+          name: string
+          organization_id: string
+          role_id?: string | null
+          task_ids?: string[]
+        }
+        Update: {
+          area_id?: string | null
+          competency_ids?: string[]
+          employee_id?: string | null
+          id?: string
+          is_active?: boolean
+          manager_id?: string | null
+          name?: string
+          organization_id?: string
+          role_id?: string | null
+          task_ids?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "people_area_id_fkey"
+            columns: ["area_id"]
+            referencedRelation: "areas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "people_manager_id_fkey"
+            columns: ["manager_id"]
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "people_organization_id_fkey"
+            columns: ["organization_id"]
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "people_role_id_fkey"
+            columns: ["role_id"]
+            referencedRelation: "roles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      processes: {
+        Row: {
+          criticality: string
+          description: string
+          id: string
+          name: string
+          organization_id: string
+        }
+        Insert: {
+          criticality?: string
+          description?: string
+          id: string
+          name: string
+          organization_id: string
+        }
+        Update: {
+          criticality?: string
+          description?: string
+          id?: string
+          name?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "processes_organization_id_fkey"
+            columns: ["organization_id"]
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: string
+        }
+        Relationships: []
+      }
+      roles: {
+        Row: {
+          competency_ids: string[]
+          description: string
+          id: string
+          name: string
+          organization_id: string
+        }
+        Insert: {
+          competency_ids?: string[]
+          description?: string
+          id: string
+          name: string
+          organization_id: string
+        }
+        Update: {
+          competency_ids?: string[]
+          description?: string
+          id?: string
+          name?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "roles_organization_id_fkey"
+            columns: ["organization_id"]
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tasks: {
+        Row: {
+          area_id: string | null
+          criticality: string
+          description: string
+          function_id: string
+          id: string
+          is_documented: boolean
+          name: string
+          organization_id: string
+          required_competency_ids: string[]
+          system_name: string | null
+        }
+        Insert: {
+          area_id?: string | null
+          criticality?: string
+          description?: string
+          function_id: string
+          id: string
+          is_documented?: boolean
+          name: string
+          organization_id: string
+          required_competency_ids?: string[]
+          system_name?: string | null
+        }
+        Update: {
+          area_id?: string | null
+          criticality?: string
+          description?: string
+          function_id?: string
+          id?: string
+          is_documented?: boolean
+          name?: string
+          organization_id?: string
+          required_competency_ids?: string[]
+          system_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tasks_area_id_fkey"
+            columns: ["area_id"]
+            referencedRelation: "areas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_function_id_fkey"
+            columns: ["function_id"]
+            referencedRelation: "org_functions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_organization_id_fkey"
+            columns: ["organization_id"]
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      user_org_ids: {
+        Args: Record<PropertyKey, never>
+        Returns: string[]
+      }
     }
     Enums: {
       [_ in never]: never
@@ -3543,6 +3870,39 @@ export type Database = {
         Relationships: []
       }
       messages_2026_08_31: {
+        Row: {
+          event: string | null
+          extension: string
+          id: string
+          inserted_at: string
+          payload: Json | null
+          private: boolean | null
+          topic: string
+          updated_at: string
+        }
+        Insert: {
+          event?: string | null
+          extension: string
+          id?: string
+          inserted_at?: string
+          payload?: Json | null
+          private?: boolean | null
+          topic: string
+          updated_at?: string
+        }
+        Update: {
+          event?: string | null
+          extension?: string
+          id?: string
+          inserted_at?: string
+          payload?: Json | null
+          private?: boolean | null
+          topic?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      messages_2026_09_01: {
         Row: {
           event: string | null
           extension: string

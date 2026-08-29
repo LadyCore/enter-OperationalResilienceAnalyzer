@@ -10,6 +10,14 @@ export interface Organization {
   id: string;
   name: string;
   description: string;
+  /** True for the seeded Meridian Group demo; demo orgs can never be deleted. */
+  isDemo?: boolean;
+}
+
+export interface Area {
+  id: string;
+  name: string;
+  description?: string;
 }
 
 export interface Process {
@@ -33,6 +41,7 @@ export interface Task {
   name: string;
   description: string;
   functionId: string;
+  areaId?: string;
   criticality: Criticality;
   isDocumented: boolean;
   systemName?: string;
@@ -49,7 +58,12 @@ export interface Role {
 export interface Person {
   id: string;
   name: string;
+  /** Optional source identifier (e.g. payroll/employee id) used during imports. */
+  employeeId?: string;
   roleId: string;
+  areaId?: string;
+  /** Direct manager/superior, referencing another person in the same organization. */
+  managerId?: string;
   isActive: boolean;
   competencyIds: string[];
   taskIds: string[];
@@ -63,6 +77,7 @@ export interface Competency {
 
 export interface Db {
   organization: Organization;
+  areas: Area[];
   processes: Process[];
   functions: OrgFunction[];
   tasks: Task[];
@@ -77,6 +92,7 @@ export type CollectionKey =
   | "tasks"
   | "roles"
   | "people"
-  | "competencies";
+  | "competencies"
+  | "areas";
 
-export type Entity = Process | OrgFunction | Task | Role | Person | Competency;
+export type Entity = Process | OrgFunction | Task | Role | Person | Competency | Area;

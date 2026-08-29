@@ -29,6 +29,8 @@ export function PeoplePage() {
   const [deleteRole, setDeleteRole] = useState<Role | null>(null);
 
   const roleName = (id: string) => db.roles.find((r) => r.id === id)?.name ?? id;
+  const areaName = (id?: string) => (id ? db.areas.find((a) => a.id === id)?.name ?? id : undefined);
+  const managerName = (id?: string) => (id ? db.people.find((p) => p.id === id)?.name ?? id : undefined);
 
   return (
     <div className="space-y-6">
@@ -59,6 +61,8 @@ export function PeoplePage() {
                     <TableRow>
                       <TableHead>Name</TableHead>
                       <TableHead>Role</TableHead>
+                      <TableHead className="hidden md:table-cell">Area</TableHead>
+                      <TableHead className="hidden lg:table-cell">Reports to</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="hidden md:table-cell">Competencies</TableHead>
                       <TableHead className="hidden sm:table-cell">Capable tasks</TableHead>
@@ -79,6 +83,12 @@ export function PeoplePage() {
                           </TableCell>
                           <TableCell>
                             <span className="text-sm text-muted-foreground">{roleName(p.roleId)}</span>
+                          </TableCell>
+                          <TableCell className="hidden md:table-cell">
+                            <span className="text-sm text-muted-foreground">{areaName(p.areaId) ?? "—"}</span>
+                          </TableCell>
+                          <TableCell className="hidden lg:table-cell">
+                            <span className="text-sm text-muted-foreground">{managerName(p.managerId) ?? "—"}</span>
                           </TableCell>
                           <TableCell>
                             {p.isActive ? (

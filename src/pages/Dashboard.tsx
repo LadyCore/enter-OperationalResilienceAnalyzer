@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { toast } from "sonner";
 import {
   AlertTriangle,
   ArrowRight,
@@ -28,13 +27,13 @@ export function Dashboard() {
   const [orgOpen, setOrgOpen] = useState(false);
   const metrics = computeDashboardMetrics(db);
   const flags = detectRiskFlags(db);
+  const isDemo = Boolean(db.organization.isDemo);
 
   const severityOrder = { critical: 0, high: 1, medium: 2 };
   const topFlags = [...flags].sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]).slice(0, 6);
 
   const handleReset = () => {
     resetToSeed();
-    toast.success("Demo data restored");
   };
 
   return (
@@ -43,9 +42,11 @@ export function Dashboard() {
         title="Operational resilience dashboard"
         description="An overview of how operational capability is distributed across the organization."
       >
-        <Button variant="outline" onClick={handleReset}>
-          <RotateCcw className="h-4 w-4" /> Reset demo data
-        </Button>
+        {isDemo && (
+          <Button variant="outline" onClick={handleReset}>
+            <RotateCcw className="h-4 w-4" /> Reset demo data
+          </Button>
+        )}
         <Button onClick={() => setOrgOpen(true)}>
           Edit organization
         </Button>

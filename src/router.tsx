@@ -22,6 +22,9 @@ const AnalysisPage = lazy(() =>
 const SimulationPage = lazy(() =>
   import("@/pages/SimulationPage").then((m) => ({ default: m.SimulationPage }))
 );
+const ImportOrganizationPage = lazy(() =>
+  import("@/pages/ImportOrganizationPage").then((m) => ({ default: m.ImportOrganizationPage }))
+);
 
 export const routers = [
   {
@@ -36,6 +39,7 @@ export const routers = [
       { path: "people", name: "people", element: <PeoplePage /> },
       { path: "analysis", name: "analysis", element: <AnalysisPage /> },
       { path: "simulation", name: "simulation", element: <SimulationPage /> },
+      { path: "import", name: "import", element: <ImportOrganizationPage /> },
     ],
   },
   /* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */

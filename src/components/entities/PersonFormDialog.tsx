@@ -33,7 +33,10 @@ interface PersonFormDialogProps {
 export function PersonFormDialog({ open, onOpenChange, person }: PersonFormDialogProps) {
   const { db, upsert } = useOra();
   const [name, setName] = useState("");
+  const [employeeId, setEmployeeId] = useState("");
   const [roleId, setRoleId] = useState("");
+  const [areaId, setAreaId] = useState("");
+  const [managerId, setManagerId] = useState("");
   const [isActive, setIsActive] = useState(true);
   const [competencyIds, setCompetencyIds] = useState<string[]>([]);
   const [taskIds, setTaskIds] = useState<string[]>([]);
@@ -41,7 +44,10 @@ export function PersonFormDialog({ open, onOpenChange, person }: PersonFormDialo
   useEffect(() => {
     if (open) {
       setName(person?.name ?? "");
+      setEmployeeId(person?.employeeId ?? "");
       setRoleId(person?.roleId ?? db.roles[0]?.id ?? "");
+      setAreaId(person?.areaId ?? "");
+      setManagerId(person?.managerId ?? "");
       setIsActive(person?.isActive ?? true);
       setCompetencyIds(person?.competencyIds ?? []);
       setTaskIds(person?.taskIds ?? []);
@@ -49,6 +55,9 @@ export function PersonFormDialog({ open, onOpenChange, person }: PersonFormDialo
   }, [open, person, db.roles]);
 
   const competencyOptions = db.competencies.map((c) => ({ value: c.id, label: c.name }));
+  const managerOptions = db.people
+    .filter((p) => p.id !== person?.id)
+    .map((p) => ({ value: p.id, label: p.name }));
   const taskOptions = db.tasks.map((t) => {
     const fn = db.functions.find((f) => f.id === t.functionId);
     const proc = fn ? db.processes.find((p) => p.id === fn.processId) : undefined;
@@ -60,7 +69,10 @@ export function PersonFormDialog({ open, onOpenChange, person }: PersonFormDialo
     upsert("people", {
       id: person?.id ?? uid("p"),
       name: name.trim(),
+      employeeId: employeeId.trim() || undefined,
       roleId,
+      areaId: areaId || undefined,
+      managerId: managerId || undefined,
       isActive,
       competencyIds,
       taskIds,
@@ -83,6 +95,9 @@ export function PersonFormDialog({ open, onOpenChange, person }: PersonFormDialo
           <Field label="Name">
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Ana Silva" />
           </Field>
+          <Field label="Person identifier (optional)" hint="Source identifier such as a payroll/employee id.">
+            <Input value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} placeholder="e.g. EMP-1024" />
+          </Field>
           <Field label="Role">
             <Select value={roleId} onValueChange={setRoleId}>
               <SelectTrigger className="w-full">
@@ -92,6 +107,36 @@ export function PersonFormDialog({ open, onOpenChange, person }: PersonFormDialo
                 {db.roles.map((r) => (
                   <SelectItem key={r.id} value={r.id}>
                     {r.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label="Area">
+            <Select value={areaId || "none"} onValueChange={(v) => setAreaId(v === "none" ? "" : v)}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No area</SelectItem>
+                {db.areas.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>
+                    {a.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label="Manager / responsible">
+            <Select value={managerId || "none"} onValueChange={(v) => setManagerId(v === "none" ? "" : v)}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="No manager" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No manager</SelectItem>
+                {managerOptions.map((m) => (
+                  <SelectItem key={m.value} value={m.value}>
+                    {m.label}
                   </SelectItem>
                 ))}
               </SelectContent>

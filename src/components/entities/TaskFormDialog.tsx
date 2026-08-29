@@ -38,6 +38,7 @@ export function TaskFormDialog({ open, onOpenChange, task, presetFunctionId }: T
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [functionId, setFunctionId] = useState("");
+  const [areaId, setAreaId] = useState("");
   const [criticality, setCriticality] = useState<Criticality>("standard");
   const [isDocumented, setIsDocumented] = useState(false);
   const [systemName, setSystemName] = useState("");
@@ -48,6 +49,7 @@ export function TaskFormDialog({ open, onOpenChange, task, presetFunctionId }: T
       setName(task?.name ?? "");
       setDescription(task?.description ?? "");
       setFunctionId(task?.functionId ?? presetFunctionId ?? db.functions[0]?.id ?? "");
+      setAreaId(task?.areaId ?? "");
       setCriticality(task?.criticality ?? "standard");
       setIsDocumented(task?.isDocumented ?? false);
       setSystemName(task?.systemName ?? "");
@@ -64,6 +66,7 @@ export function TaskFormDialog({ open, onOpenChange, task, presetFunctionId }: T
       name: name.trim(),
       description: description.trim(),
       functionId,
+      areaId: areaId || undefined,
       criticality,
       isDocumented,
       systemName: systemName.trim() || undefined,
@@ -109,6 +112,21 @@ export function TaskFormDialog({ open, onOpenChange, task, presetFunctionId }: T
           </Field>
           <Field label="Criticality">
             <CriticalitySelect value={criticality} onChange={setCriticality} />
+          </Field>
+          <Field label="Area (optional)">
+            <Select value={areaId || "none"} onValueChange={(v) => setAreaId(v === "none" ? "" : v)}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No area</SelectItem>
+                {db.areas.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>
+                    {a.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </Field>
           <Field label="System / resource (optional)" hint="e.g. ERP, backup platform, database.">
             <Input value={systemName} onChange={(e) => setSystemName(e.target.value)} placeholder="System or resource" />
