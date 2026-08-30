@@ -1,234 +1,136 @@
-# ORA multi-organización: importación Excel/CSV + persistencia en Enter Cloud
+# Reactivar el análisis de criticidad de ORA (crítica derivada)
 
 ## Context
 
-ORA hoy es una demo de una sola organización (Meridian Group) persistida en `localStorage`
-(`ora-data-v1`), sin "organización activa"; "Reset Demo Data" reemplaza todo el dataset. Objetivo:
-ORA deja de ser una demo y se convierte en un prototipo que trabaja con organizaciones reales.
-Flujo principal: `archivo Excel/CSV → carga → mapeo → validación → normalización → creación de
-organización → análisis ORA`. La organización demo permanece como dataset independiente: nunca se
-modifica ni elimina por operaciones sobre organizaciones reales.
+Hoy la criticidad es un campo estático por tarea (`Task.criticality`) que solo se
+rellena si el archivo de importación mapea la columna `Criticidad`. Cuando ese valor
+no llega, todas las tareas quedan en `standard` y toda la capa que depende de la
+criticidad se apaga: `Processes: 0 critical`, `Tasks: 0 critical`, bus factor 0,
+competencias concentradas 0, gaps de documentación 0, cobertura crítica 0%.
 
-Decisiones confirmadas (spec del usuario):
-1. **Persistencia Enter Cloud desde el inicio** (no localStorage como almacenamiento principal).
-2. **Auth email + contraseña** (login y signup, auto-confirmación).
-3. **Multi-organización**: cada usuario tiene sus organizaciones y selecciona cuál analizar.
-4. **Demo**: al primer login sin organizaciones, se crea automáticamente Meridian Group (por usuario).
-5. **Reset Demo Data**: actúa solo sobre la demo. **Demo nunca eliminable** (también en la capa de datos).
-6. **Área** como entidad independiente. **Jerarquía**: `Person.managerId` refiere a persona de la misma org.
-7. **Importación tabla plana** (una fila = una persona; listas múltiples separadas por `;`).
+El usuario confirmó el modelo deseado: **puntaje combinado** — herencia estructural
+(proceso/función) + un factor adicional de cobertura/dependencia, manteniendo la
+distinción crítica ≠ cobertura (una tarea no es crítica solo por tener 1 persona
+capaz). La criticidad debe ser **resultado del análisis de ORA**, reproducible y
+explicable, sin introducir columnas nuevas en la importación. El caso de prueba
+obligatorio se materializa como **fixture automatizado + test unitario (vitest)**.
 
-Sin ampliar alcance: sin SAP/Workday/APIs externas/SSO/roles complejos/múltiples hojas. La arquitectura
-(importer + capa `api.ts`) queda preparada para esas extensiones, sin implementarlas.
+## Modelo de criticidad derivada (núcleo)
 
----
+Nuevas funciones puras en `src/lib/analysis.ts` (reusando `capablePeople`,
+`capableRoles`, `holdersOf`, `taskDependency` existentes):
 
-## 1. Esquema de datos (una única migración)
+- `criticalityRank(c)`: `standard=1, important=2, critical=3`; `rankToCriticality(r)`.
+- `deriveTaskCriticality(db, task): { level: Criticality; reasons: string[] }`:
+  1. `structural = max(rank(process.criticality), rank(funct.criticality), rank(task.criticality))`
+     (función padre vía `task.functionId`; proceso padre vía `fn.processId`; si falta, rank 1).
+  2. `coverageFactor = +1` cuando `capablePeople(db, task.id).length <= 1` (sin cobertura o
+     persona única), si no `+0`.
+  3. `score = min(structural + coverageFactor, 3)` → nivel final.
+  4. `reasons`: qué señal(s) aportaron ("Pertenece al proceso crítico X", "Pertenece a la
+     función crítica Y", "Declarada crítica en el registro", "Su cobertura depende de una
+     sola persona (Z)" / "Nadie activo puede realizarla").
+- `criticalTasks(db): Task[]` — tareas con nivel derivado `critical`.
+- `deriveProcessCriticality(db, process): Criticality` — `max(declarada, rank derivado de
+  sus tareas)`; un proceso que contiene tareas críticas es esencial. Alimenta
+  `metrics.criticalProcesses` y "procesos críticos afectados" en ausencias.
+- Reemplazar **todas** las ocurrencias de `t.criticality === "critical"` del análisis,
+  simulación y páginas por el nivel derivado.
 
-Tablas en `public`, **RLS habilitada en la misma migración**, ids `text` generados en cliente con
-`uid()` (`src/lib/id.ts`), `organization_id` con `on delete cascade`:
+Invariantes del modelo (se verifican con test):
+- Una tarea `standard` con persona única queda `important`, **nunca** crítica solo por
+  cobertura (requisito 1).
+- Una tarea en proceso/función `important` con 0 o 1 persona capaz queda **crítica**
+  (2 + 1 = 3): "tareas cuya ausencia genera dependencia operacional relevante".
+- La dimensión cobertura/dependencia (`taskDependency`: 0=none, 1=high, 2=limited,
+  3+=adequate) permanece intacta y es la que muestra el badge de dependencia.
 
-- `profiles` (id uuid PK → auth.users, email, created_at) + **trigger `handle_new_user`** (inserta
-  perfil al signup).
-- `organizations` (id text PK, name, description, **is_demo bool**, owner_id uuid → auth.users, created_at).
-- `areas`, `competencies`, `roles` (id text PK, organization_id, name, description; roles con
-  competency_ids text[]).
-- `people` (id text PK, organization_id, name, **employee_id text**, role_id → roles, area_id → areas,
-  manager_id → people, is_active bool, competency_ids text[], task_ids text[]).
-- `processes` (id text PK, organization_id, name, description, criticality).
-- `org_functions` (id text PK, organization_id, process_id → processes, name, description, criticality).
-- `tasks` (id text PK, organization_id, function_id → org_functions, area_id → areas, name, description,
-  criticality, is_documented bool, system_name, required_competency_ids text[]).
+## Cambios por requisito
 
-**Protecciones de datos (demo y concurrencia):**
-- Trigger **`prevent_demo_org_delete`**: `BEFORE DELETE ON organizations` lanza excepción si
-  `is_demo = true` → la demo no puede eliminarse ni por UI ni por API/consulta directa.
-- Índice único parcial **`organizations_one_demo_per_owner`**:
-  `CREATE UNIQUE INDEX ... ON organizations (owner_id) WHERE is_demo IS TRUE;` → garantiza a nivel de
-  base que cada usuario tiene a lo sumo una demo (bloquea carreras por pestañas/procesos simultáneos).
+1. **Criticidad ≠ cobertura** — cumplido por el modelo de puntaje (arriba). Badge de
+   criticidad y badge de dependencia siguen siendo columnas/indicadores separados.
+2. **Criterios reproducibles** — el modelo es una fórmula fija con razones visibles;
+   sin nombres mágicos de personas. La columna `Criticidad` existente es solo una señal
+   `declared`; no se agrega ninguna columna de importación.
+3. **Bus factor** — `computePersonConcentration(db, threshold=3)` ahora calcula sobre
+   tareas críticas **derivadas** y añade `exclusiveCriticalTasks` (tareas críticas donde
+   esta persona es la única capaz) y `level: "high" | "medium"` (high si
+   `exclusiveCriticalTasks >= 1` o `count >= 5`; si no medium). Copy según principio 10.
+4. **Concentración de competencias** — `computeCompetencyConcentration`: competencias
+   requeridas por tareas críticas derivadas con `holderCount <= 2`; `level` (1 holder →
+   high, 2 → medium). `metrics.concentratedCompetencies` cuenta `holderCount <= 2`.
+5. **Role concentration** — lógica existente (tarea crítica con ≥1 capaz y exactamente 1
+   rol capaz) ahora sobre criticidad derivada; copy aclara "cubierta por un único rol".
+6. **Documentation gaps** — crítica + sin documentar (derivada). Lógica existente.
+7. **Critical task coverage** — fórmula existente (`>=2 capaces / total críticas`). Cuando
+   `criticalTasks === 0`, el card muestra 0% **y** la nota explícita "No critical tasks
+   detected" para diferenciarlo de "críticas con cobertura nula".
+8. **Ausencia** — `simulateAbsence` extiende el resultado con:
+   `affectedCriticalTaskIds`, `uncoveredCriticalTaskIds` (críticas 1→0),
+   `reducedToSingleCriticalTaskIds` (críticas 2+→1), `affectedCriticalProcessIds`,
+   `singleHolderCriticalCompetencyIds` (competencias críticas que quedan con 1 solo
+   holder), `busFactorAtRisk` y `criticalTasksLosingBackup`; más sus campos en `summary`.
+   `SimulationPanel` muestra un bloque "Critical impact" y distingue claramente
+   "No coverage (1 → 0)" de "Now single-person (2+ → 1)".
+9. **Caso de prueba** — fixture deliberado + test (abajo).
+10. **Principio** — copy reescrito en flags, tarjetas y badges: se habla de "capacidad /
+    tarea con dependencia operacional elevada por concentrarse en pocas personas", nunca
+    "esta persona es crítica". Ejemplos: título de flag
+    `Capability for N critical tasks is concentrated in one person (X)`; título de
+    single-person `Task "X" has single-person coverage`.
 
-**RLS:** función security-definer `user_org_ids()` → `SELECT id FROM organizations WHERE owner_id = auth.uid()`.
-Políticas: `organizations` → `owner_id = auth.uid()`; tablas hijas → `organization_id = any(user_org_ids())`;
-`profiles` → `id = auth.uid()`.
+## Archivos a modificar
 
-**Auth:** `supabase_configure_auth` — signup email con auto-confirmación.
+- `src/lib/analysis.ts` — núcleo: `deriveTaskCriticality`, `criticalTasks`,
+  `deriveProcessCriticality`, `computePersonConcentration` (+level/exclusive),
+  `computeCompetencyConcentration` (+level, ≤2), `computeDashboardMetrics` (derivadas,
+  `criticalProcesses` derivado), `detectRiskFlags` (derivadas + copy).
+- `src/lib/simulation.ts` — resultado extendido (requisito 8).
+- `src/components/entities/SimulationPanel.tsx` — bloque "Critical impact", badges 1→0/2→1.
+- `src/components/entities/TaskDependencyTable.tsx` — mostrar `deriveTaskCriticality`
+  (badge y razones en la fila expandida, junto a las razones de dependencia).
+- `src/pages/Dashboard.tsx` — nota "No critical tasks detected" en el card de cobertura crítica.
+- `src/pages/AnalysisPage.tsx` — misma nota + card corto de metodología de criticidad.
+- `src/pages/PeoplePage.tsx` — conteo de tareas críticas y badge bus factor con criticidad derivada.
+- `src/pages/CompetenciesPage.tsx` — `requiredByCritical` con derivada; badge concentrado ≤2.
+- `package.json` — añadir `vitest` (devDependency) y script `"test": "vitest run"`.
+- `src/lib/analysis.test.ts` — nuevo: fixture + assertions (requisito 9).
 
-**Verificación obligatoria post-migración:** `supabase_get_table_schema` sobre cada tabla nueva →
-existencia, columnas, FK, RLS habilitada y políticas listadas. Corregir en el mismo turno si falta.
+No se toca la persistencia (`api.ts`/tipos de tabla), la importación ni el modelo de datos;
+el campo `task.criticality` se conserva como señal `declared` (editable en formularios).
 
----
+## Fixture del test (requisito 9)
 
-## 2. Modelo y seed (frontend)
-
-- `src/types/index.ts`: interfaz `Area`; `Db.areas: Area[]`; `CollectionKey` += `"areas"`;
-  `Person.managerId?: string; areaId?: string; employeeId?: string`; `Task.areaId?: string`;
-  `Organization.isDemo?: boolean`.
-- `src/data/seed.ts`: `seedDb.areas = []`; `SEED_ORG.isDemo = true`; util **`remapSeedIds(seedDb)`**
-  que reasigna TODOS los ids y referencias internas (org, procesos, funciones, tareas, roles, personas,
-  competencias) preservando nombres y relaciones — los ids fijos del seed nunca se insertan tal cual.
-- `src/integrations/supabase/client.ts` y `types.ts` no se editan (los reescribe el framework).
-
----
-
-## 3. Capa de datos `src/integrations/ora/api.ts`
-
-Capa entre el modelo `Db` de ORA y las tablas del backend:
-- Mapeo colección ↔ tabla; serialización/deserialización; inyección de `organization_id`.
-- CRUD por fila; carga completa de una organización; creación respetando FKs en orden
-  **processes → org_functions → tasks → areas → competencies → roles → people**.
-- Personas: insert inicial con `manager_id` nulo + **segundo pase** para resolver jerarquías.
-- **`removeOrganization(id)`**: en esta capa, si la org es `is_demo` → rechazar (no depende solo de UI).
-- **`ensureDemoOrgIfNeeded(userId)`**: crea la demo solo si el usuario no tiene ninguna; la creación
-  es idempotente (el índice único parcial protege contra carreras; ante error de unicidad se relee).
-
----
-
-## 4. Store `src/store/OraContext.tsx` (refactor)
-
-- **Sesión:** `supabase.auth.onAuthStateChange` registrado **antes** de `getSession`; sin callbacks
-  async dentro del listener; llamadas a `supabase` dentro del callback diferidas con `setTimeout(…,0)`.
-  Estado: `user`, `session`, `isLoading`.
-- **Estado de orgs:** `organizations` (resumen `{id, name, isDemo}`), `activeOrganizationId`
-  (persistido solo como preferencia de UI en `localStorage` clave `ora-active-org`; los datos de las
-  organizaciones viven exclusivamente en backend), `db` = org activa cargada en memoria.
-- **API actual sincrónico mantenido** (formularios existentes no cambian): `setOrganization`, `upsert`,
-  `remove`, `resetToSeed` → aplican en memoria y persisten vía `api.ts` con **cola de escrituras
-  encadenada** (preserva orden; toast de error si falla).
-- **Nuevas acciones:** `addOrganization(db)` (crea en backend y activa), `setActiveOrganization(id)`
-  (carga filas), `removeOrganization(id)` (rechaza demo), `signOut`.
-- **Demo al primer login:** tras restaurar sesión, si `organizations` está vacío →
-  `ensureDemoOrgIfNeeded` (crea `remapSeedIds(seedDb)`) y la activa.
-- **`resetToSeed`:** solo si la org activa es demo → elimina la demo del usuario (borrado + recreación
-  con nuevos ids vía `remapSeedIds`) y **actualiza `activeOrganizationId` al nuevo id**; nunca toca
-  organizaciones importadas.
-
----
-
-## 5. Auth UI
-
-- `src/components/auth/AuthGate.tsx`: restaurando → loader; sin sesión → `LoginPage`; con sesión → app
-  (envuelve el router en `src/App.tsx`).
-- `src/components/auth/LoginPage.tsx`: email + contraseña, tabs login/signup;
-  `signUp` con `emailRedirectTo: ${window.location.origin}/`; `signInWithPassword`.
-- `AppShell`: dropdown de usuario (email) con "Cerrar sesión".
-
----
-
-## 6. Importación (nuevo)
-
-**Dependencia:** `xlsx`.
-
-Módulos `src/lib/importer/`:
-- `types.ts`: campos ORA mapeables: `persona`, `employeeId` (identificador de persona), `area`,
-  `responsable`, `managerId` (identificador del responsable), `rol`, `roleId`, `proceso`, `funcion`,
-  `tarea`, `competencia`, `documentada`, `activo`, `criticidad`. `ColumnMapping`, `ParsedFile`,
-  `ValidationSummary`, `ImportIssue`.
-- `parseFile.ts`: `XLSX.read(ArrayBuffer)` → primera hoja → header row → `{columns, rows}`.
-- `mapping.ts`: **`suggestMapping(columns)`** por palabras clave es/en, p. ej.:
-  `empleado|persona|nombre`→persona; `legajo|employee id|employeeid|identificador`→employeeId;
-  `sector|área|departamento|department`→area; `responsable|superior|manager|jefe`→responsable;
-  `responsableid|managerid`→managerId; `puesto|rol|cargo|job title`→rol; etc. Edición manual total.
-  No asumir que todas las columnas existen.
-- `validate.ts`: construye el resumen de validación (ver §8) a partir de rows+mapeo; aplica la
-  **regla estricta una fila = una persona** (filas con mismo nombre → posibles duplicados marcados,
-  nunca ignorados silenciosamente ni fusionados).
-- `buildOrganization.ts`: normalización `archivo → datos normalizados → entidades ORA → relaciones`:
-  - Una única entidad por valor dentro de la org (áreas, roles, procesos, funciones, tareas,
-    competencias) — sin duplicados porque el mismo valor aparezca en varias filas.
-  - **Resolución de responsables:** si hay `managerId` de origen → resolver por identificador; si no,
-    por nombre; **varias coincidencias → marca "ambigua" (bloqueante, exige revisión antes de
-    importar)**; responsable inexistente → problema de validación. Nunca resolver silenciosamente.
-  - Ids nuevos con `uid()`; procesos/funciones default `important`, tareas default `standard` salvo
-    columna `criticidad`; valores de `criticidad` no reconocidos → "valores no utilizables".
-
----
-
-## 7. Wizard `/import` (4 pasos)
-
-`src/pages/ImportOrganizationPage.tsx` (ruta lazy en `router.tsx`):
-1. Nombre + descripción + archivo Excel/CSV.
-2. Mapeo de columnas (sugerencias automáticas + edición manual).
-3. **Validación y resumen** (ver §8) + resolución de referencias ambiguas/inexistentes mediante
-   selección manual; botón "volver al mapeo".
-4. Confirmación → `buildOrganization` → `addOrganization(db)` → activa org → dashboard.
-
----
-
-## 8. Validación (resumen mostrado antes de crear)
-
-- Cantidad de registros; personas detectadas; áreas; roles; procesos; funciones; tareas; competencias;
-  relaciones jerárquicas; registros incompletos (filas sin nombre → **excluidas de la creación** y
-  contabilizadas); posibles duplicados; referencias inexistentes; referencias ambiguas; columnas sin
-  mapear; valores no utilizables.
-- Problemas bloqueantes (duplicados marcados, referencias inexistentes/ambiguas) impiden confirmar
-  hasta resolverse; el resto se muestra informativo.
-
----
-
-## 9. UI multi-organización y personas/tareas
-
-- `AppShell`: **selector de organización** (dropdown en sidebar) con las orgs del usuario +
-  "+ Incorporar organización" (`/import`); la org activa determina los datos que muestra ORA.
-- `OrganizationPage`: listar organizaciones; cambiar org activa; incorporar; eliminar orgs no-demo
-  (la demo no ofrece opción de eliminación). Conteo de áreas en "Model in numbers".
-- `Dashboard`: "Reset demo data" visible solo cuando la org activa es la demo.
-- `PeoplePage` + `PersonFormDialog`: columnas/campos **Área** y **Responsable** (select entre personas
-  de la misma org, excluye a la propia persona).
-- `TaskFormDialog`: campo **Área** (no perder `areaId` al editar tareas importadas).
-
----
-
-## Archivos críticos
-
-| Archivo | Acción |
-|---|---|
-| Migración (`supabase_migration`) | 9 tablas + RLS + `user_org_ids()` + trigger `handle_new_user` + trigger `prevent_demo_org_delete` + índice único parcial demo |
-| `supabase_configure_auth` | signup email auto-confirm |
-| `src/types/index.ts`, `src/data/seed.ts` | Area, employeeId, managerId, areaId, isDemo + `remapSeedIds` |
-| `src/integrations/ora/api.ts` | nuevo: CRUD ↔ tablas, orden FKs, protección demo, `ensureDemoOrgIfNeeded` |
-| `src/store/OraContext.tsx` | refactor sesión + multi-org + persistencia + cola de escrituras |
-| `src/components/auth/{AuthGate,LoginPage}.tsx` | nuevos |
-| `src/lib/importer/*` (5 archivos) | nuevos |
-| `src/pages/ImportOrganizationPage.tsx` + `src/components/import/*` | nuevos |
-| `src/router.tsx`, `src/App.tsx` | rutas `/login`, `/import`, AuthGate |
-| `src/components/layout/AppShell.tsx`, `src/pages/{OrganizationPage,Dashboard,PeoplePage}.tsx`, `src/components/entities/{PersonFormDialog,TaskFormDialog}.tsx` | ajustes UI |
-| `package.json` | `xlsx` |
-
-Reutilizados: `uid()` (`src/lib/id.ts`), `cloneDb` (`src/data/seed.ts`), `ConfirmDeleteDialog`,
-`PageHeader`, `MultiSelect`, `Field`, componentes shadcn, `useOra()` (mismo API para formularios),
-análisis (`src/lib/analysis.ts`, `src/lib/simulation.ts`) sin cambios funcionales.
-
----
+Db deliberada (ids `uid`-libres, fijos) con:
+- Procesos: `p_core` (critical, declarado) y `p_support` (standard).
+- Funciones: `f_payroll` (critical), `f_backup` (important), `f_office` (standard).
+- Tareas críticas derivadas: `t_payrun` (2 capaces), `t_taxtax` (2 capaces, **sin
+  documentar**), `t_inc` (3 capaces), `t_restore` (3 capaces), `t_bak` (important +
+  1 solo capaz → crítica por puntaje) y estándares: `t_supplies`, `t_rec`.
+- Personas: `p1` (4 críticas → bus factor high), `p4` (3 críticas → bus factor),
+  `p2` (solo capaz de `t_bak` → caso 1→0), `p3`, `p5`.
+- Competencias: `c_tax` (1 solo holder, requerida por `t_taxtax` → high), `c_dr`,
+  `c_payroll` (2 holders → medium), `c_facilities` (solo tareas estándar → no aplica).
 
 ## Implementation checklist
 
-- [ ] Migración única con 9 tablas + `handle_new_user` + `user_org_ids()` + `prevent_demo_org_delete` + índice único parcial demo + RLS con políticas por usuario en cada tabla.
-- [ ] `supabase_get_table_schema` por tabla: existencia, columnas, FK, RLS y políticas verificadas; corregir en el turno si falta.
-- [ ] `supabase_configure_auth`: signup email auto-confirm.
-- [ ] Tipos y seed: `Area`, `Db.areas`, `CollectionKey`+areas, `Person.employeeId/managerId/areaId`, `Task.areaId`, `Organization.isDemo`, `remapSeedIds`.
-- [ ] `api.ts`: mapeo colección↔tabla, CRUD, load org, create ordenado por FKs (manager en 2º pase), `removeOrganization` rechaza demo, `ensureDemoOrgIfNeeded` idempotente.
-- [ ] Store: sesión (listener antes de getSession, sin async en callback), multi-org, `activeOrganizationId` como preferencia local, API sincrónico + cola de escrituras, demo al primer login, `resetToSeed` (solo demo, actualiza activeOrganizationId).
-- [ ] AuthGate + LoginPage (login/signup) + signOut en AppShell.
-- [ ] Dep `xlsx`; `src/lib/importer/*` completo (parse, mapping es/en, validate con regla fila=persona, buildOrganization con normalización y resolución de responsables sin ambigüedad).
-- [ ] Wizard `/import` 4 pasos de punta a punta (incluye resolución de referencias en paso 3 y bloqueo por issues bloqueantes).
-- [ ] Switcher en AppShell; OrganizationPage (listar/cambiar/incorporar/eliminar no-demo); Dashboard "Reset demo data" solo en demo.
-- [ ] PeoplePage/PersonFormDialog (Área, Responsable sin auto-referencia) y TaskFormDialog (Área).
-- [ ] `pnpm run check` y `pnpm run build` en verde.
+- [ ] `src/lib/analysis.ts`: `criticalityRank`, `rankToCriticality`, `deriveTaskCriticality`, `criticalTasks`, `deriveProcessCriticality`.
+- [ ] `src/lib/analysis.ts`: `taskDependency` usa criticidad derivada en sus razones.
+- [ ] `src/lib/analysis.ts`: `computePersonConcentration` con `level` y `exclusiveCriticalTasks`; `computeCompetencyConcentration` con `level` y filtro `holderCount <= 2`.
+- [ ] `src/lib/analysis.ts`: `computeDashboardMetrics` calcula todos los indicadores con criticidad derivada (`criticalProcesses`, `criticalTasks`, `singlePersonTasks`, `docGapTasks`, `concentratedCompetencies`, `criticalCoverageRatio`, `busFactorPeople`, `roleConcentratedTasks`).
+- [ ] `src/lib/analysis.ts`: `detectRiskFlags` con derivadas y copy según principio 10 (nunca "persona crítica").
+- [ ] `src/lib/simulation.ts`: campos críticos nuevos + `summary` (requisito 8).
+- [ ] `src/components/entities/SimulationPanel.tsx`: bloque "Critical impact" con 1→0 vs 2→1 y bus-factor.
+- [ ] `src/components/entities/TaskDependencyTable.tsx`: badge y razones con `deriveTaskCriticality`.
+- [ ] `src/pages/Dashboard.tsx` y `src/pages/AnalysisPage.tsx`: nota "No critical tasks detected" cuando `criticalTasks === 0`.
+- [ ] `src/pages/PeoplePage.tsx` y `src/pages/CompetenciesPage.tsx`: criticidad derivada.
+- [ ] `package.json`: añadir `vitest` y script `test`.
+- [ ] `src/lib/analysis.test.ts`: fixture + assertions de requisito 9.
 
 ## Verification checklist
 
-- [ ] `supabase_get_table_schema` en las 9 tablas nuevas: columnas, FK, RLS habilitada, políticas listadas.
-- [ ] Auth: signup/login con email; contraseña corta/email inválido muestran error; auto-confirmación permite entrar sin verificar email.
-- [ ] Primer usuario: primer login crea automáticamente Meridian Group y el dashboard se ve igual al actual.
-- [ ] Persistencia: editar nombre/descripción → recargar → persiste (backend).
-- [ ] Importación: cargar Excel/CSV de prueba con `Empleado;Sector;Responsable;Puesto;Tareas;Competencias`, mapear, validar, crear → org activa; dashboard/analysis/simulation funcionan con ella.
-- [ ] Identificadores: filas con `employeeId`/`managerId` resuelven relaciones por id antes que por nombre.
-- [ ] Referencias: responsable inexistente → problema; varias coincidencias por nombre → ambigua y bloqueante hasta revisión; nunca se resuelve silenciosamente.
-- [ ] Normalización: mismo área/rol/proceso/función/tarea/competencia en varias filas → una sola entidad por valor en la org.
-- [ ] Duplicados: dos filas con el mismo nombre de persona → marcados como posibles duplicados; filas sin nombre → excluidas y contabilizadas como incompletas.
-- [ ] Separación: eliminar una org importada deja la demo intacta; la demo no ofrece eliminación; `removeOrganization`/delete por datos rechazan `is_demo` (trigger).
-- [ ] Unicidad demo: dos inits/escenarios concurrentes no producen una segunda demo (índice único parcial).
-- [ ] Reset: estando en demo, reset restaura solo Meridian Group y deja activa la nueva demo con su nuevo id; las orgs importadas no cambian.
-- [ ] Multi-usuario: segunda cuenta no ve organizaciones de la primera (RLS).
-- [ ] Errores: archivo corrupto o sin hoja → error claro en paso 1.
-- [ ] Build: `pnpm run build` y `pnpm run check` en verde.
+- [ ] `pnpm test` pasa: `criticalTasks > 0`, `busFactorPeople >= 1` (p1 con 4 críticas), `concentratedCompetencies >= 1` (`c_tax` 1 holder), `docGapTasks >= 1` (`t_taxtax`), `roleConcentratedTasks >= 1` (`t_bak` 1 rol), `singlePersonTasks >= 1` (`t_bak`), `criticalCoverageRatio` entre 0 y 1 (5 críticas, 4 con ≥2 capaces = 80%).
+- [ ] `pnpm test` verifica el caso de ausencia: `p2` deja `t_bak` **1→0** (`uncoveredCriticalTaskIds`); `p1` deja `t_payrun`/`t_taxtax` **2→1** (`reducedToSingleCriticalTaskIds`) — ambos casos distinguidos.
+- [ ] `pnpm run check` (lint + `tsc --noEmit`) pasa.
+- [ ] `pnpm run build` pasa.
+- [ ] Manual: demo Meridian y org importada con el Excel `ORA_prueba_carga_500` muestran indicadores ≠ 0; card de cobertura crítica muestra la nota cuando no hay críticas; el detalle de tareas explica la criticidad derivada.
