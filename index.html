@@ -53,12 +53,12 @@
     // Recovery for the live preview's cold-start window: right after a deploy
     // the dev server is briefly not ready, so the first page load records
     // resource errors and can get stuck on the loading shell. React replaces
-    // the shell when the app mounts; if that has not happened shortly after
-    // load, reload the page (a clean navigation) so the now-warm server serves
-    // everything fresh. Reloads are bounded and spread out.
+    // the shell when the app mounts; until that happens, reload the page at
+    // increasingly spaced intervals so a freshly warmed server serves a clean
+    // page. Bounded and spread over ~2 minutes.
     (function () {
-      var MAX_RELOADS = 3;
-      var DELAYS = [4000, 6000, 10000];
+      var MAX_RELOADS = 6;
+      var DELAYS = [5000, 10000, 18000, 25000, 35000, 45000];
       var reloads = 0;
       var root = document.getElementById("root");
 
@@ -68,29 +68,22 @@
         return style.indexOf("min-height:100vh") === -1;
       }
 
-      function recover() {
-        if (appMounted()) return;
-        if (reloads >= MAX_RELOADS) return;
-        try {
-          var count = Number(window.sessionStorage.getItem("ora_reloads") || "0") + 1;
-          window.sessionStorage.setItem("ora_reloads", String(count));
-          if (count > MAX_RELOADS) return;
-          reloads = count;
-        } catch (e) {
-          /* sessionStorage unavailable; keep local counter only */
-        }
-        window.location.reload();
-      }
-
-      var timer = 0;
       function schedule() {
-        if (reloads >= MAX_RELOADS || appMounted()) return;
-        timer += 1;
+        if (appMounted()) return;
+        var count = reloads;
+        if (count >= MAX_RELOADS) return;
         window.setTimeout(function () {
           if (appMounted()) return;
-          recover();
-          schedule();
-        }, DELAYS[timer - 1] || 10000);
+          try {
+            var stored = Number(window.sessionStorage.getItem("ora_reloads") || "0") + 1;
+            window.sessionStorage.setItem("ora_reloads", String(stored));
+            if (stored > MAX_RELOADS) return;
+            reloads = stored;
+          } catch (e) {
+            reloads = count + 1;
+          }
+          window.location.reload();
+        }, DELAYS[count]);
       }
       schedule();
     })();
