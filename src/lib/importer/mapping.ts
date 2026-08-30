@@ -60,8 +60,12 @@ export function suggestMapping(columns: string[]): ColumnMapping {
       if (used.has(column)) return;
       const header = normalizedHeaders[i];
       if (!header) return;
-      const exact = keywords.includes(header) ? 3 : 0;
-      const contained = keywords.filter((kw) => header.includes(kw) || kw.includes(header)).length;
+      const exact = keywords.includes(header) ? 4 : 0;
+      // Only count when the header contains a keyword (e.g. "ID Responsable" -> "responsable").
+      // The reverse (keyword containing the header, e.g. "responsableid" vs "Responsable")
+      // must NOT score, or a generic header like "Responsable" outranks the exact "Manager ID"
+      // for the managerId field and the whole hierarchy validation breaks.
+      const contained = keywords.filter((kw) => header.includes(kw)).length;
       const score = contained * 2 + exact;
       if (score > bestScore) {
         bestScore = score;
