@@ -19,6 +19,7 @@ import { ConfirmDeleteDialog } from "@/components/common/ConfirmDeleteDialog";
 import { PersonFormDialog } from "@/components/entities/PersonFormDialog";
 import { RoleFormDialog } from "@/components/entities/RoleFormDialog";
 import { useOra } from "@/store/OraContext";
+import { criticalTasks } from "@/lib/analysis";
 import type { Person, Role } from "@/types";
 
 export function PeoplePage() {
@@ -72,8 +73,8 @@ export function PeoplePage() {
                   </TableHeader>
                   <TableBody>
                     {db.people.map((p) => {
-                      const criticalTasks = db.tasks.filter(
-                        (t) => t.criticality === "critical" && p.taskIds.includes(t.id)
+                      const criticalTasks = criticalTasks(db).filter((t) =>
+                        p.taskIds.includes(t.id)
                       );
                       const busFactor = criticalTasks.length >= 3;
                       return (

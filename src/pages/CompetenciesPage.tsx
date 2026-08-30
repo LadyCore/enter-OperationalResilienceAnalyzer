@@ -16,7 +16,7 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { ConfirmDeleteDialog } from "@/components/common/ConfirmDeleteDialog";
 import { CompetencyFormDialog } from "@/components/entities/CompetencyFormDialog";
 import { useOra } from "@/store/OraContext";
-import { holdersOf } from "@/lib/analysis";
+import { holdersOf, criticalTasks } from "@/lib/analysis";
 import type { Competency } from "@/types";
 
 export function CompetenciesPage() {
@@ -25,7 +25,7 @@ export function CompetenciesPage() {
   const [deleteTarget, setDeleteTarget] = useState<Competency | null>(null);
 
   const requiredByCritical = (compId: string) =>
-    db.tasks.filter((t) => t.criticality === "critical" && t.requiredCompetencyIds.includes(compId));
+    criticalTasks(db).filter((t) => t.requiredCompetencyIds.includes(compId));
 
   if (db.competencies.length === 0) {
     return (
@@ -73,7 +73,8 @@ export function CompetenciesPage() {
               {db.competencies.map((c) => {
                 const holders = holdersOf(db, c.id);
                 const criticalTasks = requiredByCritical(c.id);
-                const concentrated = criticalTasks.length > 0 && holders.length === 1;
+                const singleHolder = criticalTasks.length > 0 && holders.length === 1;
+                const limitedCoverage = criticalTasks.length > 0 && holders.length === 2;
                 return (
                   <TableRow key={c.id}>
                     <TableCell>
@@ -108,9 +109,13 @@ export function CompetenciesPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      {concentrated ? (
+                      {singleHolder ? (
                         <Badge className="border-transparent bg-risk-critical/10 text-risk-critical">
-                          Concentrated
+                          Concentrated (1 holder)
+                        </Badge>
+                      ) : limitedCoverage ? (
+                        <Badge className="border-transparent bg-risk-high/10 text-risk-high">
+                          Limited (2 holders)
                         </Badge>
                       ) : criticalTasks.length > 0 ? (
                         <Badge className="border-transparent bg-risk-low/10 text-risk-low">

@@ -18,6 +18,7 @@ import { CriticalityBadge } from "@/components/common/CriticalityBadge";
 import { DependencyBadge } from "@/components/common/DependencyBadge";
 import { useOra } from "@/store/OraContext";
 import { simulateAbsence, type SimulationResult } from "@/lib/simulation";
+import { deriveTaskCriticality } from "@/lib/analysis";
 import { Field } from "../entities/field";
 
 export function SimulationPanel() {
@@ -27,6 +28,12 @@ export function SimulationPanel() {
   const [result, setResult] = useState<SimulationResult | null>(null);
 
   const activePeople = db.people.filter((p) => p.isActive);
+
+  /** Holders of a competency when the simulated person is unavailable. */
+  const remainingHolders = (competencyId: string) =>
+    db.people.filter(
+      (p) => p.isActive && p.id !== (result?.person.id ?? "") && p.competencyIds.includes(competencyId),
+    );
 
   const run = () => {
     if (!personId) {
@@ -118,6 +125,42 @@ export function SimulationPanel() {
             />
           </div>
 
+          {/* Critical impact */}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard
+              label="Affected critical tasks"
+              value={result.summary.affectedCriticalTasks}
+              hint="Critical tasks this person can perform"
+              tone={result.summary.affectedCriticalTasks > 0 ? "high" : "default"}
+            />
+            <StatCard
+              label="Critical tasks without coverage"
+              value={result.summary.uncoveredCriticalTasks}
+              hint="Critical tasks that go from 1 → 0 capable"
+              tone={result.summary.uncoveredCriticalTasks > 0 ? "critical" : "low"}
+            />
+            <StatCard
+              label="Critical tasks reduced to one"
+              value={result.summary.reducedToSingleCritical}
+              hint="Critical tasks that go from 2+ → 1 capable"
+              tone={result.summary.reducedToSingleCritical > 0 ? "high" : "low"}
+            />
+            <StatCard
+              label="Affected critical processes"
+              value={result.summary.affectedCriticalProcesses}
+              hint="Essential processes losing critical coverage"
+              tone={result.summary.affectedCriticalProcesses > 0 ? "critical" : "low"}
+            />
+          </div>
+
+          {result.busFactorAtRisk && (
+            <p className="rounded-md border border-risk-high/20 bg-risk-high/5 px-3 py-2 text-xs leading-relaxed text-risk-high">
+              Bus factor: this person concentrates {result.summary.affectedCriticalTasks} critical
+              tasks, of which {result.criticalTasksLosingBackup} lose all backup coverage during the
+              absence.
+            </p>
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
@@ -145,7 +188,9 @@ export function SimulationPanel() {
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="text-sm font-medium">{change.taskName}</span>
-                              {task && <CriticalityBadge criticality={task.criticality} />}
+                              {task && (
+                                <CriticalityBadge criticality={deriveTaskCriticality(db, task).level} />
+                              )}
                             </div>
                             <div className="mt-1 flex flex-wrap gap-1.5">
                               <DependencyBadge level={change.before.level} />
@@ -158,12 +203,12 @@ export function SimulationPanel() {
                           </div>
                           {uncovered && (
                             <Badge className="border-transparent bg-risk-critical/10 text-risk-critical">
-                              No coverage
+                              No coverage (1 → 0 capable)
                             </Badge>
                           )}
                           {!uncovered && reduced && (
                             <Badge className="border-transparent bg-risk-high/10 text-risk-high">
-                              Now single-person
+                              Now single-person (2+ → 1 capable)
                             </Badge>
                           )}
                         </li>
@@ -235,6 +280,34 @@ export function SimulationPanel() {
                         >
                           {comp?.name ?? cid}
                           {critical ? " · required by critical tasks" : ""}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Critical competencies left concentrated */}
+              <div>
+                <h4 className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Critical competencies left with a single holder
+                </h4>
+                {result.singleHolderCriticalCompetencyIds.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No critical competency is reduced to a single holder by this absence.
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {result.singleHolderCriticalCompetencyIds.map((cid) => {
+                      const comp = db.competencies.find((c) => c.id === cid);
+                      const holder = remainingHolders(cid)[0];
+                      return (
+                        <Badge
+                          key={cid}
+                          className="border-transparent bg-risk-high/10 text-risk-high"
+                        >
+                          {comp?.name ?? cid}
+                          {holder ? ` · sole remaining holder: ${holder.name}` : ""}
                         </Badge>
                       );
                     })}

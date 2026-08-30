@@ -100,13 +100,24 @@ export function Dashboard() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Critical task coverage</CardTitle>
-            <CardDescription>Critical tasks with at least 2 capable people</CardDescription>
+            <CardDescription>
+              {metrics.criticalTasks > 0
+                ? "Critical tasks with at least 2 capable people"
+                : "No critical tasks detected"}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <p className="font-mono text-3xl font-semibold tabular-nums">
               {Math.round(metrics.criticalCoverageRatio * 100)}%
             </p>
             <Progress value={metrics.criticalCoverageRatio * 100} className="mt-3" />
+            {metrics.criticalTasks === 0 && (
+              <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                No critical tasks were detected, so this is 0% by definition — not an
+                organization with critical tasks and zero coverage. Criticality is derived
+                from the process and function each task belongs to.
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>

@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { useOra } from "@/store/OraContext";
-import { buildTaskAnalysis } from "@/lib/analysis";
+import { buildTaskAnalysis, deriveTaskCriticality } from "@/lib/analysis";
 import { CriticalityBadge } from "@/components/common/CriticalityBadge";
 import { DependencyBadge } from "@/components/common/DependencyBadge";
 
@@ -51,6 +51,7 @@ export function TaskDependencyTable() {
             {rows.map(({ task, dependency, capablePeople, roles }) => {
               const fn = db.functions.find((f) => f.id === task.functionId);
               const proc = fn ? db.processes.find((p) => p.id === fn.processId) : undefined;
+              const derived = deriveTaskCriticality(db, task);
               const isOpen = expanded.has(task.id);
               const comps = task.requiredCompetencyIds
                 .map((id) => db.competencies.find((c) => c.id === id)?.name ?? id);
@@ -77,7 +78,7 @@ export function TaskDependencyTable() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <CriticalityBadge criticality={task.criticality} />
+                      <CriticalityBadge criticality={derived.level} />
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
                       <div className="flex max-w-xs flex-wrap gap-1">
@@ -126,18 +127,33 @@ export function TaskDependencyTable() {
                     <TableRow key={`${task.id}-detail`} className="bg-muted/40">
                       <TableCell />
                       <TableCell colSpan={7}>
-                        <div className="space-y-2 py-1 pr-6">
-                          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                            Why this level?
-                          </p>
-                          <ul className="space-y-1">
-                            {dependency.reasons.map((r, i) => (
-                              <li key={i} className="flex items-start gap-2 text-sm">
-                                <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-muted-foreground" />
-                                {r}
-                              </li>
-                            ))}
-                          </ul>
+                        <div className="space-y-3 py-1 pr-6">
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                              Why this criticality?
+                            </p>
+                            <ul className="mt-1 space-y-1">
+                              {derived.reasons.map((r, i) => (
+                                <li key={i} className="flex items-start gap-2 text-sm">
+                                  <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-muted-foreground" />
+                                  {r}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                              Why this dependency level?
+                            </p>
+                            <ul className="mt-1 space-y-1">
+                              {dependency.reasons.map((r, i) => (
+                                <li key={i} className="flex items-start gap-2 text-sm">
+                                  <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-muted-foreground" />
+                                  {r}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
                         </div>
                       </TableCell>
                     </TableRow>

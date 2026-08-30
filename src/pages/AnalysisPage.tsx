@@ -48,15 +48,37 @@ export function AnalysisPage() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Critical task coverage</CardTitle>
-            <CardDescription>Tasks with 2+ capable people</CardDescription>
+            <CardDescription>
+              {metrics.criticalTasks > 0
+                ? "Critical tasks with 2+ capable people"
+                : "No critical tasks detected"}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <p className="font-mono text-3xl font-semibold tabular-nums">
               {Math.round(metrics.criticalCoverageRatio * 100)}%
             </p>
+            {metrics.criticalTasks === 0 && (
+              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                0% because no critical tasks were detected, not because critical coverage is null.
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>
+
+      <Card className="bg-muted/30">
+        <CardContent className="p-4">
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            <span className="font-semibold text-foreground">How criticality works.</span> Criticality is
+            derived by ORA, not imported as a tag: a task starts from the highest of its parent process,
+            its parent function and its registry value, and is raised one level when its coverage depends
+            on zero or one person. Coverage alone never makes a standard task critical — criticality and
+            coverage are separate dimensions. A critical task can be well covered, limited to two people,
+            single-person, or uncovered.
+          </p>
+        </CardContent>
+      </Card>
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
