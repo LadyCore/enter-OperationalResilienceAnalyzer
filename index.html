@@ -50,17 +50,16 @@
   <!-- IMPORTANT: DO NOT REMOVE THIS SCRIPT TAG OR THIS VERY COMMENT! -->
   <script type="module" src="/src/main.tsx"></script>
   <script>
-    // Recovery for slow dev-server warm-up: if the entry module fails to load
-    // on the first attempt (server still starting), retry it, and as a last
-    // resort reload the page once so the freshly warmed server serves a clean
-    // page. React replaces the static loading shell, which is how we know the
-    // app is up. Detection stops as soon as the app mounts.
+    // Recovery for the live preview's cold-start window: right after a deploy
+    // the dev server is briefly not ready, so the first page load records
+    // resource errors and can get stuck on the loading shell. React replaces
+    // the shell when the app mounts; if that has not happened shortly after
+    // load, reload the page (a clean navigation) so the now-warm server serves
+    // everything fresh. Reloads are bounded and spread out.
     (function () {
-      var MAX_RETRIES = 8;
-      var RETRY_DELAY = 1800;
-      var attempts = 0;
-      var inFlight = false;
-      var stopped = false;
+      var MAX_RELOADS = 3;
+      var DELAYS = [4000, 6000, 10000];
+      var reloads = 0;
       var root = document.getElementById("root");
 
       function appMounted() {
@@ -69,49 +68,31 @@
         return style.indexOf("min-height:100vh") === -1;
       }
 
-      function tryReloadOnce() {
+      function recover() {
+        if (appMounted()) return;
+        if (reloads >= MAX_RELOADS) return;
         try {
-          if (window.sessionStorage.getItem("ora_entry_reload") === "1") return;
-          window.sessionStorage.setItem("ora_entry_reload", "1");
+          var count = Number(window.sessionStorage.getItem("ora_reloads") || "0") + 1;
+          window.sessionStorage.setItem("ora_reloads", String(count));
+          if (count > MAX_RELOADS) return;
+          reloads = count;
         } catch (e) {
-          /* sessionStorage unavailable; skip the guard */
+          /* sessionStorage unavailable; keep local counter only */
         }
-        stopped = true;
         window.location.reload();
       }
 
-      function retry() {
-        if (stopped || inFlight || attempts >= MAX_RETRIES) {
-          if (attempts >= MAX_RETRIES) tryReloadOnce();
-          return;
-        }
-        attempts += 1;
-        inFlight = true;
-        var s = document.createElement("script");
-        s.type = "module";
-        s.src = "/src/main.tsx?retry=" + attempts;
-        s.onload = function () {
-          inFlight = false;
-          window.setTimeout(check, 1200);
-        };
-        s.onerror = function () {
-          inFlight = false;
-          window.setTimeout(retry, RETRY_DELAY);
-        };
-        document.body.appendChild(s);
+      var timer = 0;
+      function schedule() {
+        if (reloads >= MAX_RELOADS || appMounted()) return;
+        timer += 1;
+        window.setTimeout(function () {
+          if (appMounted()) return;
+          recover();
+          schedule();
+        }, DELAYS[timer - 1] || 10000);
       }
-
-      function check() {
-        if (stopped) return;
-        if (appMounted()) {
-          stopped = true;
-          return;
-        }
-        retry();
-        window.setTimeout(check, 2500);
-      }
-
-      window.setTimeout(check, 3000);
+      schedule();
     })();
   </script>
 </body>
