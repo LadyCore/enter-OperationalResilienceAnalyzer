@@ -1,4 +1,4 @@
-import type { Competency, Criticality, Db, Person, Process, Task } from "@/types";
+import type { Competency, Criticality, Db, OrgFunction, Person, Process, Task } from "@/types";
 
 export type DependencyLevel = "none" | "high" | "limited" | "adequate";
 
@@ -81,48 +81,120 @@ export interface DerivedCriticality {
 }
 
 /**
- * Criticality is a RESULT of the analysis, not a free-floating tag. A task
- * starts from the highest structural rank among its parent process, its
- * parent function and its own declared value, and can be raised one level
- * when its operational coverage is fragile (0 or 1 capable people). Coverage
- * alone can never make a standard task critical — criticality and coverage
- * remain distinct dimensions.
+ * Criticality is a purely STRUCTURAL result of the analysis. It never reads
+ * the number of people capable of a task (that is the dependency dimension).
+ * Criticality flows DOWN the hierarchy (process → function → task) and never
+ * cascades sideways: one critical task does not make its sibling tasks or its
+ * parent function/process critical. Two modes, selected automatically:
+ *
+ * - Declared mode: the organization carries explicit criticality data (the
+ *   demo, or orgs edited in the UI). Function and process criticality are
+ *   their declared values; a task inherits the highest of its own declared
+ *   value, its function and its process.
+ * - Derived mode: an imported org with no criticality data (all processes and
+ *   functions "important", all tasks "standard"). Process criticality is then
+ *   derived from operational weight — how much of the organization's
+ *   functions, tasks, people and areas the process covers — and functions and
+ *   tasks inherit from it. Declaring any criticality in the UI switches the
+ *   org to declared mode.
  */
 export function deriveTaskCriticality(db: Db, task: Task): DerivedCriticality {
   const fn = db.functions.find((f) => f.id === task.functionId);
   const proc = fn ? db.processes.find((p) => p.id === fn.processId) : undefined;
 
   const reasons: string[] = [];
-  const processRank = proc ? CRITICALITY_RANK[proc.criticality] : 1;
-  const functionRank = fn ? CRITICALITY_RANK[fn.criticality] : 1;
+  const fnLevel = fn ? deriveFunctionCriticality(db, fn).level : "standard";
+  const procLevel = proc ? deriveProcessCriticality(db, proc).level : "standard";
   const declaredRank = CRITICALITY_RANK[task.criticality];
 
-  if (proc && processRank >= 3) reasons.push(`Part of the critical process "${proc.name}".`);
-  else if (proc && processRank === 2) reasons.push(`Part of the important process "${proc.name}".`);
-  if (fn && functionRank >= 3) reasons.push(`Part of the critical function "${fn.name}".`);
-  else if (fn && functionRank === 2) reasons.push(`Part of the important function "${fn.name}".`);
   if (declaredRank >= 3) reasons.push("Marked critical in the task registry.");
   else if (declaredRank === 2) reasons.push("Marked important in the task registry.");
+  if (proc && procLevel === "critical") reasons.push(`Part of the critical process "${proc.name}".`);
+  else if (proc && procLevel === "important") reasons.push(`Part of the important process "${proc.name}".`);
+  if (fn && fnLevel === "critical") reasons.push(`Part of the critical function "${fn.name}".`);
 
-  let score = Math.max(processRank, functionRank, declaredRank);
-
-  const capable = capablePeople(db, task.id).length;
-  if (capable <= 1) {
-    if (capable === 0) {
-      reasons.push("No active person can perform it — the absence of coverage raises its criticality.");
-    } else {
-      reasons.push(
-        `Coverage depends on a single person (${capablePeople(db, task.id)[0].name}) — this raises its criticality.`,
-      );
-    }
-    score = Math.min(score + 1, 3);
-  }
+  const score = Math.max(declaredRank, CRITICALITY_RANK[fnLevel], CRITICALITY_RANK[procLevel]);
 
   if (reasons.length === 0) {
-    reasons.push("No structural or coverage signal elevates this task's criticality.");
+    reasons.push("No structural signal elevates this task's criticality.");
   }
 
   return { level: rankToCriticality(score), reasons };
+}
+
+/** True when the org carries explicit criticality data instead of the import default signature. */
+function hasDeclaredCriticality(db: Db): boolean {
+  if (db.processes.length === 0) return true;
+  const allDefault =
+    db.processes.every((p) => p.criticality === "important") &&
+    db.functions.every((f) => f.criticality === "important") &&
+    db.tasks.every((t) => t.criticality === "standard");
+  return !allDefault;
+}
+
+/**
+ * Structural footprint of a process: how many functions, tasks, active people
+ * and areas it spans. Used only in derived mode as a proxy for operational
+ * relevance — it is a scale measure, not a coverage/redundancy measure.
+ */
+export function processOperationalWeight(db: Db, process: Process): number {
+  const fnIds = new Set(db.functions.filter((f) => f.processId === process.id).map((f) => f.id));
+  const tasks = db.tasks.filter((t) => fnIds.has(t.functionId));
+  const taskIds = new Set(tasks.map((t) => t.id));
+  const people = activePeople(db).filter((p) => p.taskIds.some((tid) => taskIds.has(tid)));
+  const areas = new Set(
+    [...tasks.map((t) => t.areaId), ...people.map((p) => p.areaId)].filter((a): a is string => Boolean(a)),
+  );
+  return tasks.length + fnIds.size + people.length + areas.size * 2;
+}
+
+/** Operational-weight tier used when the org carries no declared criticality. */
+function structuralTier(db: Db, process: Process): { level: Criticality; reason: string } {
+  const weight = processOperationalWeight(db, process);
+  const total = db.processes.reduce((sum, p) => sum + processOperationalWeight(db, p), 0);
+  const share = total === 0 ? 0 : weight / total;
+  const pct = Math.round(share * 100);
+  if (share >= 0.25) {
+    return { level: "critical", reason: `Covers ${pct}% of the organization's operations — its interruption would affect most of the organization.` };
+  }
+  if (share >= 0.1) {
+    return { level: "important", reason: `Covers ${pct}% of the organization's operations.` };
+  }
+  return { level: "standard", reason: `Covers ${pct}% of the organization's operations.` };
+}
+
+export function deriveFunctionCriticality(db: Db, fn: OrgFunction): DerivedCriticality {
+  if (!hasDeclaredCriticality(db)) {
+    const proc = db.processes.find((p) => p.id === fn.processId);
+    if (!proc) {
+      return { level: fn.criticality, reasons: ["No parent process found — using the declared value."] };
+    }
+    const tier = structuralTier(db, proc);
+    return {
+      level: tier.level,
+      reasons: [`Part of the process "${proc.name}" — ${tier.reason.toLowerCase()}`],
+    };
+  }
+
+  const reasons: string[] = [];
+  if (fn.criticality === "critical") reasons.push("Declared as a critical function.");
+  else if (fn.criticality === "important") reasons.push("Declared as an important function.");
+  if (reasons.length === 0) reasons.push("Declared as a standard function.");
+  return { level: fn.criticality, reasons };
+}
+
+/** A process is essential when declared critical (declared mode) or when its operational weight demands it (derived mode). */
+export function deriveProcessCriticality(db: Db, process: Process): DerivedCriticality {
+  if (!hasDeclaredCriticality(db)) {
+    const tier = structuralTier(db, process);
+    return { level: tier.level, reasons: [tier.reason] };
+  }
+
+  const reasons: string[] = [];
+  if (process.criticality === "critical") reasons.push("Declared as a critical process.");
+  else if (process.criticality === "important") reasons.push("Declared as an important process.");
+  else reasons.push("Declared as a standard process.");
+  return { level: process.criticality, reasons };
 }
 
 /** Tasks whose DERIVED criticality is critical. */
@@ -130,20 +202,8 @@ export function criticalTasks(db: Db): Task[] {
   return db.tasks.filter((t) => deriveTaskCriticality(db, t).level === "critical");
 }
 
-/** A process is essential when declared critical or when it contains critical tasks. */
-export function deriveProcessCriticality(db: Db, process: Process): Criticality {
-  const contained = db.functions
-    .filter((f) => f.processId === process.id)
-    .flatMap((f) => db.tasks.filter((t) => t.functionId === f.id));
-  const maxContained = contained.reduce(
-    (max, t) => Math.max(max, CRITICALITY_RANK[deriveTaskCriticality(db, t).level]),
-    1,
-  );
-  return rankToCriticality(Math.max(CRITICALITY_RANK[process.criticality], maxContained));
-}
-
 export function criticalProcesses(db: Db): Process[] {
-  return db.processes.filter((p) => deriveProcessCriticality(db, p) === "critical");
+  return db.processes.filter((p) => deriveProcessCriticality(db, p).level === "critical");
 }
 
 /* ------------------------------------------------------------------ */

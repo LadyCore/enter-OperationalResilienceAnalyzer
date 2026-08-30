@@ -112,7 +112,7 @@ export function simulateAbsence(db: Db, personId: string, days: number): Simulat
         .filter((p): p is string => Boolean(p))
         .filter(
           (pid) =>
-            deriveProcessCriticality(db, db.processes.find((p) => p.id === pid)!) === "critical"
+            deriveProcessCriticality(db, db.processes.find((p) => p.id === pid)!).level === "critical"
         )
     )
   );

@@ -71,11 +71,13 @@ export function AnalysisPage() {
         <CardContent className="p-4">
           <p className="text-xs leading-relaxed text-muted-foreground">
             <span className="font-semibold text-foreground">How criticality works.</span> Criticality is
-            derived by ORA, not imported as a tag: a task starts from the highest of its parent process,
-            its parent function and its registry value, and is raised one level when its coverage depends
-            on zero or one person. Coverage alone never makes a standard task critical — criticality and
-            coverage are separate dimensions. A critical task can be well covered, limited to two people,
-            single-person, or uncovered.
+            structural: a task inherits the criticality of its function and process, and functions and
+            processes inherit from the tasks they contain. Organizations without criticality data (for
+            example imports without that column) get process criticality derived from operational weight —
+            how much of the organization's functions, tasks, people and areas each process covers. Coverage
+            and redundancy never change criticality: a critical task can be well covered or single-person,
+            and a single-person task is not automatically critical. Vulnerability lives in the dependency
+            dimension below.
           </p>
         </CardContent>
       </Card>
