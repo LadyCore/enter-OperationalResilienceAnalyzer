@@ -49,6 +49,56 @@
   </div>
   <!-- IMPORTANT: DO NOT REMOVE THIS SCRIPT TAG OR THIS VERY COMMENT! -->
   <script type="module" src="/src/main.tsx"></script>
+  <script>
+    // Recovery for slow dev-server warm-up: if the entry module fails to load
+    // on the first attempt (server still starting), re-fetch it until the app
+    // actually mounts. React replaces the static loading shell, which is how we
+    // know the app is up.
+    (function () {
+      var MAX_RETRIES = 8;
+      var RETRY_DELAY = 1800;
+      var attempts = 0;
+      var inFlight = false;
+      var stopped = false;
+      var root = document.getElementById("root");
+
+      function appMounted() {
+        if (!root || !root.firstElementChild) return false;
+        var style = root.firstElementChild.getAttribute("style") || "";
+        return style.indexOf("min-height:100vh") === -1;
+      }
+
+      function retry() {
+        if (stopped || inFlight || attempts >= MAX_RETRIES) return;
+        attempts += 1;
+        inFlight = true;
+        var s = document.createElement("script");
+        s.type = "module";
+        s.src = "/src/main.tsx?retry=" + attempts;
+        s.onload = function () {
+          inFlight = false;
+          window.setTimeout(check, 1200);
+        };
+        s.onerror = function () {
+          inFlight = false;
+          window.setTimeout(retry, RETRY_DELAY);
+        };
+        document.body.appendChild(s);
+      }
+
+      function check() {
+        if (stopped) return;
+        if (appMounted()) {
+          stopped = true;
+          return;
+        }
+        retry();
+        window.setTimeout(check, 2500);
+      }
+
+      window.setTimeout(check, 3000);
+    })();
+  </script>
 </body>
 
 </html>
