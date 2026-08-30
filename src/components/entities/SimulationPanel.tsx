@@ -136,15 +136,17 @@ export function SimulationPanel() {
             <StatCard
               label="Critical tasks without coverage"
               value={result.summary.uncoveredCriticalTasks}
-              hint="Critical tasks that go from 1 → 0 capable"
+              hint="No one can perform them anymore (1 → 0 capable)"
               tone={result.summary.uncoveredCriticalTasks > 0 ? "critical" : "low"}
             />
-            <StatCard
-              label="Critical tasks reduced to one"
-              value={result.summary.reducedToSingleCritical}
-              hint="Critical tasks that go from 2+ → 1 capable"
-              tone={result.summary.reducedToSingleCritical > 0 ? "high" : "low"}
-            />
+            {result.summary.reducedToSingleCritical > 0 && (
+              <StatCard
+                label="Critical tasks reduced to one"
+                value={result.summary.reducedToSingleCritical}
+                hint="One person can still perform them (2+ → 1 capable)"
+                tone="high"
+              />
+            )}
             <StatCard
               label="Affected critical processes"
               value={result.summary.affectedCriticalProcesses}
