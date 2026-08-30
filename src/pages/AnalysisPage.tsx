@@ -71,13 +71,12 @@ export function AnalysisPage() {
         <CardContent className="p-4">
           <p className="text-xs leading-relaxed text-muted-foreground">
             <span className="font-semibold text-foreground">How criticality works.</span> Criticality is
-            structural: a task inherits the criticality of its function and process, and functions and
-            processes inherit from the tasks they contain. Organizations without criticality data (for
-            example imports without that column) get process criticality derived from operational weight —
-            how much of the organization's functions, tasks, people and areas each process covers. Coverage
-            and redundancy never change criticality: a critical task can be well covered or single-person,
-            and a single-person task is not automatically critical. Vulnerability lives in the dependency
-            dimension below.
+            structural: a task inherits the criticality of its function and process, and organizations
+            without criticality data (imports without that column) get process criticality derived from
+            operational weight — how many functions, tasks, people and areas each process covers,
+            compared against the organization's largest process. Coverage and redundancy never change
+            criticality: a critical task can be well covered or single-person, and a single-person task is
+            not automatically critical. Vulnerability lives in the dependency dimension below.
           </p>
         </CardContent>
       </Card>

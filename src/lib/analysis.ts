@@ -148,19 +148,48 @@ export function processOperationalWeight(db: Db, process: Process): number {
   return tasks.length + fnIds.size + people.length + areas.size * 2;
 }
 
+/**
+ * Derived-mode thresholds (auditable / calibratable). A process is compared
+ * against the LARGEST process in the org (reference = max operational weight):
+ *
+ *   - critical  when its weight >= DERIVED_CRITICAL_RATIO  × reference (0.50)
+ *   - important when its weight >= DERIVED_IMPORTANT_RATIO × reference (0.20)
+ *   - standard  otherwise
+ *
+ * Rationale: operational relevance is relative to the organization's own core —
+ * the largest process is the reference point. Coverage (capable people) never
+ * enters this formula; criticality and dependency stay separated. Equal-weight
+ * processes always land in the same tier.
+ */
+const DERIVED_CRITICAL_RATIO = 0.5;
+const DERIVED_IMPORTANT_RATIO = 0.2;
+
 /** Operational-weight tier used when the org carries no declared criticality. */
 function structuralTier(db: Db, process: Process): { level: Criticality; reason: string } {
   const weight = processOperationalWeight(db, process);
-  const total = db.processes.reduce((sum, p) => sum + processOperationalWeight(db, p), 0);
-  const share = total === 0 ? 0 : weight / total;
-  const pct = Math.round(share * 100);
-  if (share >= 0.25) {
-    return { level: "critical", reason: `Covers ${pct}% of the organization's operations — its interruption would affect most of the organization.` };
+  const reference = db.processes.reduce(
+    (max, p) => Math.max(max, processOperationalWeight(db, p)),
+    0,
+  );
+  const ratio = reference === 0 ? 0 : weight / reference;
+  const pct = Math.round(ratio * 100);
+
+  if (ratio >= DERIVED_CRITICAL_RATIO) {
+    return {
+      level: "critical",
+      reason: `Its operational weight is ${pct}% of the largest process — a core process for continuity.`,
+    };
   }
-  if (share >= 0.1) {
-    return { level: "important", reason: `Covers ${pct}% of the organization's operations.` };
+  if (ratio >= DERIVED_IMPORTANT_RATIO) {
+    return {
+      level: "important",
+      reason: `Its operational weight is ${pct}% of the largest process.`,
+    };
   }
-  return { level: "standard", reason: `Covers ${pct}% of the organization's operations.` };
+  return {
+    level: "standard",
+    reason: `Its operational weight is ${pct}% of the largest process — below the important threshold.`,
+  };
 }
 
 export function deriveFunctionCriticality(db: Db, fn: OrgFunction): DerivedCriticality {
