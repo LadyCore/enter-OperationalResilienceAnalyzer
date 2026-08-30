@@ -73,10 +73,10 @@ export function PeoplePage() {
                   </TableHeader>
                   <TableBody>
                     {db.people.map((p) => {
-                      const criticalTasks = criticalTasks(db).filter((t) =>
+                      const personCriticalTasks = criticalTasks(db).filter((t) =>
                         p.taskIds.includes(t.id)
                       );
-                      const busFactor = criticalTasks.length >= 3;
+                      const busFactor = personCriticalTasks.length >= 3;
                       return (
                         <TableRow key={p.id}>
                           <TableCell>
@@ -106,7 +106,7 @@ export function PeoplePage() {
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-wrap items-center gap-1.5">
-                              <span className="font-mono text-sm tabular-nums">{criticalTasks.length}</span>
+                              <span className="font-mono text-sm tabular-nums">{personCriticalTasks.length}</span>
                               {busFactor && (
                                 <Badge className="border-transparent bg-risk-high/10 text-risk-high">
                                   Bus factor
