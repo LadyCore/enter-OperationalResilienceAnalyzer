@@ -21,6 +21,30 @@ export default defineConfig(({ mode }) => {
         clientFiles: ["/src/main.tsx", "/src/index.css"],
       },
     },
+    // Pre-bundle the startup dependencies at server start (instead of on the
+    // first request) so @vite/client and /src/main.tsx resolve immediately
+    // after a dev-server restart.
+    optimizeDeps: {
+      include: [
+        "react",
+        "react-dom",
+        "react-dom/client",
+        "react-router-dom",
+        "@tanstack/react-query",
+        "i18next",
+        "react-i18next",
+        "i18next-http-backend",
+        "i18next-browser-languagedetector",
+        "@supabase/supabase-js",
+        "@enter-pro/analytics-sdk",
+        "lucide-react",
+        "sonner",
+        "next-themes",
+        "class-variance-authority",
+        "clsx",
+        "tailwind-merge",
+      ],
+    },
     plugins: plugins.filter(Boolean) as PluginOption[],
     resolve: {
       alias: {
