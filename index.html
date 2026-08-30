@@ -28,7 +28,8 @@
   <div id="root">
     <!-- Static loading shell: visible immediately so the page never appears
          blank while the app bundle is being served/loaded. React replaces it
-         on first render. -->
+         on first render. If it stays for a long time, a refresh reloads the
+         bundle against the (now warm) dev server. -->
     <div
       style="display:flex;min-height:100vh;align-items:center;justify-content:center;background:#f7f8fb;color:#182437;font-family:'IBM Plex Sans',ui-sans-serif,system-ui,sans-serif;"
     >
@@ -37,6 +38,9 @@
           style="width:28px;height:28px;margin:0 auto 14px;border:3px solid rgba(24,36,55,0.15);border-top-color:#182437;border-radius:50%;animation:ora-spin 0.8s linear infinite;"
         ></div>
         <p style="margin:0;font-size:13px;font-weight:600;letter-spacing:0.03em;">ORA &middot; Loading&hellip;</p>
+        <p id="ora-slow-hint" style="margin:8px 0 0;font-size:12px;color:#64748b;display:none;">
+          Taking longer than usual &mdash; if this stays, refresh the page.
+        </p>
       </div>
     </div>
     <style>
@@ -50,42 +54,16 @@
   <!-- IMPORTANT: DO NOT REMOVE THIS SCRIPT TAG OR THIS VERY COMMENT! -->
   <script type="module" src="/src/main.tsx"></script>
   <script>
-    // Recovery for the live preview's cold-start window: right after a deploy
-    // the dev server is briefly not ready, so the first page load records
-    // resource errors and can get stuck on the loading shell. React replaces
-    // the shell when the app mounts; until that happens, reload the page at
-    // increasingly spaced intervals so a freshly warmed server serves a clean
-    // page. Bounded and spread over ~2 minutes.
+    // Passive hint only — never reloads or navigates, so it can never disrupt a
+    // slow-but-healthy app mount. If React has not replaced the shell after a
+    // while, show a small "refresh" hint instead of hanging silently.
     (function () {
-      var MAX_RELOADS = 6;
-      var DELAYS = [5000, 10000, 18000, 25000, 35000, 45000];
-      var reloads = 0;
-      var root = document.getElementById("root");
-
-      function appMounted() {
-        if (!root || !root.firstElementChild) return false;
-        var style = root.firstElementChild.getAttribute("style") || "";
-        return style.indexOf("min-height:100vh") === -1;
-      }
-
-      function schedule() {
-        if (appMounted()) return;
-        var count = reloads;
-        if (count >= MAX_RELOADS) return;
+      var hint = document.getElementById("ora-slow-hint");
+      if (hint) {
         window.setTimeout(function () {
-          if (appMounted()) return;
-          try {
-            var stored = Number(window.sessionStorage.getItem("ora_reloads") || "0") + 1;
-            window.sessionStorage.setItem("ora_reloads", String(stored));
-            if (stored > MAX_RELOADS) return;
-            reloads = stored;
-          } catch (e) {
-            reloads = count + 1;
-          }
-          window.location.reload();
-        }, DELAYS[count]);
+          if (hint.style.display === "none") hint.style.display = "block";
+        }, 12000);
       }
-      schedule();
     })();
   </script>
 </body>
