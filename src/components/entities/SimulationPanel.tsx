@@ -16,9 +16,12 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { StatCard } from "@/components/common/StatCard";
 import { CriticalityBadge } from "@/components/common/CriticalityBadge";
 import { DependencyBadge } from "@/components/common/DependencyBadge";
+import { ExposureBadge } from "@/components/common/ExposureBadge";
+import { exposureBadgeClass } from "@/components/common/exposureBadgeClass";
 import { useOra } from "@/store/OraContext";
 import { simulateAbsence, type SimulationResult } from "@/lib/simulation";
 import { deriveTaskCriticality } from "@/lib/analysis";
+import { buildExposureReport, EXPOSURE_LABELS } from "@/lib/exposure";
 import { Field } from "../entities/field";
 
 export function SimulationPanel() {
@@ -95,7 +98,12 @@ export function SimulationPanel() {
 
       {result && (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {(() => {
+            const exposure = buildExposureReport(db, result);
+            const exposureByTask = new Map(exposure.tasks.map((t) => [t.taskId, t.level]));
+            return (
+              <>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <StatCard
               label="Affected tasks"
               value={result.summary.affectedTasks}
@@ -163,6 +171,35 @@ export function SimulationPanel() {
             </p>
           )}
 
+          {/* Temporal exposure */}
+          {exposure.overall !== "none" && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Temporal exposure</CardTitle>
+                <CardDescription>
+                  How the {result.days}-day absence exposes affected capabilities over time —
+                  separate from each task's criticality.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  {(["critical", "prolonged", "sustained"] as const).map((lv) =>
+                    exposure.counts[lv] > 0 ? (
+                      <Badge key={lv} className={exposureBadgeClass(lv)}>
+                        {EXPOSURE_LABELS[lv]}: {exposure.counts[lv]}
+                      </Badge>
+                    ) : null
+                  )}
+                </div>
+                <p className="rounded-md border bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground">
+                  Exposure reflects how long the same coverage loss lasts (critical → prolonged →
+                  sustained) for each affected task. It is an analytical approximation and never
+                  changes the task's criticality or its coverage.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
@@ -185,6 +222,7 @@ export function SimulationPanel() {
                       const task = db.tasks.find((t) => t.id === change.taskId);
                       const uncovered = result.uncoveredTaskIds.includes(change.taskId);
                       const reduced = result.reducedToSingleTaskIds.includes(change.taskId);
+                      const taskExposure = exposureByTask.get(change.taskId);
                       return (
                         <li key={change.taskId} className="flex flex-wrap items-center gap-3 px-4 py-3">
                           <div className="min-w-0 flex-1">
@@ -192,6 +230,9 @@ export function SimulationPanel() {
                               <span className="text-sm font-medium">{change.taskName}</span>
                               {task && (
                                 <CriticalityBadge criticality={deriveTaskCriticality(db, task).level} />
+                              )}
+                              {taskExposure && taskExposure !== "none" && (
+                                <ExposureBadge level={taskExposure} />
                               )}
                             </div>
                             <div className="mt-1 flex flex-wrap gap-1.5">
@@ -323,6 +364,9 @@ export function SimulationPanel() {
               </p>
             </CardContent>
           </Card>
+              </>
+            );
+          })()}
         </>
       )}
     </div>
