@@ -5,15 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { EmptyState } from "@/components/common/EmptyState";
 import { StatCard } from "@/components/common/StatCard";
+import { SearchableSelect } from "@/components/common/SearchableSelect";
 import { CriticalityBadge } from "@/components/common/CriticalityBadge";
 import { DependencyBadge } from "@/components/common/DependencyBadge";
 import { ExposureBadge } from "@/components/common/ExposureBadge";
@@ -31,6 +25,13 @@ export function SimulationPanel() {
   const [result, setResult] = useState<SimulationResult | null>(null);
 
   const activePeople = db.people.filter((p) => p.isActive);
+
+  const personOptions = activePeople.map((p) => ({
+    value: p.id,
+    label: p.name,
+    // Allow matching by surname or any part of the name, not only the first word.
+    searchTerms: p.name.split(/\s+/).filter(Boolean),
+  }));
 
   /** Holders of a competency when the simulated person is unavailable. */
   const remainingHolders = (competencyId: string) =>
@@ -58,19 +59,16 @@ export function SimulationPanel() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 sm:grid-cols-[1fr_auto_auto] sm:items-end">
-            <Field label="Person" hint="Select who is temporarily unavailable.">
-              <Select value={personId} onValueChange={setPersonId}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select a person…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {activePeople.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <Field label="Person" hint="Search by name or surname.">
+              <SearchableSelect
+                options={personOptions}
+                value={personId}
+                onChange={setPersonId}
+                placeholder="Select a person…"
+                searchPlaceholder="Search name or surname…"
+                emptyText="No matches"
+                className="w-full sm:w-64"
+              />
             </Field>
             <Field label="Absence (days)">
               <Input
