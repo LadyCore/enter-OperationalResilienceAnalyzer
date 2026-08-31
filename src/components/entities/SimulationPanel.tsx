@@ -129,7 +129,7 @@ export function SimulationPanel() {
                   [
                     { key: "temporary", label: "Temporary absence" },
                     { key: "planned", label: "Planned absence" },
-                    { key: "permanent", label: "Permanent loss" },
+                    { key: "permanent", label: "Permanent unavailability" },
                   ] as const
                 ).map(({ key, label }) => (
                   <button
@@ -297,7 +297,7 @@ export function SimulationPanel() {
                 <CardTitle className="text-base">Temporal exposure</CardTitle>
                 <CardDescription>
                   {scenario === "permanent"
-                    ? "Permanent loss — capabilities left without coverage are exposed for as long as the person is gone."
+                    ? "Permanent unavailability — capabilities left without coverage are exposed for as long as the person is gone."
                     : scenario === "planned"
                       ? `Planned absence from ${startDate} to ${endDate} — how the expected coverage loss exposes affected capabilities over time.`
                       : `How the ${result.days}-day absence exposes affected capabilities over time — separate from each task's criticality.`}
