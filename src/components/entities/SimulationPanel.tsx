@@ -5,6 +5,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { EmptyState } from "@/components/common/EmptyState";
 import { StatCard } from "@/components/common/StatCard";
 import { SearchableSelect } from "@/components/common/SearchableSelect";
@@ -19,11 +26,24 @@ import { buildExposureReport, EXPOSURE_LABELS } from "@/lib/exposure";
 import { Field } from "../entities/field";
 import { cn } from "@/lib/utils";
 
+type Scenario = "temporary" | "planned" | "permanent";
+
+const ABSENCE_TYPES = [
+  "Vacation",
+  "Maternity / parental leave",
+  "Training",
+  "Assignment / temporary duty",
+  "Other",
+] as const;
+
 export function SimulationPanel() {
   const { db } = useOra();
   const [personId, setPersonId] = useState("");
   const [days, setDays] = useState(60);
-  const [scenario, setScenario] = useState<"temporary" | "permanent">("temporary");
+  const [scenario, setScenario] = useState<Scenario>("temporary");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [absenceType, setAbsenceType] = useState("");
   const [result, setResult] = useState<SimulationResult | null>(null);
 
   const activePeople = db.people.filter((p) => p.isActive);
@@ -34,6 +54,12 @@ export function SimulationPanel() {
     // Allow matching by surname or any part of the name, not only the first word.
     searchTerms: p.name.split(/\s+/).filter(Boolean),
   }));
+
+  /** Inclusive number of calendar days between two ISO dates. */
+  const plannedDurationDays =
+    startDate && endDate
+      ? Math.max(0, Math.round((new Date(endDate).getTime() - new Date(startDate).getTime()) / 86_400_000) + 1)
+      : 0;
 
   /** Holders of a competency when the simulated person is unavailable. */
   const remainingHolders = (competencyId: string) =>
@@ -48,6 +74,20 @@ export function SimulationPanel() {
     }
     if (scenario === "temporary" && (!days || days <= 0)) {
       toast.error("Enter a positive number of days");
+      return;
+    }
+    if (scenario === "planned") {
+      if (!startDate || !endDate) {
+        toast.error("Enter a start and an end date");
+        return;
+      }
+      if (plannedDurationDays <= 0) {
+        toast.error("The end date must be on or after the start date");
+        return;
+      }
+      // The duration is derived from the user's period; it is not a fixed number
+      // of days tied to any license type. Coverage logic is unchanged.
+      setResult(simulateAbsence(db, personId, plannedDurationDays));
       return;
     }
     // For permanent loss the duration is not used to derive coverage (the person
@@ -74,22 +114,37 @@ export function SimulationPanel() {
                 className="w-full sm:w-64"
               />
             </Field>
-            <Field label="Scenario" hint={scenario === "permanent" ? "No return expected." : "Temporary unavailability."}>
+            <Field
+              label="Scenario"
+              hint={
+                scenario === "temporary"
+                  ? "Temporary unavailability."
+                  : scenario === "planned"
+                    ? "Known in advance — coverage can be planned."
+                    : "No return expected."
+              }
+            >
               <div className="flex h-10 items-center gap-1 rounded-md border bg-muted/40 p-1">
-                {(["temporary", "permanent"] as const).map((s) => (
+                {(
+                  [
+                    { key: "temporary", label: "Temporary absence" },
+                    { key: "planned", label: "Planned absence" },
+                    { key: "permanent", label: "Permanent loss" },
+                  ] as const
+                ).map(({ key, label }) => (
                   <button
-                    key={s}
+                    key={key}
                     type="button"
-                    onClick={() => setScenario(s)}
-                    aria-pressed={scenario === s}
+                    onClick={() => setScenario(key)}
+                    aria-pressed={scenario === key}
                     className={cn(
                       "h-7 rounded px-3 text-xs font-medium transition-colors",
-                      scenario === s
+                      scenario === key
                         ? "bg-card text-foreground shadow-sm"
                         : "text-muted-foreground hover:text-foreground"
                     )}
                   >
-                    {s === "temporary" ? "Temporary absence" : "Permanent loss"}
+                    {label}
                   </button>
                 ))}
               </div>
@@ -105,10 +160,50 @@ export function SimulationPanel() {
                 />
               </Field>
             )}
+            {scenario === "planned" && (
+              <>
+                <Field label="Start date">
+                  <Input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="sm:w-40"
+                  />
+                </Field>
+                <Field label="End date">
+                  <Input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="sm:w-40"
+                  />
+                </Field>
+                <Field label="Absence type" hint="Informational only.">
+                  <Select value={absenceType} onValueChange={setAbsenceType}>
+                    <SelectTrigger className="w-full sm:w-48">
+                      <SelectValue placeholder="Optional" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ABSENCE_TYPES.map((t) => (
+                        <SelectItem key={t} value={t}>
+                          {t}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+              </>
+            )}
             <Button onClick={run} className="sm:mb-0.5">
               <CalendarClock className="h-4 w-4" /> Run simulation
             </Button>
           </div>
+          {scenario === "planned" && startDate && endDate && plannedDurationDays > 0 && (
+            <p className="mt-3 text-xs text-muted-foreground">
+              Duration: {plannedDurationDays} {plannedDurationDays === 1 ? "day" : "days"} (calculated from
+              the period). ORA does not associate a fixed number of days with any license type.
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -116,7 +211,7 @@ export function SimulationPanel() {
         <EmptyState
           icon={ShieldAlert}
           title="Simulate an absence"
-          description="Select a person, choose between a temporary absence or a permanent loss, and set the length. ORA recalculates operational coverage with that person unavailable and shows what would be affected."
+          description="Select a person and choose a scenario: a temporary absence, a planned absence with known dates, or a permanent loss. ORA recalculates operational coverage with that person unavailable and shows what would be affected."
         />
       )}
 
@@ -203,7 +298,9 @@ export function SimulationPanel() {
                 <CardDescription>
                   {scenario === "permanent"
                     ? "Permanent loss — capabilities left without coverage are exposed for as long as the person is gone."
-                    : `How the ${result.days}-day absence exposes affected capabilities over time — separate from each task's criticality.`}
+                    : scenario === "planned"
+                      ? `Planned absence from ${startDate} to ${endDate} — how the expected coverage loss exposes affected capabilities over time.`
+                      : `How the ${result.days}-day absence exposes affected capabilities over time — separate from each task's criticality.`}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -229,7 +326,11 @@ export function SimulationPanel() {
             <CardHeader>
               <CardTitle className="text-base">
                 Impact of {result.person.name}
-                {scenario === "permanent" ? " being permanently lost" : ` being absent for ${result.days} days`}
+                {scenario === "permanent"
+                  ? " being permanently lost"
+                  : scenario === "planned"
+                    ? ` being absent (${absenceType || "planned"}) from ${startDate} to ${endDate} (${result.days} days)`
+                    : ` being absent for ${result.days} days`}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
