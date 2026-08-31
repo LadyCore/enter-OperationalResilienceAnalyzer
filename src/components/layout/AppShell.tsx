@@ -1,4 +1,4 @@
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import {
@@ -9,6 +9,7 @@ import {
   Check,
   ChevronsUpDown,
   CircleUserRound,
+  KeyRound,
   LayoutDashboard,
   ListChecks,
   LogOut,
@@ -25,6 +26,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ChangePasswordDialog } from "@/components/auth/ChangePasswordDialog";
 import { cn } from "@/lib/utils";
 import { useOra } from "@/store/OraContext";
 
@@ -95,25 +97,34 @@ function OrganizationSwitcher() {
 
 function UserMenu() {
   const { user, signOut } = useOra();
+  const [passwordOpen, setPasswordOpen] = useState(false);
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent/70 hover:text-sidebar-foreground"
-        >
-          <CircleUserRound className="h-4 w-4 shrink-0" />
-          <span className="min-w-0 truncate">{user?.email}</span>
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" sideOffset={6}>
-        <DropdownMenuItem onSelect={() => void signOut()}>
-          <LogOut className="h-4 w-4" />
-          Sign out
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent/70 hover:text-sidebar-foreground"
+          >
+            <CircleUserRound className="h-4 w-4 shrink-0" />
+            <span className="min-w-0 truncate">{user?.email}</span>
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" sideOffset={6}>
+          <DropdownMenuItem onSelect={() => setPasswordOpen(true)}>
+            <KeyRound className="h-4 w-4" />
+            Change password
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => void signOut()}>
+            <LogOut className="h-4 w-4" />
+            Sign out
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <ChangePasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} />
+    </>
   );
 }
 
