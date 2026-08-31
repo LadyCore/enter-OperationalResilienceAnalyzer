@@ -17,11 +17,13 @@ import { simulateAbsence, type SimulationResult } from "@/lib/simulation";
 import { deriveTaskCriticality } from "@/lib/analysis";
 import { buildExposureReport, EXPOSURE_LABELS } from "@/lib/exposure";
 import { Field } from "../entities/field";
+import { cn } from "@/lib/utils";
 
 export function SimulationPanel() {
   const { db } = useOra();
   const [personId, setPersonId] = useState("");
   const [days, setDays] = useState(60);
+  const [scenario, setScenario] = useState<"temporary" | "permanent">("temporary");
   const [result, setResult] = useState<SimulationResult | null>(null);
 
   const activePeople = db.people.filter((p) => p.isActive);
@@ -44,11 +46,13 @@ export function SimulationPanel() {
       toast.error("Select a person to simulate");
       return;
     }
-    if (!days || days <= 0) {
+    if (scenario === "temporary" && (!days || days <= 0)) {
       toast.error("Enter a positive number of days");
       return;
     }
-    setResult(simulateAbsence(db, personId, days));
+    // For permanent loss the duration is not used to derive coverage (the person
+    // simply never returns); we still pass the field value to the shared sim.
+    setResult(simulateAbsence(db, personId, scenario === "temporary" ? days : 365));
   };
 
   return (
@@ -58,7 +62,7 @@ export function SimulationPanel() {
           <CardTitle className="text-base">Absence scenario</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 sm:grid-cols-[1fr_auto_auto] sm:items-end">
+          <div className="grid gap-4 sm:grid-cols-[1fr_auto_auto_auto] sm:items-end">
             <Field label="Person" hint="Search by name or surname.">
               <SearchableSelect
                 options={personOptions}
@@ -70,15 +74,37 @@ export function SimulationPanel() {
                 className="w-full sm:w-64"
               />
             </Field>
-            <Field label="Absence (days)">
-              <Input
-                type="number"
-                min={1}
-                value={days}
-                onChange={(e) => setDays(Number(e.target.value))}
-                className="sm:w-28"
-              />
+            <Field label="Scenario" hint={scenario === "permanent" ? "No return expected." : "Temporary unavailability."}>
+              <div className="flex h-10 items-center gap-1 rounded-md border bg-muted/40 p-1">
+                {(["temporary", "permanent"] as const).map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setScenario(s)}
+                    aria-pressed={scenario === s}
+                    className={cn(
+                      "h-7 rounded px-3 text-xs font-medium transition-colors",
+                      scenario === s
+                        ? "bg-card text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {s === "temporary" ? "Temporary absence" : "Permanent loss"}
+                  </button>
+                ))}
+              </div>
             </Field>
+            {scenario === "temporary" && (
+              <Field label="Absence (days)">
+                <Input
+                  type="number"
+                  min={1}
+                  value={days}
+                  onChange={(e) => setDays(Number(e.target.value))}
+                  className="sm:w-28"
+                />
+              </Field>
+            )}
             <Button onClick={run} className="sm:mb-0.5">
               <CalendarClock className="h-4 w-4" /> Run simulation
             </Button>
@@ -90,14 +116,14 @@ export function SimulationPanel() {
         <EmptyState
           icon={ShieldAlert}
           title="Simulate an absence"
-          description="Select a person and the length of their absence. ORA recalculates operational coverage with that person unavailable and shows what would be affected."
+          description="Select a person, choose between a temporary absence or a permanent loss, and set the length. ORA recalculates operational coverage with that person unavailable and shows what would be affected."
         />
       )}
 
       {result && (
         <>
           {(() => {
-            const exposure = buildExposureReport(db, result);
+            const exposure = buildExposureReport(db, result, scenario === "permanent");
             const exposureByTask = new Map(exposure.tasks.map((t) => [t.taskId, t.level]));
             return (
               <>
@@ -175,13 +201,14 @@ export function SimulationPanel() {
               <CardHeader>
                 <CardTitle className="text-base">Temporal exposure</CardTitle>
                 <CardDescription>
-                  How the {result.days}-day absence exposes affected capabilities over time —
-                  separate from each task's criticality.
+                  {scenario === "permanent"
+                    ? "Permanent loss — capabilities left without coverage are exposed for as long as the person is gone."
+                    : `How the ${result.days}-day absence exposes affected capabilities over time — separate from each task's criticality.`}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex flex-wrap gap-2">
-                  {(["critical", "prolonged", "sustained"] as const).map((lv) =>
+                  {(["short", "prolonged", "sustained"] as const).map((lv) =>
                     exposure.counts[lv] > 0 ? (
                       <Badge key={lv} className={exposureBadgeClass(lv)}>
                         {EXPOSURE_LABELS[lv]}: {exposure.counts[lv]}
@@ -190,9 +217,9 @@ export function SimulationPanel() {
                   )}
                 </div>
                 <p className="rounded-md border bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground">
-                  Exposure reflects how long the same coverage loss lasts (critical → prolonged →
-                  sustained) for each affected task. It is an analytical approximation and never
-                  changes the task's criticality or its coverage.
+                  Exposure reflects how long the same coverage loss lasts (short → prolonged → sustained)
+                  for each affected task. It is an analytical approximation and never changes the task's
+                  criticality or its coverage.
                 </p>
               </CardContent>
             </Card>
@@ -201,7 +228,8 @@ export function SimulationPanel() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
-                Impact of {result.person.name} being absent for {result.days} days
+                Impact of {result.person.name}
+                {scenario === "permanent" ? " being permanently lost" : ` being absent for ${result.days} days`}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">

@@ -2,25 +2,25 @@ import type { Criticality, Db } from "@/types";
 import { deriveTaskCriticality } from "@/lib/analysis";
 import type { SimulationResult } from "@/lib/simulation";
 
-export type ExposureLevel = "none" | "critical" | "prolonged" | "sustained";
+export type ExposureLevel = "none" | "short" | "prolonged" | "sustained";
 
 /**
  * Temporal-exposure thresholds — centralized here so they are auditable and easy
  * to recalibrate. They are ORA's analytical approximation of how long a coverage
  * loss lasts during an absence. They are NOT claims about how many days the
  * organization can tolerate a task being down (that data does not exist in the
- * model) and they never change a task's criticality or coverage.
+ * model).
  *
- *   - a short absence lasts <= SHORT_MAX_DAYS
- *   - a prolonged absence lasts <= PROLONGED_MAX_DAYS
- *   - anything longer is treated as sustained / ongoing
+ *   - Short:     1 day .. SHORT_MAX_DAYS
+ *   - Prolonged: SHORT_MAX_DAYS+1 .. PROLONGED_MAX_DAYS
+ *   - Sustained: > PROLONGED_MAX_DAYS, or any Permanent loss with coverage lost
  */
 export const SHORT_MAX_DAYS = 3;
 export const PROLONGED_MAX_DAYS = 14;
 
 export const EXPOSURE_LABELS: Record<ExposureLevel, string> = {
   none: "No exposure",
-  critical: "Critical exposure",
+  short: "Short exposure",
   prolonged: "Prolonged exposure",
   sustained: "Sustained exposure",
 };
@@ -28,50 +28,37 @@ export const EXPOSURE_LABELS: Record<ExposureLevel, string> = {
 /** Coverage impact of the absence on a task (reuses the existing 1→0 / 2+→1 logic). */
 export type CoverageImpact = "none" | "reduced-to-single" | "uncovered";
 
-function durationRank(days: number): number {
-  if (days > PROLONGED_MAX_DAYS) return 2;
-  if (days > SHORT_MAX_DAYS) return 1;
-  return 0;
-}
-
 /**
- * Temporal exposure of a single task from the duration of the absence.
+ * Temporal exposure of a task.
  *
- * Only tasks that actually LOSE coverage are exposed. Relevance comes from the
- * task's derived criticality (standard tasks never create a temporal exposure
- * flag), and the duration escalates the SAME coverage loss over time:
+ * Exposure is DURATION-ONLY. It is a separate dimension from criticality:
  *
- *   criticality: critical=2, important=1, standard=0  (0 → no exposure)
- *   impact:      uncovered (1→0)=2, reduced-to-single (2+→1)=1
- *   duration:    short=0, prolonged=1, sustained=2
- *   score = criticality + impact + duration
- *   score >= 6 → sustained; >= 5 → prolonged; >= 3 → critical; else none
+ *   - only a task that actually LOSES coverage (1 → 0 capable) has exposure;
+ *   - 2+ → 1 (reduced redundancy) is NOT a total loss and has no exposure level;
+ *   - a Permanent loss with coverage lost is Sustained by definition (no return
+ *     expected — ORA does not invent a duration for it);
+ *   - otherwise the duration maps to Short / Prolonged / Sustained.
  *
- * This is interpretation only: it never changes the task's criticality nor its
- * coverage/dependency.
+ * Criticality (Standard/Important/Critical) is never an input and never changes.
  */
 export function computeTaskExposure(
-  criticality: Criticality,
   impact: CoverageImpact,
+  isPermanent: boolean,
   days: number,
 ): ExposureLevel {
-  if (impact === "none") return "none";
+  if (impact !== "uncovered") return "none";
 
-  const relevance = criticality === "critical" ? 2 : criticality === "important" ? 1 : 0;
-  if (relevance === 0) return "none";
+  if (isPermanent) return "sustained";
 
-  const impactScore = impact === "uncovered" ? 2 : 1;
-  const score = relevance + impactScore + durationRank(days);
-
-  if (score >= 6) return "sustained";
-  if (score >= 5) return "prolonged";
-  if (score >= 3) return "critical";
-  return "none";
+  if (days <= SHORT_MAX_DAYS) return "short";
+  if (days <= PROLONGED_MAX_DAYS) return "prolonged";
+  return "sustained";
 }
 
 export interface TaskExposure {
   taskId: string;
   taskName: string;
+  /** Shown for context only — exposure never derives from or changes this. */
   criticality: Criticality;
   impact: CoverageImpact;
   days: number;
@@ -91,8 +78,14 @@ export interface ExposureReport {
  * Interpret a completed absence simulation as a temporal-exposure view. This is
  * presentation/interpretation only: it reads the existing coverage results and
  * the chosen duration and never mutates the task, its criticality or coverage.
+ *
+ * @param isPermanent true when the scenario is a Permanent loss (no return).
  */
-export function buildExposureReport(db: Db, result: SimulationResult): ExposureReport {
+export function buildExposureReport(
+  db: Db,
+  result: SimulationResult,
+  isPermanent = false,
+): ExposureReport {
   const tasks: TaskExposure[] = result.taskChanges.map((change) => {
     const task = db.tasks.find((t) => t.id === change.taskId);
     const criticality = task ? deriveTaskCriticality(db, task).level : "standard";
@@ -105,11 +98,11 @@ export function buildExposureReport(db: Db, result: SimulationResult): ExposureR
       criticality,
       impact,
       days: result.days,
-      level: computeTaskExposure(criticality, impact, result.days),
+      level: computeTaskExposure(impact, isPermanent, result.days),
     };
   });
 
-  const counts: ExposureReport["counts"] = { critical: 0, prolonged: 0, sustained: 0 };
+  const counts: ExposureReport["counts"] = { short: 0, prolonged: 0, sustained: 0 };
   for (const t of tasks) {
     if (t.level !== "none") counts[t.level] += 1;
   }
@@ -118,8 +111,8 @@ export function buildExposureReport(db: Db, result: SimulationResult): ExposureR
       ? "sustained"
       : counts.prolonged > 0
         ? "prolonged"
-        : counts.critical > 0
-          ? "critical"
+        : counts.short > 0
+          ? "short"
           : "none";
 
   return { tasks, counts, overall };
