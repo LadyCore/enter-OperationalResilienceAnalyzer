@@ -219,7 +219,7 @@ export function SimulationPanel() {
         <>
           {(() => {
             const exposure = buildExposureReport(db, result, scenario === "permanent");
-            const exposureByTask = new Map(exposure.tasks.map((t) => [t.taskId, t.level]));
+            const exposureByTask = new Map(exposure.tasks.map((t) => [t.taskId, t]));
             return (
               <>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -358,8 +358,8 @@ export function SimulationPanel() {
                               {task && (
                                 <CriticalityBadge criticality={deriveTaskCriticality(db, task).level} />
                               )}
-                              {taskExposure && taskExposure !== "none" && (
-                                <ExposureBadge level={taskExposure} />
+                              {taskExposure && taskExposure.level !== "none" && (
+                                <ExposureBadge level={taskExposure.level} />
                               )}
                             </div>
                             <div className="mt-1 flex flex-wrap gap-1.5">
@@ -370,6 +370,14 @@ export function SimulationPanel() {
                                 ({change.before.capableCount} → {change.after.capableCount} capable)
                               </span>
                             </div>
+                            {taskExposure && taskExposure.level !== "none" && (
+                              <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                                <span className="font-medium text-foreground">
+                                  {taskExposure.description.title}.
+                                </span>{" "}
+                                {taskExposure.description.note}
+                              </p>
+                            )}
                           </div>
                           {uncovered && (
                             <Badge className="border-transparent bg-risk-critical/10 text-risk-critical">
