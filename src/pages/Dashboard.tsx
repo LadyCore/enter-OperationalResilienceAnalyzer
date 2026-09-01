@@ -4,6 +4,8 @@ import {
   AlertTriangle,
   ArrowRight,
   Award,
+  Download,
+  FileSpreadsheet,
   FileWarning,
   GitBranch,
   ListChecks,
@@ -47,6 +49,16 @@ export function Dashboard() {
             <RotateCcw className="h-4 w-4" /> Reset demo data
           </Button>
         )}
+        <Button asChild variant="outline">
+          <a href="/PLANTILLA DE DATOS.xlsx" download="PLANTILLA DE DATOS.xlsx">
+            <Download className="h-4 w-4" /> Download template
+          </a>
+        </Button>
+        <Button asChild>
+          <Link to="/import">
+            <FileSpreadsheet className="h-4 w-4" /> Import organization
+          </Link>
+        </Button>
         <Button onClick={() => setOrgOpen(true)}>
           Edit organization
         </Button>
