@@ -18,7 +18,6 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { Field } from "@/components/entities/field";
 import { ColumnMappingEditor } from "@/components/import/ColumnMappingEditor";
 import { ValidationReport } from "@/components/import/ValidationReport";
-import { ImportHelpCard } from "@/components/import/ImportHelpCard";
 import { useOra } from "@/store/OraContext";
 import { parseWorkbookFile } from "@/lib/importer/parseFile";
 import { suggestMapping } from "@/lib/importer/mapping";
@@ -134,9 +133,7 @@ export function ImportOrganizationPage() {
 
       {/* Step 1 */}
       {step === 1 && (
-        <>
-          <ImportHelpCard />
-          <Card>
+        <Card>
           <CardHeader>
             <CardTitle className="text-base">Organization and file</CardTitle>
             <CardDescription>
@@ -198,8 +195,7 @@ export function ImportOrganizationPage() {
               Load file
             </Button>
           </div>
-          </Card>
-        </>
+        </Card>
       )}
 
       {/* Step 2 */}

@@ -4,7 +4,6 @@ import {
   AlertTriangle,
   ArrowRight,
   Award,
-  Download,
   FileSpreadsheet,
   FileWarning,
   GitBranch,
@@ -23,7 +22,7 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { OrganizationFormDialog } from "@/components/entities/OrganizationFormDialog";
 import { useOra } from "@/store/OraContext";
 import { computeDashboardMetrics, detectRiskFlags } from "@/lib/analysis";
-import { downloadOrganizationTemplate } from "@/lib/importer/downloadTemplate";
+import { ImportHelpCard } from "@/components/import/ImportHelpCard";
 
 export function Dashboard() {
   const { db, resetToSeed } = useOra();
@@ -50,9 +49,6 @@ export function Dashboard() {
             <RotateCcw className="h-4 w-4" /> Reset demo data
           </Button>
         )}
-        <Button variant="outline" onClick={() => void downloadOrganizationTemplate()}>
-          <Download className="h-4 w-4" /> Download template
-        </Button>
         <Button asChild>
           <Link to="/import">
             <FileSpreadsheet className="h-4 w-4" /> Import organization
@@ -62,6 +58,9 @@ export function Dashboard() {
           Edit organization
         </Button>
       </PageHeader>
+
+      {/* Template download + how-to — access before the import flow */}
+      <ImportHelpCard />
 
       {/* Organization banner */}
       <Card className="relative overflow-hidden border-primary/10">
