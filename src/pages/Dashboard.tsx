@@ -23,6 +23,7 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { OrganizationFormDialog } from "@/components/entities/OrganizationFormDialog";
 import { useOra } from "@/store/OraContext";
 import { computeDashboardMetrics, detectRiskFlags } from "@/lib/analysis";
+import { downloadOrganizationTemplate } from "@/lib/importer/downloadTemplate";
 
 export function Dashboard() {
   const { db, resetToSeed } = useOra();
@@ -49,10 +50,8 @@ export function Dashboard() {
             <RotateCcw className="h-4 w-4" /> Reset demo data
           </Button>
         )}
-        <Button asChild variant="outline">
-          <a href="/PLANTILLA DE DATOS.xlsx" download="PLANTILLA DE DATOS.xlsx">
-            <Download className="h-4 w-4" /> Download template
-          </a>
+        <Button variant="outline" onClick={() => void downloadOrganizationTemplate()}>
+          <Download className="h-4 w-4" /> Download template
         </Button>
         <Button asChild>
           <Link to="/import">

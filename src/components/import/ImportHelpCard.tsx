@@ -2,9 +2,8 @@ import { useState } from "react";
 import { Download, HelpCircle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { downloadOrganizationTemplate } from "@/lib/importer/downloadTemplate";
 import { cn } from "@/lib/utils";
-
-const TEMPLATE_URL = "/PLANTILLA DE DATOS.xlsx";
 
 const flowSteps = [
   "Download template",
@@ -80,10 +79,8 @@ export function ImportHelpCard({ className }: ImportHelpCardProps) {
             Download the official template and read the instructions before preparing your data.
           </p>
         </div>
-        <Button asChild variant="outline" size="sm">
-          <a href={TEMPLATE_URL} download="PLANTILLA DE DATOS.xlsx">
-            <Download className="h-4 w-4" /> Download organization template
-          </a>
+        <Button variant="outline" size="sm" onClick={() => void downloadOrganizationTemplate()}>
+          <Download className="h-4 w-4" /> Download organization template
         </Button>
       </CardHeader>
       <CardContent className="space-y-3">
