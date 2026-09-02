@@ -11,6 +11,8 @@ import {
 import { toast } from "sonner";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { getMyAccess } from "@/lib/access/api";
+import type { MyAccess } from "@/lib/access/types";
 import {
   createOrganization,
   deleteOrganization,
@@ -46,6 +48,12 @@ interface OraApi {
   isLoading: boolean;
   signOut: () => Promise<void>;
 
+  // Access & licensing
+  access: MyAccess | null;
+  accessFailed: boolean;
+  isOwner: boolean;
+  refreshAccess: () => Promise<void>;
+
   // Multi-organization
   organizations: OrgSummary[];
   activeOrganizationId: string | null;
@@ -67,6 +75,8 @@ export function OraProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [access, setAccess] = useState<MyAccess | null>(null);
+  const [accessFailed, setAccessFailed] = useState(false);
   const [organizations, setOrganizations] = useState<OrgSummary[]>([]);
   const [activeOrganizationId, setActiveOrganizationId] = useState<string | null>(null);
   const [db, setDb] = useState<Db | null>(null);
@@ -80,6 +90,17 @@ export function OraProvider({ children }: { children: ReactNode }) {
       console.error("ORA persistence failed:", err);
       toast.error("Could not save changes. Please retry.");
     });
+  }, []);
+
+  const refreshAccess = useCallback(async () => {
+    setAccessFailed(false);
+    try {
+      const next = await getMyAccess();
+      setAccess(next);
+    } catch (err) {
+      console.error("Failed to resolve access:", err);
+      setAccessFailed(true);
+    }
   }, []);
 
   const loadWorkspace = useCallback(async (userId: string) => {
@@ -124,6 +145,7 @@ export function OraProvider({ children }: { children: ReactNode }) {
         if (event === "INITIAL_SESSION" || event === "SIGNED_IN") {
           setTimeout(() => {
             void loadWorkspace(nextSession.user!.id);
+            void refreshAccess();
           }, 0);
         }
       } else {
@@ -131,6 +153,8 @@ export function OraProvider({ children }: { children: ReactNode }) {
         setOrganizations([]);
         setActiveOrganizationId(null);
         activeOrgIdRef.current = null;
+        setAccess(null);
+        setAccessFailed(false);
         setIsLoading(false);
       }
     });
@@ -142,7 +166,7 @@ export function OraProvider({ children }: { children: ReactNode }) {
     });
 
     return () => subscription.subscription.unsubscribe();
-  }, [loadWorkspace]);
+  }, [loadWorkspace, refreshAccess]);
 
   /* ------------------------------------------------ */
   /* Existing synchronous mutations (optimistic + queue) */
@@ -258,6 +282,10 @@ export function OraProvider({ children }: { children: ReactNode }) {
       session,
       isLoading,
       signOut,
+      access,
+      accessFailed,
+      isOwner: access?.is_owner === true,
+      refreshAccess,
       organizations,
       activeOrganizationId,
       addOrganization,
@@ -274,6 +302,9 @@ export function OraProvider({ children }: { children: ReactNode }) {
       session,
       isLoading,
       signOut,
+      access,
+      accessFailed,
+      refreshAccess,
       organizations,
       activeOrganizationId,
       addOrganization,

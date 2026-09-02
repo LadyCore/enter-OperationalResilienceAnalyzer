@@ -28,6 +28,9 @@ const SimulationPage = lazy(() =>
 const ImportOrganizationPage = lazy(() =>
   import("@/pages/ImportOrganizationPage").then((m) => ({ default: m.ImportOrganizationPage }))
 );
+const AccessAdminPage = lazy(() =>
+  import("@/pages/AccessAdminPage").then((m) => ({ default: m.AccessAdminPage }))
+);
 
 export const routers = [
   /* Public auth routes (reachable with or without a session) */
@@ -47,6 +50,7 @@ export const routers = [
       { path: "analysis", name: "analysis", element: <AnalysisPage /> },
       { path: "simulation", name: "simulation", element: <SimulationPage /> },
       { path: "import", name: "import", element: <ImportOrganizationPage /> },
+      { path: "access", name: "access", element: <AccessAdminPage /> },
     ],
   },
   /* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */

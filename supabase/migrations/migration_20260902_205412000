@@ -1,0 +1,569 @@
+-- =====================================================================
+-- ORA access, DEMO and licensing layer
+-- =====================================================================
+
+-- ---------------------------------------------------------------------
+-- 1) Owner flag on profiles
+-- ---------------------------------------------------------------------
+alter table public.profiles add column if not exists is_owner boolean not null default false;
+
+update public.profiles
+set is_owner = true
+where lower(email) = 'mariaeugeniasaldi@gmail.com';
+
+-- ---------------------------------------------------------------------
+-- 2) Tables
+-- ---------------------------------------------------------------------
+create table if not exists public.clients (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  tax_type text check (tax_type in ('dni','cuit')),
+  tax_id text,
+  email text,
+  created_at timestamptz not null default now()
+);
+alter table public.clients enable row level security;
+
+create unique index if not exists clients_tax_id_unique
+  on public.clients (tax_id) where tax_id is not null;
+
+create table if not exists public.licenses (
+  id uuid primary key default gen_random_uuid(),
+  client_id uuid not null references public.clients (id) on delete cascade,
+  modality text not null check (modality in ('perpetual','subscription')),
+  status text not null default 'active' check (status in ('active','suspended','expired')),
+  version text not null default 'current',
+  issued_at timestamptz not null default now(),
+  start_date timestamptz not null default now(),
+  renewal_date timestamptz,
+  notes text
+);
+alter table public.licenses enable row level security;
+
+create table if not exists public.license_users (
+  id uuid primary key default gen_random_uuid(),
+  license_id uuid not null references public.licenses (id) on delete cascade,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  granted_at timestamptz not null default now(),
+  unique (license_id, user_id)
+);
+alter table public.license_users enable row level security;
+
+create table if not exists public.demo_sessions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  client_id uuid references public.clients (id) on delete set null,
+  started_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now()
+);
+alter table public.demo_sessions enable row level security;
+
+create table if not exists public.demo_usage_history (
+  id uuid primary key default gen_random_uuid(),
+  tax_id text not null,
+  tax_type text not null check (tax_type in ('dni','cuit')),
+  client_id uuid references public.clients (id) on delete set null,
+  demo_session_id uuid references public.demo_sessions (id) on delete set null,
+  used_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
+);
+alter table public.demo_usage_history enable row level security;
+
+create index if not exists demo_usage_history_tax_id_idx
+  on public.demo_usage_history (tax_id, used_at desc);
+
+create table if not exists public.notification_outbox (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  demo_session_id uuid references public.demo_sessions (id) on delete cascade,
+  kind text not null check (kind in ('demo_expiring_3days','demo_expired')),
+  planned_for timestamptz not null,
+  status text not null default 'pending' check (status in ('pending','sent','failed')),
+  created_at timestamptz not null default now(),
+  sent_at timestamptz
+);
+alter table public.notification_outbox enable row level security;
+
+-- ---------------------------------------------------------------------
+-- 3) Helper functions (must exist before policies)
+-- ---------------------------------------------------------------------
+create or replace function public.is_owner()
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select coalesce((select is_owner from public.profiles where id = auth.uid()), false);
+$$;
+grant execute on function public.is_owner() to authenticated, anon;
+
+create or replace function public.user_license_ids()
+returns uuid[]
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select coalesce(array_agg(lu.license_id), '{}')
+  from public.license_users lu
+  where lu.user_id = auth.uid();
+$$;
+grant execute on function public.user_license_ids() to authenticated, anon;
+
+create or replace function public.demo_notifications_on_insert()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.notification_outbox (user_id, demo_session_id, kind, planned_for)
+  values
+    (new.user_id, new.id, 'demo_expiring_3days', new.expires_at - interval '3 days'),
+    (new.user_id, new.id, 'demo_expired', new.expires_at);
+  return new;
+end;
+$$;
+
+-- ---------------------------------------------------------------------
+-- 4) Policies
+-- ---------------------------------------------------------------------
+create policy "profiles_owner_select" on public.profiles
+  for select using (public.is_owner());
+
+create policy "clients_owner_all" on public.clients for all using (public.is_owner());
+
+create policy "licenses_owner_all" on public.licenses for all using (public.is_owner());
+create policy "licenses_user_select" on public.licenses
+  for select using (id = any(public.user_license_ids()));
+
+create policy "license_users_owner_all" on public.license_users for all using (public.is_owner());
+create policy "license_users_user_select" on public.license_users
+  for select using (user_id = auth.uid());
+
+create policy "demo_sessions_owner_all" on public.demo_sessions for all using (public.is_owner());
+create policy "demo_sessions_user_select" on public.demo_sessions
+  for select using (user_id = auth.uid());
+
+create policy "demo_usage_history_owner_all" on public.demo_usage_history for all using (public.is_owner());
+
+create policy "notification_outbox_owner_all" on public.notification_outbox for all using (public.is_owner());
+create policy "notification_outbox_user_select" on public.notification_outbox
+  for select using (user_id = auth.uid());
+
+-- ---------------------------------------------------------------------
+-- 5) Trigger
+-- ---------------------------------------------------------------------
+drop trigger if exists demo_notifications_on_insert on public.demo_sessions;
+create trigger demo_notifications_on_insert
+  after insert on public.demo_sessions
+  for each row execute function public.demo_notifications_on_insert();
+
+grant execute on function public.demo_notifications_on_insert() to authenticated, anon;
+
+-- ---------------------------------------------------------------------
+-- 6) DEMO activation
+-- ---------------------------------------------------------------------
+create or replace function public.request_demo(
+  p_tax_type text,
+  p_tax_id text,
+  p_client_name text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_email text;
+  v_client_id uuid;
+  v_demo_id uuid;
+  v_used record;
+  v_eligible_after timestamptz;
+begin
+  if v_uid is null then
+    return jsonb_build_object('ok', false, 'reason', 'unauthorized');
+  end if;
+
+  if public.is_owner() then
+    return jsonb_build_object('ok', false, 'reason', 'owner');
+  end if;
+
+  select email into v_email from public.profiles where id = v_uid;
+
+  if exists (
+    select 1 from public.licenses l
+    join public.license_users lu on lu.license_id = l.id
+    where lu.user_id = v_uid and l.status = 'active'
+  ) then
+    return jsonb_build_object('ok', false, 'reason', 'already_licensed');
+  end if;
+
+  if exists (
+    select 1 from public.demo_sessions where user_id = v_uid and expires_at > now()
+  ) then
+    return jsonb_build_object('ok', false, 'reason', 'demo_already_active');
+  end if;
+
+  select used_at into v_used
+  from public.demo_usage_history
+  where tax_id = p_tax_id and tax_type = p_tax_type
+    and used_at > now() - interval '12 months'
+  order by used_at desc
+  limit 1;
+
+  if v_used.used_at is not null then
+    v_eligible_after := v_used.used_at + interval '12 months';
+    return jsonb_build_object(
+      'ok', false,
+      'reason', 'not_eligible',
+      'eligible_after', v_eligible_after
+    );
+  end if;
+
+  select id into v_client_id
+  from public.clients
+  where tax_id = p_tax_id and tax_type = p_tax_type
+  limit 1;
+
+  if v_client_id is null then
+    insert into public.clients (name, tax_type, tax_id, email)
+    values (coalesce(nullif(p_client_name, ''), v_email), p_tax_type, p_tax_id, v_email)
+    returning id into v_client_id;
+  end if;
+
+  insert into public.demo_sessions (user_id, client_id, started_at, expires_at)
+  values (v_uid, v_client_id, now(), now() + interval '15 days')
+  returning id into v_demo_id;
+
+  insert into public.demo_usage_history (tax_id, tax_type, client_id, demo_session_id, used_at)
+  values (p_tax_id, p_tax_type, v_client_id, v_demo_id, now());
+
+  return jsonb_build_object(
+    'ok', true,
+    'demo_id', v_demo_id,
+    'expires_at', now() + interval '15 days'
+  );
+end;
+$$;
+grant execute on function public.request_demo(text, text, text) to authenticated;
+
+-- ---------------------------------------------------------------------
+-- 7) Authoritative access resolution
+-- ---------------------------------------------------------------------
+create or replace function public.get_my_access()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+stable
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_email text;
+  v_license record;
+  v_demo record;
+  v_days int;
+begin
+  if v_uid is null then
+    return jsonb_build_object('status', 'anonymous', 'is_owner', false);
+  end if;
+
+  select email into v_email from public.profiles where id = v_uid;
+
+  if public.is_owner() then
+    return jsonb_build_object(
+      'status', 'owner',
+      'is_owner', true,
+      'user_id', v_uid,
+      'email', v_email,
+      'available_modalities', jsonb_build_array('perpetual'),
+      'subscription_enabled', false
+    );
+  end if;
+
+  select l.id, l.modality, l.status, l.version, l.renewal_date
+    into v_license
+  from public.licenses l
+  join public.license_users lu on lu.license_id = l.id
+  where lu.user_id = v_uid
+  order by case when l.status = 'active' then 0 else 1 end, l.issued_at desc
+  limit 1;
+
+  if v_license.id is not null and v_license.status = 'active' then
+    if v_license.modality = 'perpetual' then
+      return jsonb_build_object(
+        'status', 'perpetual_active',
+        'is_owner', false,
+        'user_id', v_uid,
+        'email', v_email,
+        'modality', 'perpetual',
+        'version', v_license.version,
+        'license_id', v_license.id,
+        'available_modalities', jsonb_build_array('perpetual'),
+        'subscription_enabled', false
+      );
+    else
+      return jsonb_build_object(
+        'status', 'subscription_active',
+        'is_owner', false,
+        'user_id', v_uid,
+        'email', v_email,
+        'modality', 'subscription',
+        'version', v_license.version,
+        'license_id', v_license.id,
+        'renewal_date', v_license.renewal_date,
+        'available_modalities', jsonb_build_array('perpetual'),
+        'subscription_enabled', false
+      );
+    end if;
+  elsif v_license.id is not null and v_license.modality = 'subscription' then
+    return jsonb_build_object(
+      'status', 'subscription_expired',
+      'is_owner', false,
+      'user_id', v_uid,
+      'email', v_email,
+      'modality', 'subscription',
+      'version', v_license.version,
+      'license_id', v_license.id,
+      'available_modalities', jsonb_build_array('perpetual'),
+      'subscription_enabled', false
+    );
+  end if;
+
+  select id, started_at, expires_at into v_demo
+  from public.demo_sessions
+  where user_id = v_uid
+  order by started_at desc
+  limit 1;
+
+  if v_demo.id is not null then
+    if v_demo.expires_at > now() then
+      v_days := greatest(0, ceil(extract(epoch from (v_demo.expires_at - now())) / 86400.0))::int;
+      if v_days <= 3 then
+        return jsonb_build_object(
+          'status', 'demo_expiring',
+          'is_owner', false,
+          'user_id', v_uid,
+          'email', v_email,
+          'demo_id', v_demo.id,
+          'days_left', v_days,
+          'started_at', v_demo.started_at,
+          'expires_at', v_demo.expires_at,
+          'available_modalities', jsonb_build_array('perpetual'),
+          'subscription_enabled', false
+        );
+      else
+        return jsonb_build_object(
+          'status', 'demo_active',
+          'is_owner', false,
+          'user_id', v_uid,
+          'email', v_email,
+          'demo_id', v_demo.id,
+          'days_left', v_days,
+          'started_at', v_demo.started_at,
+          'expires_at', v_demo.expires_at,
+          'available_modalities', jsonb_build_array('perpetual'),
+          'subscription_enabled', false
+        );
+      end if;
+    else
+      return jsonb_build_object(
+        'status', 'demo_expired',
+        'is_owner', false,
+        'user_id', v_uid,
+        'email', v_email,
+        'demo_id', v_demo.id,
+        'days_left', 0,
+        'started_at', v_demo.started_at,
+        'expires_at', v_demo.expires_at,
+        'available_modalities', jsonb_build_array('perpetual'),
+        'subscription_enabled', false
+      );
+    end if;
+  end if;
+
+  return jsonb_build_object(
+    'status', 'none',
+    'is_owner', false,
+    'user_id', v_uid,
+    'email', v_email,
+    'available_modalities', jsonb_build_array('perpetual'),
+    'subscription_enabled', false
+  );
+end;
+$$;
+grant execute on function public.get_my_access() to authenticated;
+
+-- ---------------------------------------------------------------------
+-- 8) Owner admin actions
+-- ---------------------------------------------------------------------
+create or replace function public.grant_license(
+  p_user_email text,
+  p_modality text,
+  p_version text default 'current',
+  p_client_name text default null,
+  p_tax_type text default null,
+  p_tax_id text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid;
+  v_client_id uuid;
+  v_license_id uuid;
+begin
+  if not public.is_owner() then
+    return jsonb_build_object('ok', false, 'reason', 'forbidden');
+  end if;
+
+  if lower(p_modality) <> 'perpetual' then
+    return jsonb_build_object('ok', false, 'reason', 'subscription_disabled');
+  end if;
+
+  select id into v_user_id from public.profiles where lower(email) = lower(p_user_email);
+  if v_user_id is null then
+    return jsonb_build_object('ok', false, 'reason', 'user_not_found');
+  end if;
+
+  if p_tax_type is not null and p_tax_id is not null then
+    select id into v_client_id
+    from public.clients
+    where tax_id = p_tax_id and tax_type = p_tax_type
+    limit 1;
+  end if;
+
+  if v_client_id is null then
+    insert into public.clients (name, tax_type, tax_id, email)
+    values (
+      coalesce(nullif(p_client_name, ''), p_user_email),
+      p_tax_type,
+      p_tax_id,
+      p_user_email
+    )
+    returning id into v_client_id;
+  end if;
+
+  insert into public.licenses (client_id, modality, status, version, start_date)
+  values (v_client_id, 'perpetual', 'active', coalesce(nullif(p_version, ''), 'current'), now())
+  returning id into v_license_id;
+
+  insert into public.license_users (license_id, user_id)
+  values (v_license_id, v_user_id);
+
+  return jsonb_build_object('ok', true, 'license_id', v_license_id);
+end;
+$$;
+grant execute on function public.grant_license(text, text, text, text, text, text) to authenticated;
+
+create or replace function public.revoke_license(p_license_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_owner() then
+    return jsonb_build_object('ok', false, 'reason', 'forbidden');
+  end if;
+
+  update public.licenses
+  set status = 'suspended'
+  where id = p_license_id;
+
+  return jsonb_build_object('ok', true, 'license_id', p_license_id);
+end;
+$$;
+grant execute on function public.revoke_license(uuid) to authenticated;
+
+create or replace function public.admin_grant_demo(
+  p_user_email text,
+  p_tax_type text,
+  p_tax_id text,
+  p_client_name text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid;
+  v_client_id uuid;
+  v_demo_id uuid;
+  v_used record;
+begin
+  if not public.is_owner() then
+    return jsonb_build_object('ok', false, 'reason', 'forbidden');
+  end if;
+
+  select id into v_user_id from public.profiles where lower(email) = lower(p_user_email);
+  if v_user_id is null then
+    return jsonb_build_object('ok', false, 'reason', 'user_not_found');
+  end if;
+
+  if exists (
+    select 1 from public.licenses l
+    join public.license_users lu on lu.license_id = l.id
+    where lu.user_id = v_user_id and l.status = 'active'
+  ) then
+    return jsonb_build_object('ok', false, 'reason', 'already_licensed');
+  end if;
+
+  if exists (
+    select 1 from public.demo_sessions where user_id = v_user_id and expires_at > now()
+  ) then
+    return jsonb_build_object('ok', false, 'reason', 'demo_already_active');
+  end if;
+
+  select used_at into v_used
+  from public.demo_usage_history
+  where tax_id = p_tax_id and tax_type = p_tax_type
+    and used_at > now() - interval '12 months'
+  order by used_at desc
+  limit 1;
+
+  if v_used.used_at is not null then
+    return jsonb_build_object(
+      'ok', false,
+      'reason', 'not_eligible',
+      'eligible_after', v_used.used_at + interval '12 months'
+    );
+  end if;
+
+  select id into v_client_id
+  from public.clients
+  where tax_id = p_tax_id and tax_type = p_tax_type
+  limit 1;
+
+  if v_client_id is null then
+    insert into public.clients (name, tax_type, tax_id, email)
+    values (coalesce(nullif(p_client_name, ''), p_user_email), p_tax_type, p_tax_id, p_user_email)
+    returning id into v_client_id;
+  end if;
+
+  insert into public.demo_sessions (user_id, client_id, started_at, expires_at)
+  values (v_user_id, v_client_id, now(), now() + interval '15 days')
+  returning id into v_demo_id;
+
+  insert into public.demo_usage_history (tax_id, tax_type, client_id, demo_session_id, used_at)
+  values (p_tax_id, p_tax_type, v_client_id, v_demo_id, now());
+
+  return jsonb_build_object('ok', true, 'demo_id', v_demo_id);
+end;
+$$;
+grant execute on function public.admin_grant_demo(text, text, text, text) to authenticated;
+
+-- ---------------------------------------------------------------------
+-- 9) Migration of pre-DEMO users (reliable email evidence only)
+-- ---------------------------------------------------------------------
+insert into public.demo_sessions (user_id, started_at, expires_at)
+select id, now(), now() + interval '15 days'
+from public.profiles
+where lower(email) in ('facundo20072@gmail.com', 'prueba2024@gmail.com');

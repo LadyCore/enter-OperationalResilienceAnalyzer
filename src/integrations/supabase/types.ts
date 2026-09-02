@@ -1602,6 +1602,102 @@ export type Database = {
       [_ in never]: never
     }
   }
+  _supabase_studio: {
+    Tables: {
+      sql_snippet_folders: {
+        Row: {
+          id: string
+          name: string
+          owner_id: number | null
+          parent_id: string | null
+          project_id: number | null
+        }
+        Insert: {
+          id?: string
+          name: string
+          owner_id?: number | null
+          parent_id?: string | null
+          project_id?: number | null
+        }
+        Update: {
+          id?: string
+          name?: string
+          owner_id?: number | null
+          parent_id?: string | null
+          project_id?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sql_snippet_folders_parent_id_fkey"
+            columns: ["parent_id"]
+            referencedRelation: "sql_snippet_folders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sql_snippets: {
+        Row: {
+          description: string | null
+          favorite: boolean | null
+          folder_id: string | null
+          id: string
+          inserted_at: string | null
+          name: string
+          owner_id: number | null
+          project_id: number | null
+          sql_content: string
+          updated_at: string | null
+          visibility: string
+        }
+        Insert: {
+          description?: string | null
+          favorite?: boolean | null
+          folder_id?: string | null
+          id?: string
+          inserted_at?: string | null
+          name?: string
+          owner_id?: number | null
+          project_id?: number | null
+          sql_content?: string
+          updated_at?: string | null
+          visibility?: string
+        }
+        Update: {
+          description?: string | null
+          favorite?: boolean | null
+          folder_id?: string | null
+          id?: string
+          inserted_at?: string | null
+          name?: string
+          owner_id?: number | null
+          project_id?: number | null
+          sql_content?: string
+          updated_at?: string | null
+          visibility?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sql_snippets_folder_id_fkey"
+            columns: ["folder_id"]
+            referencedRelation: "sql_snippet_folders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      [_ in never]: never
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   auth: {
     Tables: {
       audit_log_entries: {
@@ -3388,6 +3484,33 @@ export type Database = {
           },
         ]
       }
+      clients: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: string
+          name: string
+          tax_id: string | null
+          tax_type: string | null
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          name: string
+          tax_id?: string | null
+          tax_type?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          name?: string
+          tax_id?: string | null
+          tax_type?: string | null
+        }
+        Relationships: []
+      }
       competencies: {
         Row: {
           description: string
@@ -3412,6 +3535,194 @@ export type Database = {
             foreignKeyName: "competencies_organization_id_fkey"
             columns: ["organization_id"]
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      demo_sessions: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          started_at: string
+          user_id: string
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          expires_at: string
+          id?: string
+          started_at?: string
+          user_id: string
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          started_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "demo_sessions_client_id_fkey"
+            columns: ["client_id"]
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      demo_usage_history: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          demo_session_id: string | null
+          id: string
+          tax_id: string
+          tax_type: string
+          used_at: string
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          demo_session_id?: string | null
+          id?: string
+          tax_id: string
+          tax_type: string
+          used_at?: string
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          demo_session_id?: string | null
+          id?: string
+          tax_id?: string
+          tax_type?: string
+          used_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "demo_usage_history_client_id_fkey"
+            columns: ["client_id"]
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "demo_usage_history_demo_session_id_fkey"
+            columns: ["demo_session_id"]
+            referencedRelation: "demo_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      license_users: {
+        Row: {
+          granted_at: string
+          id: string
+          license_id: string
+          user_id: string
+        }
+        Insert: {
+          granted_at?: string
+          id?: string
+          license_id: string
+          user_id: string
+        }
+        Update: {
+          granted_at?: string
+          id?: string
+          license_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "license_users_license_id_fkey"
+            columns: ["license_id"]
+            referencedRelation: "licenses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      licenses: {
+        Row: {
+          client_id: string
+          id: string
+          issued_at: string
+          modality: string
+          notes: string | null
+          renewal_date: string | null
+          start_date: string
+          status: string
+          version: string
+        }
+        Insert: {
+          client_id: string
+          id?: string
+          issued_at?: string
+          modality: string
+          notes?: string | null
+          renewal_date?: string | null
+          start_date?: string
+          status?: string
+          version?: string
+        }
+        Update: {
+          client_id?: string
+          id?: string
+          issued_at?: string
+          modality?: string
+          notes?: string | null
+          renewal_date?: string | null
+          start_date?: string
+          status?: string
+          version?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "licenses_client_id_fkey"
+            columns: ["client_id"]
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notification_outbox: {
+        Row: {
+          created_at: string
+          demo_session_id: string | null
+          id: string
+          kind: string
+          planned_for: string
+          sent_at: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          demo_session_id?: string | null
+          id?: string
+          kind: string
+          planned_for: string
+          sent_at?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          demo_session_id?: string | null
+          id?: string
+          kind?: string
+          planned_for?: string
+          sent_at?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_outbox_demo_session_id_fkey"
+            columns: ["demo_session_id"]
+            referencedRelation: "demo_sessions"
             referencedColumns: ["id"]
           },
         ]
@@ -3583,16 +3894,19 @@ export type Database = {
           created_at: string
           email: string | null
           id: string
+          is_owner: boolean
         }
         Insert: {
           created_at?: string
           email?: string | null
           id: string
+          is_owner?: boolean
         }
         Update: {
           created_at?: string
           email?: string | null
           id?: string
+          is_owner?: boolean
         }
         Relationships: []
       }
@@ -3690,6 +4004,46 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_grant_demo: {
+        Args: {
+          p_client_name?: string
+          p_tax_id: string
+          p_tax_type: string
+          p_user_email: string
+        }
+        Returns: Json
+      }
+      get_my_access: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      grant_license: {
+        Args: {
+          p_client_name?: string
+          p_modality: string
+          p_tax_id?: string
+          p_tax_type?: string
+          p_user_email: string
+          p_version?: string
+        }
+        Returns: Json
+      }
+      is_owner: {
+        Args: Record<PropertyKey, never>
+        Returns: boolean
+      }
+      request_demo: {
+        Args: { p_client_name?: string; p_tax_id: string; p_tax_type: string }
+        Returns: Json
+      }
+      revoke_license: {
+        Args: { p_license_id: string }
+        Returns: Json
+      }
+      user_license_ids: {
+        Args: Record<PropertyKey, never>
+        Returns: string[]
+      }
       user_org_ids: {
         Args: Record<PropertyKey, never>
         Returns: string[]
@@ -4923,6 +5277,9 @@ export const Constants = {
     Enums: {},
   },
   _realtime: {
+    Enums: {},
+  },
+  _supabase_studio: {
     Enums: {},
   },
   auth: {

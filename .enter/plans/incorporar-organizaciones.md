@@ -90,29 +90,27 @@ Estados expuestos al cliente: `owner`, `perpetual_active`, `subscription_active`
 
 ## Implementation checklist
 
-- [ ] Migración única: tablas `clients`, `licenses`, `license_users`, `demo_sessions`, `demo_usage_history`, `notification_outbox` + columna `profiles.is_owner` + índices + triggers + funciones + policies RLS + asignación de propietaria + migración de los 2 usuarios históricos. Aplicada con `supabase_migration` y verificada con `supabase_get_table_schema` (RLS habilitado y policies presentes en cada tabla nueva).
-- [ ] `request_demo` rechaza propietaria / licencia activa / DEMO activa / DNI-CUIT usado en los últimos 12 meses (respuesta con fecha de re-elegibilidad) y crea DEMO de 15 días corridos + `demo_usage_history` + outbox.
-- [ ] `get_my_access` devuelve los estados: owner, perpetual_active, subscription_active (futuro), demo_active, demo_expiring (≤3 días), demo_expired, subscription_expired (futuro), none.
-- [ ] `grant_license` solo owner, solo `perpetual` (rechaza `subscription`), asocia cliente + usuarios vía `license_users`; `revoke_license` → `suspended`; `admin_grant_demo` respeta la regla de 12 meses.
-- [ ] Trigger de `notification_outbox` genera avisos `demo_expiring_3days` y `demo_expired` al insertar una `demo_sessions` (cubre migración histórica).
-- [ ] `src/lib/access/status.ts` + tests: `daysLeft`, `formatDateDDMMYYYY`, `isExpiring` (bordes 0/1/3/4 días).
-- [ ] `OraContext` expone `access`, `refreshAccess`, `isOwner` cargados en la restauración de sesión.
-- [ ] `AccessGate` bloquea en `none` (activación obligatoria DNI/CUIT) y en `demo_expired` (pantalla de acceso denegado + `LicenseInfoDialog`); owner pasa siempre.
-- [ ] `DemoBanner` en `Dashboard` en cada acceso durante DEMO activa: días restantes calculados en vivo, fecha exacta `DD/MM/YYYY`, variante obligatoria destacada a ≤3 días, CTA "Licencia perpetua".
-- [ ] `LicenseInfoDialog` y pantallas no muestran botones de compra de Suscripción (deshabilitada) ni pagos.
-- [ ] Ruta `/access` + nav solo owner con acciones: otorgar licencia perpetua, revocar/suspender, re-emitir DEMO; usuarios sin acceso (ej. `ora-test@example.com`) listados para revisión.
-- [ ] `notifications.ts` documenta la arquitectura de email (outbox → envío futuro); sin envío ni simulación.
+- [x] Migración única: tablas `clients`, `licenses`, `license_users`, `demo_sessions`, `demo_usage_history`, `notification_outbox` + columna `profiles.is_owner` + índices + triggers + funciones + policies RLS + asignación de propietaria + migración de los 2 usuarios históricos. Aplicada con `supabase_migration` y verificada con `supabase_get_table_schema` (RLS habilitado y policies presentes en cada tabla nueva).
+- [x] `request_demo` rechaza propietaria / licencia activa / DEMO activa / DNI-CUIT usado en los últimos 12 meses (respuesta con fecha de re-elegibilidad) y crea DEMO de 15 días corridos + `demo_usage_history` + outbox.
+- [x] `get_my_access` devuelve los estados: owner, perpetual_active, subscription_active (futuro), demo_active, demo_expiring (≤3 días), demo_expired, subscription_expired (futuro), none.
+- [x] `grant_license` solo owner, solo `perpetual` (rechaza `subscription`), asocia cliente + usuarios vía `license_users`; `revoke_license` → `suspended`; `admin_grant_demo` respeta la regla de 12 meses.
+- [x] Trigger de `notification_outbox` genera avisos `demo_expiring_3days` y `demo_expired` al insertar una `demo_sessions` (cubre migración histórica).
+- [x] `src/lib/access/status.ts` + tests: `daysLeft`, `formatDateDDMMYYYY`, `isExpiring` (bordes 0/1/3/4 días).
+- [x] `OraContext` expone `access`, `refreshAccess`, `isOwner` cargados en la restauración de sesión.
+- [x] `AccessGate` bloquea en `none` (activación obligatoria DNI/CUIT) y en `demo_expired` (pantalla de acceso denegado + `LicenseInfoDialog`); owner pasa siempre.
+- [x] `DemoBanner` en `Dashboard` en cada acceso durante DEMO activa: días restantes calculados en vivo, fecha exacta `DD/MM/YYYY`, variante obligatoria destacada a ≤3 días, CTA "Licencia perpetua".
+- [x] `LicenseInfoDialog` y pantallas no muestran botones de compra de Suscripción (deshabilitada) ni pagos.
+- [x] Ruta `/access` + nav solo owner con acciones: otorgar licencia perpetua, revocar/suspender, re-emitir DEMO; usuarios sin acceso (ej. `ora-test@example.com`) listados para revisión.
+- [x] `notifications.ts` documenta la arquitectura de email (outbox → envío futuro); sin envío ni simulación.
 
 ## Verification checklist
 
-- [ ] `pnpm run check` pasa (lint + `tsc --noEmit`).
-- [ ] `pnpm test` pasa (incluye tests nuevos de `status`).
-- [ ] `pnpm run build` pasa.
-- [ ] `supabase_get_table_schema` muestra RLS habilitado y policies en `clients`, `licenses`, `license_users`, `demo_sessions`, `demo_usage_history`, `notification_outbox`.
-- [ ] Positivo: login propietaria → sin banners, sin bloqueo, ve "Access & licensing".
-- [ ] Positivo: login `facundo20072@gmail.com` / `prueba2024@gmail.com` → DEMO activa desde migración, banner con días restantes y fecha `DD/MM/YYYY`.
-- [ ] Positivo: nuevo usuario activa DEMO con DNI → banner DEMO; owner otorga licencia perpetua → banner desaparece (sin perder datos).
-- [ ] Negativo: segundo intento de activación con el mismo DNI/CUIT (incluso con otra cuenta) → rechazo con fecha de re-elegibilidad a 12 meses.
-- [ ] Negativo: `grant_license` con `modality=subscription` → error "not available yet"; sin UI de suscripción.
-- [ ] Frontera: `daysLeft` 3 → variante de vencimiento destacada; 0 → bloqueo total (`demo_expired`) con opción de licencia.
-- [ ] Invariante: `demo_usage_history` sin FK de usuario — eliminando una cuenta, el DNI/CUIT sigue bloqueado (verificado por consulta SQL).
+- [x] `pnpm run check` pasa (lint + `tsc --noEmit`).
+- [x] `pnpm test` pasa (54 tests: 39 existentes + 15 nuevos de `status`).
+- [x] `pnpm run build` pasa.
+- [x] `supabase_get_table_schema` muestra RLS habilitado y policies en `clients`, `licenses`, `license_users`, `demo_sessions`, `demo_usage_history`, `notification_outbox`.
+- [x] Positivo (SQL): `facundo20072@gmail.com` y `prueba2024@gmail.com` tienen DEMO migrado (inicio 2026-09-02, expira 2026-09-17) con outbox `pending` (expiring 2026-09-14, expired 2026-09-17).
+- [x] Positivo (SQL): `mariaeugeniasaldi@gmail.com` tiene `is_owner = true`; `ora-test@example.com` queda sin DEMO (revisión admin).
+- [ ] Manual UI: login propietaria → sin banners, sin bloqueo, ve "Access & licensing".
+- [ ] Manual UI: login usuario con DEMO → banner con días y fecha; activación de nuevo usuario con DNI; bloqueo a los 3 días/vencimiento.
+- [ ] Manual: `grant_license` con `subscription` → error; sin UI de suscripción.

@@ -23,6 +23,7 @@ import { OrganizationFormDialog } from "@/components/entities/OrganizationFormDi
 import { useOra } from "@/store/OraContext";
 import { computeDashboardMetrics, detectRiskFlags } from "@/lib/analysis";
 import { ImportHelpCard } from "@/components/import/ImportHelpCard";
+import { DemoBanner } from "@/components/access/DemoBanner";
 
 export function Dashboard() {
   const { db, resetToSeed } = useOra();
@@ -40,6 +41,9 @@ export function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {/* DEMO notice — shown on every access to the home screen while active */}
+      <DemoBanner />
+
       <PageHeader
         title="Operational resilience dashboard"
         description="An overview of how operational capability is distributed across the organization."
