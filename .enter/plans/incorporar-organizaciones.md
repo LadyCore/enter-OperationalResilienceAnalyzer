@@ -1,136 +1,118 @@
-# Reactivar el análisis de criticidad de ORA (crítica derivada)
+# ORA — Acceso, DEMO y Licenciamiento
 
 ## Context
 
-Hoy la criticidad es un campo estático por tarea (`Task.criticality`) que solo se
-rellena si el archivo de importación mapea la columna `Criticidad`. Cuando ese valor
-no llega, todas las tareas quedan en `standard` y toda la capa que depende de la
-criticidad se apaga: `Processes: 0 critical`, `Tasks: 0 critical`, bus factor 0,
-competencias concentradas 0, gaps de documentación 0, cobertura crítica 0%.
+ORA es un analizador de resiliencia operacional (Vite + React + TS + Tailwind + shadcn + Enter Cloud). Hoy todo usuario autenticado tiene acceso pleno e ilimitado: al registrarse se le crea una organización DEMO y puede importar organizaciones. No existe gestión de acceso, vencimientos ni licencias.
 
-El usuario confirmó el modelo deseado: **puntaje combinado** — herencia estructural
-(proceso/función) + un factor adicional de cobertura/dependencia, manteniendo la
-distinción crítica ≠ cobertura (una tarea no es crítica solo por tener 1 persona
-capaz). La criticidad debe ser **resultado del análisis de ORA**, reproducible y
-explicable, sin introducir columnas nuevas en la importación. El caso de prueba
-obligatorio se materializa como **fixture automatizado + test unitario (vitest)**.
+Se requiere una capa nueva de gestión de usuarios, DEMO y licenciamiento que **no altere** la metodología, el análisis, la simulación ni el chatbot de ORA. `mariaeugeniasaldi@gmail.com` es la cuenta **propietaria**: acceso permanente, exento de DEMO/licencias, con capacidad administrativa. La modalidad **Suscripción queda preparada pero deshabilitada** comercialmente. No se implementan pagos reales.
 
-## Modelo de criticidad derivada (núcleo)
+**Datos reales en la base (verificados):**
+- Propietaria: `mariaeugeniasaldi@gmail.com` (6656c6eb-…) con 11 organizaciones.
+- Usuarios con evidencia de uso previo (tienen org DEMO creada antes de esta implementación): `facundo20072@gmail.com` (ac6954a5-…), `prueba2024@gmail.com` (a8776c7a-…).
+- `ora-test@example.com` (4a9bb4f2-…) tiene **0 organizaciones**: sin evidencia confiable de uso → **no se migra**, queda listada para revisión administrativa.
+- La cuenta propietaria queda excluida de la migración.
 
-Nuevas funciones puras en `src/lib/analysis.ts` (reusando `capablePeople`,
-`capableRoles`, `holdersOf`, `taskDependency` existentes):
+## Modelo de datos (nuevas tablas en `public`, migración única vía `supabase_migration`)
 
-- `criticalityRank(c)`: `standard=1, important=2, critical=3`; `rankToCriticality(r)`.
-- `deriveTaskCriticality(db, task): { level: Criticality; reasons: string[] }`:
-  1. `structural = max(rank(process.criticality), rank(funct.criticality), rank(task.criticality))`
-     (función padre vía `task.functionId`; proceso padre vía `fn.processId`; si falta, rank 1).
-  2. `coverageFactor = +1` cuando `capablePeople(db, task.id).length <= 1` (sin cobertura o
-     persona única), si no `+0`.
-  3. `score = min(structural + coverageFactor, 3)` → nivel final.
-  4. `reasons`: qué señal(s) aportaron ("Pertenece al proceso crítico X", "Pertenece a la
-     función crítica Y", "Declarada crítica en el registro", "Su cobertura depende de una
-     sola persona (Z)" / "Nadie activo puede realizarla").
-- `criticalTasks(db): Task[]` — tareas con nivel derivado `critical`.
-- `deriveProcessCriticality(db, process): Criticality` — `max(declarada, rank derivado de
-  sus tareas)`; un proceso que contiene tareas críticas es esencial. Alimenta
-  `metrics.criticalProcesses` y "procesos críticos afectados" en ausencias.
-- Reemplazar **todas** las ocurrencias de `t.criticality === "critical"` del análisis,
-  simulación y páginas por el nivel derivado.
+```
+CLIENTE (clients)
+   └── LICENCIA (licenses)
+          └── license_users (usuario ↔ licencia)
+demo_sessions        — DEMO por usuario (started_at, expires_at)
+demo_usage_history   — registro de uso por DNI/CUIT (independiente de la cuenta)
+notification_outbox  — avisos de email pendientes (arquitectura preparada, sin envío)
+```
 
-Invariantes del modelo (se verifican con test):
-- Una tarea `standard` con persona única queda `important`, **nunca** crítica solo por
-  cobertura (requisito 1).
-- Una tarea en proceso/función `important` con 0 o 1 persona capaz queda **crítica**
-  (2 + 1 = 3): "tareas cuya ausencia genera dependencia operacional relevante".
-- La dimensión cobertura/dependencia (`taskDependency`: 0=none, 1=high, 2=limited,
-  3+=adequate) permanece intacta y es la que muestra el badge de dependencia.
+1. `profiles`: agregar columna `is_owner boolean not null default false`; marcar `true` a la propietaria por email. (No tocar `auth.users`.)
+2. `clients`: `id uuid pk`, `name text not null`, `tax_type text check (dni|cuit) null`, `tax_id text null`, `email text null`, `created_at`. Índice único parcial sobre `tax_id` donde no nulo.
+3. `licenses`: `id uuid pk`, `client_id fk clients`, `modality text check (perpetual|subscription)`, `status text check (active|suspended|expired) default active`, `version text not null default 'current'`, `issued_at`, `start_date`, `renewal_date null` (futuro de suscripción), `notes`.
+4. `license_users`: `id uuid pk`, `license_id fk licenses on delete cascade`, `user_id fk auth.users on delete cascade`, `granted_at`, único `(license_id, user_id)`.
+5. `demo_sessions`: `id uuid pk`, `user_id fk auth.users on delete cascade`, `client_id fk clients null`, `started_at timestamptz not null`, `expires_at timestamptz not null`, `created_at`.
+6. `demo_usage_history`: `id uuid pk`, `tax_id text not null`, `tax_type text check (dni|cuit) not null`, `client_id fk clients null`, `demo_session_id fk null`, `used_at timestamptz default now()`. **Sin FK a usuario** → sobrevive a la eliminación de la cuenta y bloquea nuevos DEMO con el mismo DNI/CUIT durante 12 meses.
+7. `notification_outbox`: `id uuid pk`, `user_id fk auth.users`, `demo_session_id fk null`, `kind text check (demo_expiring_3days|demo_expired)`, `planned_for timestamptz`, `status check (pending|sent|failed) default pending`, `created_at`, `sent_at null`.
 
-## Cambios por requisito
+**RLS en TODAS las tablas nuevas** (verificación obligatoria con `supabase_get_table_schema` después de migrar):
+- `clients`, `licenses`, `license_users`, `demo_sessions`, `demo_usage_history`, `notification_outbox`: policy owner ALL (`using (public.is_owner())`).
+- `license_users`, `demo_sessions`, `notification_outbox`: además policy SELECT del propio usuario (`user_id = auth.uid()` / subconsulta vía helper security definer `user_license_ids()` para evitar recursión en `licenses`).
+- Usuarios: **sin policies de INSERT/UPDATE/DELETE** sobre estas tablas — todas las escrituras pasan por funciones security definer (`request_demo`, `grant_license`, etc.).
 
-1. **Criticidad ≠ cobertura** — cumplido por el modelo de puntaje (arriba). Badge de
-   criticidad y badge de dependencia siguen siendo columnas/indicadores separados.
-2. **Criterios reproducibles** — el modelo es una fórmula fija con razones visibles;
-   sin nombres mágicos de personas. La columna `Criticidad` existente es solo una señal
-   `declared`; no se agrega ninguna columna de importación.
-3. **Bus factor** — `computePersonConcentration(db, threshold=3)` ahora calcula sobre
-   tareas críticas **derivadas** y añade `exclusiveCriticalTasks` (tareas críticas donde
-   esta persona es la única capaz) y `level: "high" | "medium"` (high si
-   `exclusiveCriticalTasks >= 1` o `count >= 5`; si no medium). Copy según principio 10.
-4. **Concentración de competencias** — `computeCompetencyConcentration`: competencias
-   requeridas por tareas críticas derivadas con `holderCount <= 2`; `level` (1 holder →
-   high, 2 → medium). `metrics.concentratedCompetencies` cuenta `holderCount <= 2`.
-5. **Role concentration** — lógica existente (tarea crítica con ≥1 capaz y exactamente 1
-   rol capaz) ahora sobre criticidad derivada; copy aclara "cubierta por un único rol".
-6. **Documentation gaps** — crítica + sin documentar (derivada). Lógica existente.
-7. **Critical task coverage** — fórmula existente (`>=2 capaces / total críticas`). Cuando
-   `criticalTasks === 0`, el card muestra 0% **y** la nota explícita "No critical tasks
-   detected" para diferenciarlo de "críticas con cobertura nula".
-8. **Ausencia** — `simulateAbsence` extiende el resultado con:
-   `affectedCriticalTaskIds`, `uncoveredCriticalTaskIds` (críticas 1→0),
-   `reducedToSingleCriticalTaskIds` (críticas 2+→1), `affectedCriticalProcessIds`,
-   `singleHolderCriticalCompetencyIds` (competencias críticas que quedan con 1 solo
-   holder), `busFactorAtRisk` y `criticalTasksLosingBackup`; más sus campos en `summary`.
-   `SimulationPanel` muestra un bloque "Critical impact" y distingue claramente
-   "No coverage (1 → 0)" de "Now single-person (2+ → 1)".
-9. **Caso de prueba** — fixture deliberado + test (abajo).
-10. **Principio** — copy reescrito en flags, tarjetas y badges: se habla de "capacidad /
-    tarea con dependencia operacional elevada por concentrarse en pocas personas", nunca
-    "esta persona es crítica". Ejemplos: título de flag
-    `Capability for N critical tasks is concentrated in one person (X)`; título de
-    single-person `Task "X" has single-person coverage`.
+**Funciones (security definer, `search_path = public`):**
+- `is_owner() returns boolean` — `select coalesce((select is_owner from profiles where id = auth.uid()), false)`.
+- `request_demo(p_tax_type text, p_tax_id text, p_client_name text) returns jsonb` — activación atómica: valida DNI/CUIT; rechaza si propietario / licencia activa / DEMO activa; **rechaza si hay `demo_usage_history` con ese `tax_id` en los últimos 12 meses** (mensaje con fecha de re-elegibilidad); crea/reencontra cliente, `demo_sessions` (15 días corridos), `demo_usage_history`, y outbox (trigger).
+- `get_my_access() returns jsonb` — resolución autoritativa de estado del usuario: `owner | perpetual_active | subscription_active (futuro) | demo_active | demo_expiring (≤3 días) | demo_expired | subscription_expired (futuro) | none` + días restantes, fecha de vencimiento, versión, modalidades disponibles.
+- `grant_license(p_user_email, p_modality, p_version, p_client_name, p_tax_type, p_tax_id) returns jsonb` — solo owner (lanza si no). **`modality` acepta únicamente `perpetual`**; `subscription` se rechaza con "not available yet".
+- `revoke_license(p_license_id) returns jsonb` — solo owner; estado `suspended`.
+- `admin_grant_demo(p_user_email, p_tax_type, p_tax_id, p_client_name) returns jsonb` — solo owner; mismas reglas de elegibilidad que `request_demo` pero para el usuario objetivo.
+- Trigger `demo_notifications_on_insert` sobre `demo_sessions`: inserta 2 filas en `notification_outbox` (`demo_expiring_3days` con `planned_for = expires_at - 3 days`; `demo_expired` con `planned_for = expires_at`). Esto cubre también la migración de usuarios históricos.
 
-## Archivos a modificar
+**Migración de usuarios pre-DEMO** (en la misma migración, con `now()` = fecha de implementación, sin inventar datos):
+- `INSERT INTO demo_sessions (user_id, started_at, expires_at) SELECT id, now(), now() + interval '15 days' FROM profiles WHERE lower(email) IN ('facundo20072@gmail.com','prueba2024@gmail.com')` — DEMO de 15 días desde la migración. `client_id null` y **sin** `demo_usage_history` (no existe DNI/CUIT → no se inventa).
+- Propietaria y `ora-test@example.com` quedan sin tocar (esta última visible en el panel de administración para revisión).
 
-- `src/lib/analysis.ts` — núcleo: `deriveTaskCriticality`, `criticalTasks`,
-  `deriveProcessCriticality`, `computePersonConcentration` (+level/exclusive),
-  `computeCompetencyConcentration` (+level, ≤2), `computeDashboardMetrics` (derivadas,
-  `criticalProcesses` derivado), `detectRiskFlags` (derivadas + copy).
-- `src/lib/simulation.ts` — resultado extendido (requisito 8).
-- `src/components/entities/SimulationPanel.tsx` — bloque "Critical impact", badges 1→0/2→1.
-- `src/components/entities/TaskDependencyTable.tsx` — mostrar `deriveTaskCriticality`
-  (badge y razones en la fila expandida, junto a las razones de dependencia).
-- `src/pages/Dashboard.tsx` — nota "No critical tasks detected" en el card de cobertura crítica.
-- `src/pages/AnalysisPage.tsx` — misma nota + card corto de metodología de criticidad.
-- `src/pages/PeoplePage.tsx` — conteo de tareas críticas y badge bus factor con criticidad derivada.
-- `src/pages/CompetenciesPage.tsx` — `requiredByCritical` con derivada; badge concentrado ≤2.
-- `package.json` — añadir `vitest` (devDependency) y script `"test": "vitest run"`.
-- `src/lib/analysis.test.ts` — nuevo: fixture + assertions (requisito 9).
+**Nota de decisión (seguridad):** el bloqueo por DEMO vencida se aplica en la capa de producto (`AccessGate` usa `get_my_access`, autoritativo del lado servidor). Las tablas de organizaciones conservan su RLS actual (datos propios del usuario intactos para no romper el funcionamiento existente ni la cuenta propietaria); el acceso al producto se bloquea al vencimiento y se restaura al licenciar.
 
-No se toca la persistencia (`api.ts`/tipos de tabla), la importación ni el modelo de datos;
-el campo `task.criticality` se conserva como señal `declared` (editable en formularios).
+## Flujo de acceso (frontend)
 
-## Fixture del test (requisito 9)
+Estados expuestos al cliente: `owner`, `perpetual_active`, `subscription_active` (futuro), `demo_active`, `demo_expiring` (≤3 días), `demo_expired`, `subscription_expired` (futuro), `none`, y `demo_not_eligible` (resultado de activación).
 
-Db deliberada (ids `uid`-libres, fijos) con:
-- Procesos: `p_core` (critical, declarado) y `p_support` (standard).
-- Funciones: `f_payroll` (critical), `f_backup` (important), `f_office` (standard).
-- Tareas críticas derivadas: `t_payrun` (2 capaces), `t_taxtax` (2 capaces, **sin
-  documentar**), `t_inc` (3 capaces), `t_restore` (3 capaces), `t_bak` (important +
-  1 solo capaz → crítica por puntaje) y estándares: `t_supplies`, `t_rec`.
-- Personas: `p1` (4 críticas → bus factor high), `p4` (3 críticas → bus factor),
-  `p2` (solo capaz de `t_bak` → caso 1→0), `p3`, `p5`.
-- Competencias: `c_tax` (1 solo holder, requerida por `t_taxtax` → high), `c_dr`,
-  `c_payroll` (2 holders → medium), `c_facilities` (solo tareas estándar → no aplica).
+- **Owner**: navega normal + ítem de navegación "Access & licensing" (único) → `/access`.
+- **Nuevo usuario (estado `none`)**: pantalla de **activación de DEMO obligatoria** antes de usar ORA (toggle Persona→DNI / Empresa→CUIT + nombre de cliente). `request_demo` valida elegibilidad de 12 meses. Error "no elegible" muestra fecha de re-elegibilidad. Éxito → refresca acceso y entra.
+- **`demo_active` / `demo_expiring`**: se usa ORA normal + **banner en cada acceso al Dashboard** ("You are using ORA in DEMO version. N days left. Expires DD/MM/YYYY. Continue with a Perpetual License of the current version."). Cuando `daysLeft ≤ 3` el banner pasa a variante obligatoria y destacada ("Your DEMO expires in 3 days on DD/MM/YYYY; after that your DEMO access ends — continue with a paid license"). Contador calculado en vivo desde `expires_at`.
+- **`demo_expired`**: **bloqueo total** — pantalla de acceso denegado con `LicenseInfoDialog` (Licencia perpetua = disponible; Suscripción = futura/no disponible), contacto vía mailto a la propietaria. Sin pagos.
+- **`perpetual_active` / `subscription_active`**: acceso normal, sin banners (owner tampoco).
+- **Conversión DEMO→licencia**: sin perder cuenta ni datos; el owner otorga la licencia (manualmente, sin pago) y el siguiente `get_my_access` devuelve `perpetual_active`.
+
+## Archivos
+
+**Nuevos:**
+- `src/lib/access/types.ts` — tipos (`AccessStatus`, `MyAccess`, constantes `DEMO_DAYS=15`, `ELIGIBILITY_MONTHS=12`, `OWNER_EMAIL`, `SUBSCRIPTION_ENABLED=false`).
+- `src/lib/access/status.ts` — helpers puros: `daysLeft(expiresAt)`, `formatDateDDMMYYYY(date)` (ej. `10/09/2026`), `isExpiring(daysLeft)`, `resolveAccessState()`.
+- `src/lib/access/status.test.ts` — tests unitarios (bordes: 0, 1, 3, 4, 14, 15 días; fecha).
+- `src/lib/access/api.ts` — RPCs tipadas (`getMyAccess`, `activateDemo`, `grantLicense`, `revokeLicense`, `reissueDemo`) + consultas del panel admin (owner, via RLS).
+- `src/lib/access/notifications.ts` — stub documentado del futuro envío por email (lee `notification_outbox`, NO envía; sin servidor de correo configurado).
+- `src/components/access/AccessGate.tsx` — resuelve `get_my_access`; bloquea (activación / expirado) o renderiza hijos + banner; refresca tras acciones.
+- `src/components/access/DemoActivationScreen.tsx` — DNI/CUIT + nombre; maneja `demo_not_eligible`.
+- `src/components/access/DemoBanner.tsx` — banner de acceso + variante de vencimiento a 3 días (para `Dashboard`).
+- `src/components/access/AccessBlockedScreen.tsx` — bloqueo por DEMO vencida.
+- `src/components/access/LicenseInfoDialog.tsx` — modalidades (perpetua disponible; suscripción futura). Sin botones de pago.
+- `src/pages/AccessAdminPage.tsx` — panel owner: resumen de usuarios (email, estado, fechas de DEMO, licencia), clientes, licencias, historial de uso; acciones: otorgar licencia perpetua, revocar/suspender, re-emitir DEMO.
+- `src/components/access/admin/GrantLicenseDialog.tsx`, `ReissueDemoDialog.tsx` — formularios del panel.
+
+**Modificados:**
+- `src/integrations/supabase/types.ts` — regenerado por el framework tras la migración (no editarlo; si no se regenera, usar casts `as never`, patrón ya existente en `api.ts`).
+- `src/store/OraContext.tsx` — exponer `access: MyAccess | null`, `refreshAccess()`, `isOwner` (cargar acceso junto al workspace, patrón `setTimeout` dentro del listener).
+- `src/components/auth/AppGuard.tsx` — envolver `AppShell` con `<AccessGate>`.
+- `src/components/layout/AppShell.tsx` — ítem "Access & licensing" solo owner.
+- `src/router.tsx` — ruta `/access` (guard owner; redirect a `/`).
+- `src/pages/Dashboard.tsx` — renderizar `<DemoBanner/>` arriba (aviso en cada acceso al inicio).
+
+**No se tocan:** `src/lib/analysis.ts`, `exposure.ts`, `simulation.ts`, `src/lib/importer/*`, páginas de entidades, flujo de importación, formularios de autenticación existentes.
 
 ## Implementation checklist
 
-- [ ] `src/lib/analysis.ts`: `criticalityRank`, `rankToCriticality`, `deriveTaskCriticality`, `criticalTasks`, `deriveProcessCriticality`.
-- [ ] `src/lib/analysis.ts`: `taskDependency` usa criticidad derivada en sus razones.
-- [ ] `src/lib/analysis.ts`: `computePersonConcentration` con `level` y `exclusiveCriticalTasks`; `computeCompetencyConcentration` con `level` y filtro `holderCount <= 2`.
-- [ ] `src/lib/analysis.ts`: `computeDashboardMetrics` calcula todos los indicadores con criticidad derivada (`criticalProcesses`, `criticalTasks`, `singlePersonTasks`, `docGapTasks`, `concentratedCompetencies`, `criticalCoverageRatio`, `busFactorPeople`, `roleConcentratedTasks`).
-- [ ] `src/lib/analysis.ts`: `detectRiskFlags` con derivadas y copy según principio 10 (nunca "persona crítica").
-- [ ] `src/lib/simulation.ts`: campos críticos nuevos + `summary` (requisito 8).
-- [ ] `src/components/entities/SimulationPanel.tsx`: bloque "Critical impact" con 1→0 vs 2→1 y bus-factor.
-- [ ] `src/components/entities/TaskDependencyTable.tsx`: badge y razones con `deriveTaskCriticality`.
-- [ ] `src/pages/Dashboard.tsx` y `src/pages/AnalysisPage.tsx`: nota "No critical tasks detected" cuando `criticalTasks === 0`.
-- [ ] `src/pages/PeoplePage.tsx` y `src/pages/CompetenciesPage.tsx`: criticidad derivada.
-- [ ] `package.json`: añadir `vitest` y script `test`.
-- [ ] `src/lib/analysis.test.ts`: fixture + assertions de requisito 9.
+- [ ] Migración única: tablas `clients`, `licenses`, `license_users`, `demo_sessions`, `demo_usage_history`, `notification_outbox` + columna `profiles.is_owner` + índices + triggers + funciones + policies RLS + asignación de propietaria + migración de los 2 usuarios históricos. Aplicada con `supabase_migration` y verificada con `supabase_get_table_schema` (RLS habilitado y policies presentes en cada tabla nueva).
+- [ ] `request_demo` rechaza propietaria / licencia activa / DEMO activa / DNI-CUIT usado en los últimos 12 meses (respuesta con fecha de re-elegibilidad) y crea DEMO de 15 días corridos + `demo_usage_history` + outbox.
+- [ ] `get_my_access` devuelve los estados: owner, perpetual_active, subscription_active (futuro), demo_active, demo_expiring (≤3 días), demo_expired, subscription_expired (futuro), none.
+- [ ] `grant_license` solo owner, solo `perpetual` (rechaza `subscription`), asocia cliente + usuarios vía `license_users`; `revoke_license` → `suspended`; `admin_grant_demo` respeta la regla de 12 meses.
+- [ ] Trigger de `notification_outbox` genera avisos `demo_expiring_3days` y `demo_expired` al insertar una `demo_sessions` (cubre migración histórica).
+- [ ] `src/lib/access/status.ts` + tests: `daysLeft`, `formatDateDDMMYYYY`, `isExpiring` (bordes 0/1/3/4 días).
+- [ ] `OraContext` expone `access`, `refreshAccess`, `isOwner` cargados en la restauración de sesión.
+- [ ] `AccessGate` bloquea en `none` (activación obligatoria DNI/CUIT) y en `demo_expired` (pantalla de acceso denegado + `LicenseInfoDialog`); owner pasa siempre.
+- [ ] `DemoBanner` en `Dashboard` en cada acceso durante DEMO activa: días restantes calculados en vivo, fecha exacta `DD/MM/YYYY`, variante obligatoria destacada a ≤3 días, CTA "Licencia perpetua".
+- [ ] `LicenseInfoDialog` y pantallas no muestran botones de compra de Suscripción (deshabilitada) ni pagos.
+- [ ] Ruta `/access` + nav solo owner con acciones: otorgar licencia perpetua, revocar/suspender, re-emitir DEMO; usuarios sin acceso (ej. `ora-test@example.com`) listados para revisión.
+- [ ] `notifications.ts` documenta la arquitectura de email (outbox → envío futuro); sin envío ni simulación.
 
 ## Verification checklist
 
-- [ ] `pnpm test` pasa: `criticalTasks > 0`, `busFactorPeople >= 1` (p1 con 4 críticas), `concentratedCompetencies >= 1` (`c_tax` 1 holder), `docGapTasks >= 1` (`t_taxtax`), `roleConcentratedTasks >= 1` (`t_bak` 1 rol), `singlePersonTasks >= 1` (`t_bak`), `criticalCoverageRatio` entre 0 y 1 (5 críticas, 4 con ≥2 capaces = 80%).
-- [ ] `pnpm test` verifica el caso de ausencia: `p2` deja `t_bak` **1→0** (`uncoveredCriticalTaskIds`); `p1` deja `t_payrun`/`t_taxtax` **2→1** (`reducedToSingleCriticalTaskIds`) — ambos casos distinguidos.
-- [ ] `pnpm run check` (lint + `tsc --noEmit`) pasa.
+- [ ] `pnpm run check` pasa (lint + `tsc --noEmit`).
+- [ ] `pnpm test` pasa (incluye tests nuevos de `status`).
 - [ ] `pnpm run build` pasa.
-- [ ] Manual: demo Meridian y org importada con el Excel `ORA_prueba_carga_500` muestran indicadores ≠ 0; card de cobertura crítica muestra la nota cuando no hay críticas; el detalle de tareas explica la criticidad derivada.
+- [ ] `supabase_get_table_schema` muestra RLS habilitado y policies en `clients`, `licenses`, `license_users`, `demo_sessions`, `demo_usage_history`, `notification_outbox`.
+- [ ] Positivo: login propietaria → sin banners, sin bloqueo, ve "Access & licensing".
+- [ ] Positivo: login `facundo20072@gmail.com` / `prueba2024@gmail.com` → DEMO activa desde migración, banner con días restantes y fecha `DD/MM/YYYY`.
+- [ ] Positivo: nuevo usuario activa DEMO con DNI → banner DEMO; owner otorga licencia perpetua → banner desaparece (sin perder datos).
+- [ ] Negativo: segundo intento de activación con el mismo DNI/CUIT (incluso con otra cuenta) → rechazo con fecha de re-elegibilidad a 12 meses.
+- [ ] Negativo: `grant_license` con `modality=subscription` → error "not available yet"; sin UI de suscripción.
+- [ ] Frontera: `daysLeft` 3 → variante de vencimiento destacada; 0 → bloqueo total (`demo_expired`) con opción de licencia.
+- [ ] Invariante: `demo_usage_history` sin FK de usuario — eliminando una cuenta, el DNI/CUIT sigue bloqueado (verificado por consulta SQL).
