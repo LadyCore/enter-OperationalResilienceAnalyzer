@@ -1,67 +1,63 @@
-# ORA — Optimización de carga inicial (A/B) del sitio
+# ORA — Feedback integrado (transversal, contextual, persistente)
 
 ## Context
 
-El sitio tarda en "aparecer" al abrir la URL (antes de interactuar). El objetivo es reducir el tiempo hasta que aparece la interfaz inicial (A) y hasta que queda interactiva (B), sin tocar auth/SMTP/DEMO/licencias/RLS/análisis ni ocultar la espera con un loading más bonito.
+ORA necesita que sus usuarios puedan reportar problemas de funcionamiento, errores, lentitud, bloqueos y sugerencias de mejora desde cualquier pantalla de la app autenticada, con contexto detectado automáticamente y persistencia para análisis posterior. Es independiente del chatbot y de la telemetría existente. Alcance acordado: **solo dentro de la app autenticada** (AppShell) y **contexto automático + instrumentación de pasos en páginas clave** (importación y People). No se agrega panel de administración en esta etapa.
 
-## Diagnóstico (causas concretas)
+## Arquitectura
 
-Medido con build real a /tmp (sin tocar el proyecto):
+### Persistencia (Enter Cloud, migración única)
+Tabla `public.feedback_reports`:
+- `id uuid pk default gen_random_uuid()`
+- `user_id uuid references auth.users(id) on delete set null`
+- `created_at timestamptz default now()`
+- `kind text check in ('not_working','error','slow','stuck','suggestion','other')`
+- `description text not null`
+- `module text` (p. ej. "People", "Simulation", "Import")
+- `screen text` (pathname)
+- `stage text null` (paso/sección instrumentada, p. ej. "Step 2 · Column mapping")
+- `is_general boolean default false`
+- `status text default 'new'` (futura gestión interna)
+- `context jsonb default '{}'` (técnico: ruta previa, userAgent, viewport, errores JS recientes, organización activa)
 
-- **Chunk inicial (`index`)**: 842 KB min / **253 KB gzip** — es el JS que hay que descargar+parsear+ejecutar antes del primer render. Es la causa principal de la lentitud percibida (A y B).
-- Contenido del chunk inicial (verificado por refs y por greps de uso):
-  - **i18next + react-i18next + i18next-http-backend + languagedetector** (~decenas de KB) se importan e **inicializan en `main.tsx`** (`import "./i18n/config"`), aunque los únicos consumidores son `NotFound` y un `LanguageSwitcher` que **no está montado en ninguna parte**.
-  - **@tanstack/react-query** (`QueryClientProvider` en `App.tsx`): **cero** `useQuery/useMutation` en todo el proyecto → peso muerto.
-  - **Toaster radix** (`ui/toaster.tsx`, `hooks/use-toast.ts`): **cero** consumidores (todos los toasts usan `sonner`) → peso muerto.
-  - **`AppShell` + `AccessGate` + pantallas de acceso** (DemoActivationScreen, AccessBlockedScreen, LicenseInfoDialog, ChangePasswordDialog, dropdowns, dialogs) se importan estáticamente desde `AppGuard`, así que **entran en el bundle inicial aunque un visitante anónimo solo vaya a ver el login**.
-  - Las páginas de auth estáticas en `router.tsx` (`verify-email`, `forgot-password`, `reset-password`, `NotFound`) también van al chunk inicial.
-- Correcto hoy: `framer-motion`, `recharts`, `xlsx`, `embla`, `chart`, `jszip` **no** están en el chunk inicial (lazy/tree-shaken); el CSS es 65 KB; las fuentes de Google ya cargan no-bloqueantes (`media=print` + `onload`); el shell estático de `index.html` es mínimo.
+RLS en la misma migración: insert `with check (user_id = auth.uid())`; select del propio usuario (`user_id = auth.uid()`) y del owner (`public.is_owner()`); sin update/delete de usuario. **Verificar con `supabase_get_table_schema`** tras migrar (RLS on + policies).
 
-Decisión del usuario: **diferir i18n manteniendo la infraestructura** (no eliminar el soporte multi-idioma).
+### Frontend (solo app autenticada)
+- `src/lib/feedback/types.ts` — `FeedbackKind`, `FeedbackInput`, tipos de contexto técnico.
+- `src/lib/feedback/context.ts` — singleton de contexto:
+  - `startFeedbackTelemetry()`: suscribe `window` a `error` y `unhandledrejection` y mantiene ring buffer (máx ~6) de errores JS con marca de tiempo.
+  - `trackRoute(pathname, module)`: registra ruta previa/actual.
+  - `setFeedbackStage(label | null)`: usado por páginas instrumentadas.
+  - `collectContext()`: arma JSON técnico (ruta, ruta previa, userAgent, viewport, org activa id/nombre, errores recientes, timestamp).
+- `src/lib/feedback/api.ts` — `submitFeedback(input)` inserta la fila tipada (reusa `supabase`).
+- `src/components/feedback/FeedbackDialog.tsx` — formulario: tipo (6 opciones con íconos), textarea obligatoria, panel "Contexto detectado" (módulo/ruta/etapa), checkbox "Feedback general" (envía `is_general=true`, sin contexto funcional forzado), botón Enviar; estado de éxito con confirmación y reset.
+- `src/components/feedback/FeedbackFab.tsx` — botón flotante discreto "Feedback" fijo (bottom-right) dentro de la app autenticada; abre el diálogo sin navegar (no pierde el estado de trabajo).
 
-## Optimizaciones (seguras, sin cambiar comportamiento)
+### Puntos de montaje / instrumentación (modificados)
+- `src/components/layout/AppShell.tsx` — montar `<FeedbackFab />` y arrancar telemetría (`useEffect startFeedbackTelemetry`); derivar módulo de la ruta vía `useLocation` + mapa de rutas (reutilizando las etiquetas de `nav`/router).
+- `src/pages/ImportOrganizationPage.tsx` — `useEffect([step])` → `setFeedbackStage(`Step ${step} · ${STEPS[step-1]}`)` (no altera la lógica del wizard).
+- `src/pages/PeoplePage.tsx` — registrar la pestaña/sección activa si expone tabs (solo lectura del estado existente).
 
-1. **i18n diferido (manteniendo infraestructura)**
-   - `src/main.tsx`: quitar `import "./i18n/config"` (evita cargar i18next al arranque). El módulo `src/i18n/config.ts` y sus locales **no se borran**.
-   - `src/pages/NotFound.tsx`: inicializar i18n al montar (`await import("@/i18n/config")` con flag `ready`) antes de usar `t()` → i18next pasa al chunk lazy de la 404 y solo se carga si se visita una ruta inexistente. `LanguageSwitcher` queda como está (sin montar, no entra al bundle).
-
-2. **Quitar peso muerto del arranque**
-   - `src/App.tsx`: eliminar `QueryClientProvider`/`QueryClient` (react-query sin uso) y el `<Toaster />` radix (sin consumidores). Se conserva `sonner` (único sistema de toasts real) y `TooltipProvider` (sí se usa en `sidebar.tsx`).
-
-3. **Lazy-loading del shell y del gate de acceso** (reducen el chunk que ve un visitante anónimo)
-   - `src/components/auth/AppGuard.tsx`: convertir `AppShell` y `AccessGate` en `React.lazy` con `Suspense` (fallback ligero reutilizando el spinner existente). Un visitante anónimo ya no descarga AppShell ni las pantallas DEMO/blocked/licencia.
-
-4. **Lazy-loading de rutas públicas de auth**
-   - `src/router.tsx`: `verify-email`, `forgot-password`, `reset-password` y `NotFound` pasan a `React.lazy` (patrón ya usado por las páginas del app).
-
-5. **Diferir telemetría no esencial**
-   - `src/main.tsx`: ejecutar `bootstrapGeneratedSiteAnalytics()` tras el primer render (`setTimeout(…, 0)` / post-paint) en vez de bloquearlo antes de `createRoot`. No bloquea render y mantiene el tracking.
-
-6. **Fonts / CSS / shell** — sin cambios: ya son no-bloqueantes o mínimos.
-
-No se tocan: auth/Supabase, SMTP, emails, redirects, DEMO, licencias, RLS, acceso, modelo de datos, análisis, ni la lógica de negocio. `pnpm run check`, `pnpm test`, `pnpm run build` deben seguir pasando.
-
-## Archivos a modificar
-- `src/main.tsx`
-- `src/App.tsx`
-- `src/components/auth/AppGuard.tsx`
-- `src/router.tsx`
-- `src/pages/NotFound.tsx`
+### No se toca
+Chatbot (no existe componente propio en esta base; no se crea), análisis, simulación, DEMO/licencias/RLS de acceso, lógica de importación, autenticación, identidad visual general. No se agrega UI administrativa.
 
 ## Implementation checklist
-- [x] `src/App.tsx`: quitado `QueryClientProvider`/`QueryClient` (react-query sin uso) y `<Toaster />` radix (sin consumidores); conservados `sonner` y `TooltipProvider`.
-- [x] `src/components/auth/AppGuard.tsx`: `AppShell` y `AccessGate` como `React.lazy` dentro de `Suspense` con fallbacks de spinner existentes. Un visitante anónimo ya no descarga el shell ni las pantallas DEMO/blocked/licencia.
-- [x] `src/router.tsx`: lazy-load de `verify-email`, `forgot-password`, `reset-password` y `NotFound` (patrón ya usado por las páginas del app).
-- [x] `src/main.tsx`: **no modificable** — archivo protegido por la plataforma. El import eager de `./i18n/config` y la llamada a `bootstrapGeneratedSiteAnalytics()` se conservan (limitación de la plataforma, no del proyecto).
-- [x] i18n: infraestructura y `LanguageSwitcher` intactos. `NotFound` pasa a chunk lazy; su `useTranslation` sigue funcionando porque i18n se inicializa igualmente en el arranque protegido.
-- [x] `pnpm run check`, `pnpm test`, `pnpm run build` pasan.
+- [ ] Migración: tabla `feedback_reports` + RLS (insert propio, select propio/owner) aplicada y verificada con `supabase_get_table_schema`.
+- [ ] `src/lib/feedback/types.ts` y `src/lib/feedback/context.ts` (telemetría de errores + rutas + stage + collector).
+- [ ] `src/lib/feedback/api.ts` (`submitFeedback`).
+- [ ] `src/components/feedback/FeedbackDialog.tsx` (tipos, descripción obligatoria, contexto visible, "Feedback general", confirmación).
+- [ ] `src/components/feedback/FeedbackFab.tsx` (acceso persistente no invasivo).
+- [ ] `src/components/layout/AppShell.tsx`: montar FAB + `startFeedbackTelemetry()` + mapeo ruta→módulo.
+- [ ] `ImportOrganizationPage`: reportar paso actual vía `setFeedbackStage`.
+- [ ] `PeoplePage`: reportar pestaña activa vía `setFeedbackStage` (si la página expone tab/estado).
 
 ## Verification checklist
-- [x] `pnpm run check` pasa (lint + `tsc --noEmit`).
-- [x] `pnpm test` pasa (54 tests).
-- [x] `pnpm run build` pasa.
-- [x] Chunk inicial (servido por el HTML) **antes**: `index-CV1Pwir8.js` 842.8 KB raw / 252.9 KB gzip. **Después**: `index-DQG7DbeR.js` 721.6 KB raw / 218.8 KB gzip → **−121 KB raw (−14%), −34 KB gzip (−13,5%)**.
-- [x] `AppShell`, `AccessGate`, `LicenseInfoDialog`, `VerifyEmailPage`, `ForgotPasswordPage`, `ResetPasswordPage`, `NotFound` ahora son chunks lazy separados (no entran en el primer paint).
-- [x] Login renderiza correctamente (verificado con screenshot); consola sin errores de runtime (solo reconexiones de Vite del preview).
-- [x] Sin regresión: auth, DEMO, licencias, RLS y análisis intactos (no se tocaron).
-- [ ] Nota de entorno: la demora restante depende del hosting/red/parseo del bundle (medible en DevTools → Network → `index-*.js`) y de la carga de i18next que el arranque protegido mantiene eager.
+- [ ] `pnpm run check` pasa (lint + `tsc --noEmit`).
+- [ ] `pnpm test` pasa (54 tests existentes).
+- [ ] `pnpm run build` pasa.
+- [ ] `supabase_get_table_schema` muestra `feedback_reports` con RLS habilitado y las policies.
+- [ ] Insert manual (SQL owner/admin) de una fila de prueba y consulta: la fila persiste y es legible por el owner.
+- [ ] Manual UI: el botón "Feedback" aparece fijo dentro de la app (Dashboard/People/…); al abrirlo no navega; enviar sin descripción muestra validación; enviar completo muestra confirmación.
+- [ ] Contexto: abrir desde `/import` en el paso 2 → contexto muestra "Import · Step 2 · Column mapping"; marcar "Feedback general" lo envía sin forzar etapa.
+- [ ] RLS negativo: verificar que un usuario no pueda listar filas ajenas (policy select propio) y que insert con `user_id` distinto a `auth.uid()` sea rechazado.
+- [ ] Sin regresión de análisis/simulación/importación (no se modificó su lógica).
