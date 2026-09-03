@@ -1,5 +1,8 @@
-// SMTP diagnostic — logs the raw server conversation line by line.
-const SMTP_HOST = "smtp.hostinger.com";
+// SMTP diagnostic — completes a full send and reports the final server verdict.
+// Defaults to Turbo SMTP (the working provider). Credentials come from secrets:
+//   TURBO_SMTP_USER = Turbo Consumer Key
+//   TURBO_SMTP_PASSWORD = Turbo Consumer Secret
+const SMTP_HOST = "pro.turbo-smtp.com";
 const SMTP_PORT = 465;
 const FROM = "no-reply@oraresilience.com";
 const TO = "ladyqa12@gmail.com";
@@ -8,12 +11,11 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
 Deno.serve(async () => {
-  const log: string[] = ["MARKER-v5"];
+  const log: string[] = [];
   let conn: Deno.Conn | null = null;
   try {
     conn = await Deno.connectTls({ hostname: SMTP_HOST, port: SMTP_PORT });
 
-    // Read one raw line from the connection.
     const reader = { buffer: "" };
     const readRawLine = async (): Promise<string> => {
       const chunk = new Uint8Array(4096);
@@ -29,51 +31,66 @@ Deno.serve(async () => {
         reader.buffer += decoder.decode(chunk.slice(0, n));
       }
     };
-    // Drain a full reply: read lines until one does NOT end with "-".
-    const drainReply = async (tag: string): Promise<string[]> => {
-      const lines: string[] = [];
+    const drainReply = async (tag: string): Promise<void> => {
       for (let i = 0; i < 30; i++) {
         const line = await readRawLine();
-        lines.push(`${tag} <- ${line}`);
+        log.push(`${tag} <- ${line}`);
         const cont = line.length > 3 && line[3] === "-";
-        if (!cont) break;
+        if (!cont) return;
       }
-      return lines;
     };
 
-    log.push("CONNECT (banner)");
-    log.push(...(await drainReply("banner")));
+    log.push(`CONNECT (banner) to ${SMTP_HOST}:${SMTP_PORT}`);
+    await drainReply("banner");
 
     const ehloHost = (Deno.env.get("SUPABASE_URL") ?? "https://ora.local").replace(/^https?:\/\//, "");
     await conn.write(encoder.encode(`EHLO ${ehloHost}\r\n`));
-    log.push(...(await drainReply("EHLO")));
+    await drainReply("EHLO");
 
-    const user = FROM;
-    const pass = Deno.env.get("HOSTINGER_SMTP_PASSWORD") ?? "";
+    const user = Deno.env.get("TURBO_SMTP_USER") ?? "";
+    const pass = Deno.env.get("TURBO_SMTP_PASSWORD") ?? "";
+    if (!user || !pass) {
+      return new Response(JSON.stringify({ ok: false, log: [...log, "ERROR: missing TURBO_SMTP_USER / TURBO_SMTP_PASSWORD secrets"] }, null, 2), { headers: { "content-type": "application/json" } });
+    }
 
     await conn.write(encoder.encode("AUTH LOGIN\r\n"));
-    log.push(...(await drainReply("AUTH")));
-
+    await drainReply("AUTH");
     await conn.write(encoder.encode(btoa(user) + "\r\n"));
-    log.push(...(await drainReply("USER")));
-
+    await drainReply("USER");
     await conn.write(encoder.encode(btoa(pass) + "\r\n"));
-    log.push(...(await drainReply("PASS")));
+    await drainReply("PASS");
 
     await conn.write(encoder.encode(`MAIL FROM:<${FROM}>\r\n`));
-    log.push(...(await drainReply("MAIL")));
+    await drainReply("MAIL");
 
     await conn.write(encoder.encode(`RCPT TO:<${TO}>\r\n`));
-    log.push(...(await drainReply("RCPT")));
+    await drainReply("RCPT");
 
     await conn.write(encoder.encode("DATA\r\n"));
-    log.push(...(await drainReply("DATA")));
+    await drainReply("DATA");
+
+    const CRLF = "\r\n";
+    const body =
+      "Subject: ORA account verification test" + CRLF +
+      "From: ORA <no-reply@oraresilience.com>" + CRLF +
+      "To: <ladyqa12@gmail.com>" + CRLF +
+      "MIME-Version: 1.0" + CRLF +
+      "Content-Type: text/plain; charset=utf-8" + CRLF + CRLF +
+      "Please confirm your ORA account by opening the link below." + CRLF +
+      "https://ora.example/confirm" + CRLF + CRLF +
+      "If you did not create this account, ignore this message." + CRLF +
+      "ORA — Resilience Analyzer" + CRLF +
+      "." + CRLF;
+    await conn.write(encoder.encode(body));
+    await drainReply("DATA END (final verdict)");
+
+    try { await conn.write(encoder.encode("QUIT\r\n")); } catch { /* noop */ }
   } catch (e) {
     log.push(`ERROR: ${e instanceof Error ? e.message : String(e)}`);
   } finally {
     try { conn?.close(); } catch { /* noop */ }
   }
-  return new Response(JSON.stringify({ log }, null, 2), {
+  return new Response(JSON.stringify({ ok: true, log }, null, 2), {
     headers: { "content-type": "application/json" },
   });
 });
