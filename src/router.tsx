@@ -1,9 +1,18 @@
 import { lazy } from "react";
 import { AppGuard } from "@/components/auth/AppGuard";
-import { VerifyEmailPage } from "@/components/auth/VerifyEmailPage";
-import { ForgotPasswordPage } from "@/components/auth/ForgotPasswordPage";
-import { ResetPasswordPage } from "@/components/auth/ResetPasswordPage";
-import NotFound from "./pages/NotFound";
+
+// Public auth routes and the 404 are loaded on demand: an anonymous visitor
+// landing on "/" should not download the verify/forgot/reset/not-found code.
+const VerifyEmailPage = lazy(() =>
+  import("@/components/auth/VerifyEmailPage").then((m) => ({ default: m.VerifyEmailPage }))
+);
+const ForgotPasswordPage = lazy(() =>
+  import("@/components/auth/ForgotPasswordPage").then((m) => ({ default: m.ForgotPasswordPage }))
+);
+const ResetPasswordPage = lazy(() =>
+  import("@/components/auth/ResetPasswordPage").then((m) => ({ default: m.ResetPasswordPage }))
+);
+const NotFound = lazy(() => import("./pages/NotFound"));
 
 // Route-level code splitting: each page is loaded on demand, keeping the
 // initial module graph (and first paint) small.

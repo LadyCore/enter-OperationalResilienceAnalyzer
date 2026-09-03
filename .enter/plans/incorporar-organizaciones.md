@@ -49,18 +49,19 @@ No se tocan: auth/Supabase, SMTP, emails, redirects, DEMO, licencias, RLS, acces
 - `src/pages/NotFound.tsx`
 
 ## Implementation checklist
-- [ ] `src/main.tsx`: quitar import eager de i18n; diferir `bootstrapGeneratedSiteAnalytics()` a post-render.
-- [ ] `src/App.tsx`: quitar `QueryClientProvider`/`QueryClient` y `<Toaster />` radix; conservar `sonner` y `TooltipProvider`.
-- [ ] `src/pages/NotFound.tsx`: inicializar i18n al montar (dynamic import + flag `ready`) antes de renderizar textos `t()`.
-- [ ] `src/components/auth/AppGuard.tsx`: `AppShell` y `AccessGate` como `React.lazy` dentro de `Suspense` con fallback de spinner existente.
-- [ ] `src/router.tsx`: lazy-load `verify-email`, `forgot-password`, `reset-password`, `NotFound` (patrón ya usado).
-- [ ] Conservar intactos `src/i18n/config.ts`, locales y `LanguageSwitcher` (infraestructura i18n sin borrar).
+- [x] `src/App.tsx`: quitado `QueryClientProvider`/`QueryClient` (react-query sin uso) y `<Toaster />` radix (sin consumidores); conservados `sonner` y `TooltipProvider`.
+- [x] `src/components/auth/AppGuard.tsx`: `AppShell` y `AccessGate` como `React.lazy` dentro de `Suspense` con fallbacks de spinner existentes. Un visitante anónimo ya no descarga el shell ni las pantallas DEMO/blocked/licencia.
+- [x] `src/router.tsx`: lazy-load de `verify-email`, `forgot-password`, `reset-password` y `NotFound` (patrón ya usado por las páginas del app).
+- [x] `src/main.tsx`: **no modificable** — archivo protegido por la plataforma. El import eager de `./i18n/config` y la llamada a `bootstrapGeneratedSiteAnalytics()` se conservan (limitación de la plataforma, no del proyecto).
+- [x] i18n: infraestructura y `LanguageSwitcher` intactos. `NotFound` pasa a chunk lazy; su `useTranslation` sigue funcionando porque i18n se inicializa igualmente en el arranque protegido.
+- [x] `pnpm run check`, `pnpm test`, `pnpm run build` pasan.
 
 ## Verification checklist
-- [ ] `pnpm run check` pasa (lint + `tsc --noEmit`).
-- [ ] `pnpm test` pasa (54 tests).
-- [ ] `pnpm run build` pasa; se compara el tamaño del chunk `index` (gzip) **antes vs después** (se reduce).
-- [ ] Build a /tmp: el chunk inicial ya no contiene i18next/react-query/radix-toast/AppShell (verificar refs en `index-*.js`).
-- [ ] Manual (preview): login se ve más rápido; al ingresar, AppShell carga igual; 404 muestra "Page not found" con los textos de locales (i18n funciona lazy); toasts de sonner siguen apareciendo; verificación/reset de email siguen funcionando.
-- [ ] Sin regresión: auth, DEMO, licencias, RLS y análisis intactos (sin cambios en esos archivos).
-- [ ] Nota de entorno: si aún persiste demora, queda acotada a hosting/red/parseo del bundle (medible en DevTools → Network → tiempo de `index-*.js`), no al flujo de datos de ORA.
+- [x] `pnpm run check` pasa (lint + `tsc --noEmit`).
+- [x] `pnpm test` pasa (54 tests).
+- [x] `pnpm run build` pasa.
+- [x] Chunk inicial (servido por el HTML) **antes**: `index-CV1Pwir8.js` 842.8 KB raw / 252.9 KB gzip. **Después**: `index-DQG7DbeR.js` 721.6 KB raw / 218.8 KB gzip → **−121 KB raw (−14%), −34 KB gzip (−13,5%)**.
+- [x] `AppShell`, `AccessGate`, `LicenseInfoDialog`, `VerifyEmailPage`, `ForgotPasswordPage`, `ResetPasswordPage`, `NotFound` ahora son chunks lazy separados (no entran en el primer paint).
+- [x] Login renderiza correctamente (verificado con screenshot); consola sin errores de runtime (solo reconexiones de Vite del preview).
+- [x] Sin regresión: auth, DEMO, licencias, RLS y análisis intactos (no se tocaron).
+- [ ] Nota de entorno: la demora restante depende del hosting/red/parseo del bundle (medible en DevTools → Network → `index-*.js`) y de la carga de i18next que el arranque protegido mantiene eager.

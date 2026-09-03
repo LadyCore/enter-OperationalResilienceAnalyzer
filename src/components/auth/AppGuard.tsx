@@ -1,10 +1,36 @@
-import { Loader2, RefreshCw } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Suspense, lazy } from "react";
+import { Loader2 } from "lucide-react";
 import { useOra } from "@/store/OraContext";
 import { LoginPage } from "./LoginPage";
-import { AppShell } from "@/components/layout/AppShell";
-import { AccessGate } from "@/components/access/AccessGate";
 import { gateState } from "@/lib/access/status";
+
+// AppShell (the whole authenticated layout: nav, dropdowns, dialogs) and the
+// access gate screens (DEMO activation, blocked, licensing) are only needed
+// after a session exists. Lazy-loading keeps them out of the initial bundle so
+// an anonymous visitor who reaches the login screen downloads far less JS.
+const AppShell = lazy(() =>
+  import("@/components/layout/AppShell").then((m) => ({ default: m.AppShell }))
+);
+const AccessGate = lazy(() =>
+  import("@/components/access/AccessGate").then((m) => ({ default: m.AccessGate }))
+);
+
+function FullPageSpinner({ label }: { label: string }) {
+  return (
+    <div className="flex h-screen items-center justify-center text-muted-foreground">
+      <Loader2 className="h-5 w-5 animate-spin" />
+      <span className="ml-2 text-sm">{label}</span>
+    </div>
+  );
+}
+
+function LazyGate() {
+  return (
+    <Suspense fallback={<FullPageSpinner label="Checking access…" />}>
+      <AccessGate />
+    </Suspense>
+  );
+}
 
 /**
  * Guards the authenticated application.
@@ -21,34 +47,24 @@ export function AppGuard() {
 
   // Session restore in progress (initial getSession / auth listener).
   if (isLoading) {
-    return (
-      <div className="flex h-screen items-center justify-center text-muted-foreground">
-        <Loader2 className="h-5 w-5 animate-spin" />
-        <span className="ml-2 text-sm">Loading ORA…</span>
-      </div>
-    );
+    return <FullPageSpinner label="Loading ORA…" />;
   }
 
   if (!user) return <LoginPage />;
 
   // Access still resolving.
   if (!access && !accessFailed) {
-    return (
-      <div className="flex h-screen items-center justify-center text-muted-foreground">
-        <Loader2 className="h-5 w-5 animate-spin" />
-        <span className="ml-2 text-sm">Checking access…</span>
-      </div>
-    );
+    return <FullPageSpinner label="Checking access…" />;
   }
 
-  // Access resolution failed → AccessGate renders its own retry state.
+  // Access resolution failed or access is not unlocked → gate screens handle
+  // retry / DEMO activation / blocked.
   if (accessFailed && !access) {
-    return <AccessGate />;
+    return <LazyGate />;
   }
 
-  // DEMO activation / blocked screens need no organization data at all.
   if (gateState(access) !== "unlocked") {
-    return <AccessGate />;
+    return <LazyGate />;
   }
 
   // Access is unlocked but the workspace failed to load → allow a retry.
@@ -58,9 +74,13 @@ export function AppGuard() {
         <div className="w-full max-w-sm rounded-lg border bg-card p-6 text-center">
           <h2 className="font-display text-base font-semibold">Could not load your organizations</h2>
           <p className="mt-2 text-sm text-muted-foreground">Please retry to continue.</p>
-          <Button className="mt-4 w-full" onClick={retryWorkspace}>
-            <RefreshCw className="h-4 w-4" /> Retry
-          </Button>
+          <button
+            type="button"
+            onClick={retryWorkspace}
+            className="mt-4 w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/80"
+          >
+            Retry
+          </button>
         </div>
       </div>
     );
@@ -68,17 +88,14 @@ export function AppGuard() {
 
   // Access is unlocked but the workspace is still loading.
   if (!db) {
-    return (
-      <div className="flex h-screen items-center justify-center text-muted-foreground">
-        <Loader2 className="h-5 w-5 animate-spin" />
-        <span className="ml-2 text-sm">Loading your organizations…</span>
-      </div>
-    );
+    return <FullPageSpinner label="Loading your organizations…" />;
   }
 
   return (
-    <AccessGate>
-      <AppShell />
-    </AccessGate>
+    <Suspense fallback={<FullPageSpinner label="Loading ORA…" />}>
+      <AccessGate>
+        <AppShell />
+      </AccessGate>
+    </Suspense>
   );
 }
