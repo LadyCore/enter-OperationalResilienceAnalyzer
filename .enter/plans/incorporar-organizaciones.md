@@ -1,116 +1,139 @@
-# ORA — Acceso, DEMO y Licenciamiento
+# ORA — Optimización de carga inicial y de creación de organizaciones
 
-## Context
+## Context / Síntoma
 
-ORA es un analizador de resiliencia operacional (Vite + React + TS + Tailwind + shadcn + Enter Cloud). Hoy todo usuario autenticado tiene acceso pleno e ilimitado: al registrarse se le crea una organización DEMO y puede importar organizaciones. No existe gestión de acceso, vencimientos ni licencias.
+Al ingresar a ORA el usuario ve mucho tiempo el shell estático "ORA · Loading…" y al
+final recién aparece la pantalla de activación de DEMO. Además, crear una organización
+grande (p. ej. ~500 personas, ~476 tareas) tarda ~1 minuto.
 
-Se requiere una capa nueva de gestión de usuarios, DEMO y licenciamiento que **no altere** la metodología, el análisis, la simulación ni el chatbot de ORA. `mariaeugeniasaldi@gmail.com` es la cuenta **propietaria**: acceso permanente, exento de DEMO/licencias, con capacidad administrativa. La modalidad **Suscripción queda preparada pero deshabilitada** comercialmente. No se implementan pagos reales.
+Objetivo: reducir el tiempo real de las operaciones de arranque y de persistencia. No
+cambiar el texto del loading ni el timeout. No tocar auth, email, redirects, reglas de
+DEMO/eligibilidad, RLS ni lógica de negocio.
 
-**Datos reales en la base (verificados):**
-- Propietaria: `mariaeugeniasaldi@gmail.com` (6656c6eb-…) con 11 organizaciones.
-- Usuarios con evidencia de uso previo (tienen org DEMO creada antes de esta implementación): `facundo20072@gmail.com` (ac6954a5-…), `prueba2024@gmail.com` (a8776c7a-…).
-- `ora-test@example.com` (4a9bb4f2-…) tiene **0 organizaciones**: sin evidencia confiable de uso → **no se migra**, queda listada para revisión administrativa.
-- La cuenta propietaria queda excluida de la migración.
+## Diagnóstico (causas reales encontradas)
 
-## Modelo de datos (nuevas tablas en `public`, migración única vía `supabase_migration`)
+### Causa 1 — Arranque: el workspace se carga antes de saber qué pantalla mostrar
+`OraContext` (listener INITIAL_SESSION/SIGNED_IN) lanza en paralelo `loadWorkspace()` y
+`refreshAccess()`. `loadWorkspace()` hace:
+`listOrganizations` → si 0 orgs `ensureDemoOrganization` (**crea toda la org demo: 8
+inserts**) → `listOrganizations` de nuevo → `loadOrganization` (**8 SELECTs de la org
+completa**).
+`AppGuard` muestra spinner hasta que `db` esté cargado (`isLoading || (user && !db)`), y
+solo después decide la puerta de acceso.
+**Consecuencia:** un usuario que va a ver la pantalla de activación DEMO (acceso `none`)
+espera igual a que se cree y cargue toda la org demo + datos, que **no necesita en
+absoluto**. El flujo correcto es: resolver `access` (1 RPC ligero) → si está bloqueado o
+requiere activación mostrar esa pantalla **sin tocar las orgs**; solo si el acceso está
+habilitado (owner / licencia / DEMO activa) cargar el workspace.
 
+### Causa 2 — Creación de organización: ~480 updates secuenciales
+En `insertChildren` (`src/integrations/ora/api.ts`), tras insertar `people`, se resuelve la
+jerarquía con **un `UPDATE` por persona** en un `for…await`:
 ```
-CLIENTE (clients)
-   └── LICENCIA (licenses)
-          └── license_users (usuario ↔ licencia)
-demo_sessions        — DEMO por usuario (started_at, expires_at)
-demo_usage_history   — registro de uso por DNI/CUIT (independiente de la cuenta)
-notification_outbox  — avisos de email pendientes (arquitectura preparada, sin envío)
+for (const p of db.people) { if (!p.managerId) continue; await supabase…update… }
 ```
+Datos reales: BABEL tiene 500 personas / 480 con manager, MARCO ANTONIO 300/292. Eso son
+~480 (o ~292) round-trips secuenciales ≈ el "minuto" observado. Se resuelve en **1 sola
+petición**: `upsert` masivo de `{ id, manager_id }` (los manager ya existen como filas tras
+el insert inicial, así que la FK no se viola) — y/o agrupando los 7 inserts de hijos en
+oleadas paralelas respetando dependencias FK.
 
-1. `profiles`: agregar columna `is_owner boolean not null default false`; marcar `true` a la propietaria por email. (No tocar `auth.users`.)
-2. `clients`: `id uuid pk`, `name text not null`, `tax_type text check (dni|cuit) null`, `tax_id text null`, `email text null`, `created_at`. Índice único parcial sobre `tax_id` donde no nulo.
-3. `licenses`: `id uuid pk`, `client_id fk clients`, `modality text check (perpetual|subscription)`, `status text check (active|suspended|expired) default active`, `version text not null default 'current'`, `issued_at`, `start_date`, `renewal_date null` (futuro de suscripción), `notes`.
-4. `license_users`: `id uuid pk`, `license_id fk licenses on delete cascade`, `user_id fk auth.users on delete cascade`, `granted_at`, único `(license_id, user_id)`.
-5. `demo_sessions`: `id uuid pk`, `user_id fk auth.users on delete cascade`, `client_id fk clients null`, `started_at timestamptz not null`, `expires_at timestamptz not null`, `created_at`.
-6. `demo_usage_history`: `id uuid pk`, `tax_id text not null`, `tax_type text check (dni|cuit) not null`, `client_id fk clients null`, `demo_session_id fk null`, `used_at timestamptz default now()`. **Sin FK a usuario** → sobrevive a la eliminación de la cuenta y bloquea nuevos DEMO con el mismo DNI/CUIT durante 12 meses.
-7. `notification_outbox`: `id uuid pk`, `user_id fk auth.users`, `demo_session_id fk null`, `kind text check (demo_expiring_3days|demo_expired)`, `planned_for timestamptz`, `status check (pending|sent|failed) default pending`, `created_at`, `sent_at null`.
+### Causa 3 — Duplicación en arranque para cuentas con acceso
+`loadWorkspace` re-lista las orgs después de crear la demo (2º `listOrganizations`) y
+`ensureDemoOrganization` ya devuelve el `Db` creado (podría usarse directo, evitando
+re-listar y recargar). Además `OraContext` dispara el workspace sin esperar el resultado
+del gate, trabajo que se desperdicia para usuarios bloqueados/sin acceso.
 
-**RLS en TODAS las tablas nuevas** (verificación obligatoria con `supabase_get_table_schema` después de migrar):
-- `clients`, `licenses`, `license_users`, `demo_sessions`, `demo_usage_history`, `notification_outbox`: policy owner ALL (`using (public.is_owner())`).
-- `license_users`, `demo_sessions`, `notification_outbox`: además policy SELECT del propio usuario (`user_id = auth.uid()` / subconsulta vía helper security definer `user_license_ids()` para evitar recursión en `licenses`).
-- Usuarios: **sin policies de INSERT/UPDATE/DELETE** sobre estas tablas — todas las escrituras pasan por funciones security definer (`request_demo`, `grant_license`, etc.).
+### Nota (no es la causa de datos)
+Parte de la espera del shell estático "ORA · Loading…" puede deberse a descarga/parseo del
+bundle y a la máquina del usuario (frío + antivirus), que no se arregla con texto. Lo que
+sí se arregla en el flujo de datos: que React monte y llegue a la pantalla correcta sin
+encadenar creación + carga de orgs antes de tiempo. No se toca index.html ni su hint.
 
-**Funciones (security definer, `search_path = public`):**
-- `is_owner() returns boolean` — `select coalesce((select is_owner from profiles where id = auth.uid()), false)`.
-- `request_demo(p_tax_type text, p_tax_id text, p_client_name text) returns jsonb` — activación atómica: valida DNI/CUIT; rechaza si propietario / licencia activa / DEMO activa; **rechaza si hay `demo_usage_history` con ese `tax_id` en los últimos 12 meses** (mensaje con fecha de re-elegibilidad); crea/reencontra cliente, `demo_sessions` (15 días corridos), `demo_usage_history`, y outbox (trigger).
-- `get_my_access() returns jsonb` — resolución autoritativa de estado del usuario: `owner | perpetual_active | subscription_active (futuro) | demo_active | demo_expiring (≤3 días) | demo_expired | subscription_expired (futuro) | none` + días restantes, fecha de vencimiento, versión, modalidades disponibles.
-- `grant_license(p_user_email, p_modality, p_version, p_client_name, p_tax_type, p_tax_id) returns jsonb` — solo owner (lanza si no). **`modality` acepta únicamente `perpetual`**; `subscription` se rechaza con "not available yet".
-- `revoke_license(p_license_id) returns jsonb` — solo owner; estado `suspended`.
-- `admin_grant_demo(p_user_email, p_tax_type, p_tax_id, p_client_name) returns jsonb` — solo owner; mismas reglas de elegibilidad que `request_demo` pero para el usuario objetivo.
-- Trigger `demo_notifications_on_insert` sobre `demo_sessions`: inserta 2 filas en `notification_outbox` (`demo_expiring_3days` con `planned_for = expires_at - 3 days`; `demo_expired` con `planned_for = expires_at`). Esto cubre también la migración de usuarios históricos.
+## Optimizaciones propuestas (sin cambiar reglas de negocio)
 
-**Migración de usuarios pre-DEMO** (en la misma migración, con `now()` = fecha de implementación, sin inventar datos):
-- `INSERT INTO demo_sessions (user_id, started_at, expires_at) SELECT id, now(), now() + interval '15 days' FROM profiles WHERE lower(email) IN ('facundo20072@gmail.com','prueba2024@gmail.com')` — DEMO de 15 días desde la migración. `client_id null` y **sin** `demo_usage_history` (no existe DNI/CUIT → no se inventa).
-- Propietaria y `ora-test@example.com` quedan sin tocar (esta última visible en el panel de administración para revisión).
+1. **Resolver acceso primero, cargar workspace solo si hace falta.**
+   En `OraContext`, al restaurar/iniciar sesión: primero `refreshAccess()` (1 RPC
+   `get_my_access`). Un efecto vigila `[user, access]`:
+   - acceso `none` / `demo_expired` / `subscription_expired` → no se carga ni crea nada; se
+     renderiza activación/bloqueo.
+   - acceso habilitado (`owner`, `perpetual_active`, `subscription_active`, `demo_active`,
+     `demo_expiring`) y `db === null` → recién ahí `loadWorkspace(user.id)` (con guard de
+     una sola ejecución por sesión mediante ref).
+   - Tras activar el DEMO, `refreshAccess()` devuelve `demo_active` y el mismo efecto carga
+     el workspace (crea la org demo si el usuario no tiene ninguna, como hoy).
+   El flag `isLoading` pasa a significar "restaurando sesión/acceso"; se libera al resolver
+   acceso (no al terminar de cargar orgs).
 
-**Nota de decisión (seguridad):** el bloqueo por DEMO vencida se aplica en la capa de producto (`AccessGate` usa `get_my_access`, autoritativo del lado servidor). Las tablas de organizaciones conservan su RLS actual (datos propios del usuario intactos para no romper el funcionamiento existente ni la cuenta propietaria); el acceso al producto se bloquea al vencimiento y se restaura al licenciar.
+2. **`AppGuard` decide por estado de acceso, no por `db`.**
+   - sesión restaurándose → spinner inicial;
+   - sin usuario → `LoginPage`;
+   - sin acceso aún → spinner "Checking access…" (o reintento si `accessFailed`);
+   - acceso `none`/bloqueado → `AccessGate` (activación/bloqueo) **sin esperar `db`**;
+   - acceso habilitado → esperar `db` ("Loading your organizations…") y renderizar
+     `AppShell`.
+   Reutiliza `gateState(access)` de `src/lib/access/status.ts`.
 
-## Flujo de acceso (frontend)
+3. **Creación de organizaciones en lote** (`insertChildren`):
+   - insertar los 7 conjuntos de hijos en oleadas paralelas respetando FK:
+     W1 paralelo: `processes`, `areas`, `competencies`, `roles`
+     W2 paralelo: `functions` (FK process) y `people` (FK role/area)
+     W3: `tasks` (FK function/area)
+   - resolver jerarquía con **1 `upsert` masivo** de `{ id, manager_id }` (con
+     `onConflict: "id"`) en lugar del bucle por persona.
+   Resultado: de ~8 peticiones secuenciales + ~480 updates a ~4 peticiones en total.
+   Aplica también a `resetDemoOrganization` y `ensureDemoOrganization` (comparten
+   `insertChildren`).
 
-Estados expuestos al cliente: `owner`, `perpetual_active`, `subscription_active` (futuro), `demo_active`, `demo_expiring` (≤3 días), `demo_expired`, `subscription_expired` (futuro), `none`, y `demo_not_eligible` (resultado de activación).
+4. **Eliminar la doble lista en arranque**: en `loadWorkspace`, si
+   `ensureDemoOrganization` devuelve un `Db`, usar ese objeto directamente (orgs = 1
+   elemento, `db` = el creado) sin segundo `listOrganizations` ni `loadOrganization`.
 
-- **Owner**: navega normal + ítem de navegación "Access & licensing" (único) → `/access`.
-- **Nuevo usuario (estado `none`)**: pantalla de **activación de DEMO obligatoria** antes de usar ORA (toggle Persona→DNI / Empresa→CUIT + nombre de cliente). `request_demo` valida elegibilidad de 12 meses. Error "no elegible" muestra fecha de re-elegibilidad. Éxito → refresca acceso y entra.
-- **`demo_active` / `demo_expiring`**: se usa ORA normal + **banner en cada acceso al Dashboard** ("You are using ORA in DEMO version. N days left. Expires DD/MM/YYYY. Continue with a Perpetual License of the current version."). Cuando `daysLeft ≤ 3` el banner pasa a variante obligatoria y destacada ("Your DEMO expires in 3 days on DD/MM/YYYY; after that your DEMO access ends — continue with a paid license"). Contador calculado en vivo desde `expires_at`.
-- **`demo_expired`**: **bloqueo total** — pantalla de acceso denegado con `LicenseInfoDialog` (Licencia perpetua = disponible; Suscripción = futura/no disponible), contacto vía mailto a la propietaria. Sin pagos.
-- **`perpetual_active` / `subscription_active`**: acceso normal, sin banners (owner tampoco).
-- **Conversión DEMO→licencia**: sin perder cuenta ni datos; el owner otorga la licencia (manualmente, sin pago) y el siguiente `get_my_access` devuelve `perpetual_active`.
+## Archivos a modificar
+- `src/store/OraContext.tsx` — arranque acceso-primero, efecto de carga del workspace
+  condicionado al gate, guard por sesión, ajuste semántica de `isLoading`.
+- `src/components/auth/AppGuard.tsx` — render por estado de acceso (activación/bloqueo sin
+  esperar `db`; `AppShell` solo con acceso habilitado y `db` cargado).
+- `src/integrations/ora/api.ts` — `insertChildren` por oleadas + `upsert` masivo de
+  managers; `loadWorkspace` sin segunda lista (en OraContext); `ensureDemoOrganization`
+  reutilizado.
+- `src/pages/LoginPage.tsx` — copia menor: la org demo se crea tras activar el DEMO (no en
+  el signup). Sin cambiar ningún flujo.
 
-## Archivos
-
-**Nuevos:**
-- `src/lib/access/types.ts` — tipos (`AccessStatus`, `MyAccess`, constantes `DEMO_DAYS=15`, `ELIGIBILITY_MONTHS=12`, `OWNER_EMAIL`, `SUBSCRIPTION_ENABLED=false`).
-- `src/lib/access/status.ts` — helpers puros: `daysLeft(expiresAt)`, `formatDateDDMMYYYY(date)` (ej. `10/09/2026`), `isExpiring(daysLeft)`, `resolveAccessState()`.
-- `src/lib/access/status.test.ts` — tests unitarios (bordes: 0, 1, 3, 4, 14, 15 días; fecha).
-- `src/lib/access/api.ts` — RPCs tipadas (`getMyAccess`, `activateDemo`, `grantLicense`, `revokeLicense`, `reissueDemo`) + consultas del panel admin (owner, via RLS).
-- `src/lib/access/notifications.ts` — stub documentado del futuro envío por email (lee `notification_outbox`, NO envía; sin servidor de correo configurado).
-- `src/components/access/AccessGate.tsx` — resuelve `get_my_access`; bloquea (activación / expirado) o renderiza hijos + banner; refresca tras acciones.
-- `src/components/access/DemoActivationScreen.tsx` — DNI/CUIT + nombre; maneja `demo_not_eligible`.
-- `src/components/access/DemoBanner.tsx` — banner de acceso + variante de vencimiento a 3 días (para `Dashboard`).
-- `src/components/access/AccessBlockedScreen.tsx` — bloqueo por DEMO vencida.
-- `src/components/access/LicenseInfoDialog.tsx` — modalidades (perpetua disponible; suscripción futura). Sin botones de pago.
-- `src/pages/AccessAdminPage.tsx` — panel owner: resumen de usuarios (email, estado, fechas de DEMO, licencia), clientes, licencias, historial de uso; acciones: otorgar licencia perpetua, revocar/suspender, re-emitir DEMO.
-- `src/components/access/admin/GrantLicenseDialog.tsx`, `ReissueDemoDialog.tsx` — formularios del panel.
-
-**Modificados:**
-- `src/integrations/supabase/types.ts` — regenerado por el framework tras la migración (no editarlo; si no se regenera, usar casts `as never`, patrón ya existente en `api.ts`).
-- `src/store/OraContext.tsx` — exponer `access: MyAccess | null`, `refreshAccess()`, `isOwner` (cargar acceso junto al workspace, patrón `setTimeout` dentro del listener).
-- `src/components/auth/AppGuard.tsx` — envolver `AppShell` con `<AccessGate>`.
-- `src/components/layout/AppShell.tsx` — ítem "Access & licensing" solo owner.
-- `src/router.tsx` — ruta `/access` (guard owner; redirect a `/`).
-- `src/pages/Dashboard.tsx` — renderizar `<DemoBanner/>` arriba (aviso en cada acceso al inicio).
-
-**No se tocan:** `src/lib/analysis.ts`, `exposure.ts`, `simulation.ts`, `src/lib/importer/*`, páginas de entidades, flujo de importación, formularios de autenticación existentes.
+No se tocan: `index.html`, auth/email/redirect, tablas, RLS, funciones de acceso, reglas
+DEMO (15 días / DNI-CUIT / 12 meses), ni la lógica de análisis/importación.
 
 ## Implementation checklist
-
-- [x] Migración única: tablas `clients`, `licenses`, `license_users`, `demo_sessions`, `demo_usage_history`, `notification_outbox` + columna `profiles.is_owner` + índices + triggers + funciones + policies RLS + asignación de propietaria + migración de los 2 usuarios históricos. Aplicada con `supabase_migration` y verificada con `supabase_get_table_schema` (RLS habilitado y policies presentes en cada tabla nueva).
-- [x] `request_demo` rechaza propietaria / licencia activa / DEMO activa / DNI-CUIT usado en los últimos 12 meses (respuesta con fecha de re-elegibilidad) y crea DEMO de 15 días corridos + `demo_usage_history` + outbox.
-- [x] `get_my_access` devuelve los estados: owner, perpetual_active, subscription_active (futuro), demo_active, demo_expiring (≤3 días), demo_expired, subscription_expired (futuro), none.
-- [x] `grant_license` solo owner, solo `perpetual` (rechaza `subscription`), asocia cliente + usuarios vía `license_users`; `revoke_license` → `suspended`; `admin_grant_demo` respeta la regla de 12 meses.
-- [x] Trigger de `notification_outbox` genera avisos `demo_expiring_3days` y `demo_expired` al insertar una `demo_sessions` (cubre migración histórica).
-- [x] `src/lib/access/status.ts` + tests: `daysLeft`, `formatDateDDMMYYYY`, `isExpiring` (bordes 0/1/3/4 días).
-- [x] `OraContext` expone `access`, `refreshAccess`, `isOwner` cargados en la restauración de sesión.
-- [x] `AccessGate` bloquea en `none` (activación obligatoria DNI/CUIT) y en `demo_expired` (pantalla de acceso denegado + `LicenseInfoDialog`); owner pasa siempre.
-- [x] `DemoBanner` en `Dashboard` en cada acceso durante DEMO activa: días restantes calculados en vivo, fecha exacta `DD/MM/YYYY`, variante obligatoria destacada a ≤3 días, CTA "Licencia perpetua".
-- [x] `LicenseInfoDialog` y pantallas no muestran botones de compra de Suscripción (deshabilitada) ni pagos.
-- [x] Ruta `/access` + nav solo owner con acciones: otorgar licencia perpetua, revocar/suspender, re-emitir DEMO; usuarios sin acceso (ej. `ora-test@example.com`) listados para revisión.
-- [x] `notifications.ts` documenta la arquitectura de email (outbox → envío futuro); sin envío ni simulación.
+- [ ] `OraContext`: el listener de sesión ya no llama `loadWorkspace` directo; solo
+  `refreshAccess()` al restaurar/ingresar.
+- [ ] `OraContext`: efecto que inicia `loadWorkspace(user.id)` únicamente cuando
+  `access` está habilitado (`gateState(access) === "unlocked"`), `db === null` y no se
+  ejecutó ya en esta sesión (ref `workspaceStartedRef`, reseteada en sign-out).
+- [ ] `OraContext`: `isLoading` se libera al resolver el acceso (no al cargar orgs); sin
+  sesión se libera como hoy.
+- [ ] `OraContext`: `loadWorkspace` usa el `Db` devuelto por `ensureDemoOrganization`
+  (orgs = [resumen], sin 2º `listOrganizations` ni `loadOrganization` de lo ya creado).
+- [ ] `AppGuard`: reordenado — sesión → login → acceso (`none`/bloqueado renderizan
+  `AccessGate` sin `db`; habilitado espera `db` y renderiza `AppShell`).
+- [ ] `api.ts`: `insertChildren` en oleadas paralelas (processes/areas/competencies/roles →
+  functions/people → tasks), manteniendo FK y lógica.
+- [ ] `api.ts`: jerarquía de managers en un único `upsert` masivo `{ id, manager_id }`
+  (`onConflict: "id"`), reemplazando el bucle por persona.
+- [ ] `LoginPage`: ajuste de copia (org demo tras activar DEMO). Sin cambios de lógica.
 
 ## Verification checklist
-
-- [x] `pnpm run check` pasa (lint + `tsc --noEmit`).
-- [x] `pnpm test` pasa (54 tests: 39 existentes + 15 nuevos de `status`).
-- [x] `pnpm run build` pasa.
-- [x] `supabase_get_table_schema` muestra RLS habilitado y policies en `clients`, `licenses`, `license_users`, `demo_sessions`, `demo_usage_history`, `notification_outbox`.
-- [x] Positivo (SQL): `facundo20072@gmail.com` y `prueba2024@gmail.com` tienen DEMO migrado (inicio 2026-09-02, expira 2026-09-17) con outbox `pending` (expiring 2026-09-14, expired 2026-09-17).
-- [x] Positivo (SQL): `mariaeugeniasaldi@gmail.com` tiene `is_owner = true`; `ora-test@example.com` queda sin DEMO (revisión admin).
-- [ ] Manual UI: login propietaria → sin banners, sin bloqueo, ve "Access & licensing".
-- [ ] Manual UI: login usuario con DEMO → banner con días y fecha; activación de nuevo usuario con DNI; bloqueo a los 3 días/vencimiento.
-- [ ] Manual: `grant_license` con `subscription` → error; sin UI de suscripción.
+- [ ] `pnpm run check` pasa (lint + `tsc --noEmit`).
+- [ ] `pnpm test` pasa (suite actual intacta: análisis/simulación/access).
+- [ ] `pnpm run build` pasa.
+- [ ] Sin acceso (usuario `none`): el login llega directo a la pantalla de activación DEMO
+  **sin** crear/cargar organizaciones (verificado por ausencia de peticiones a
+  `organizations`/tablas antes del render de activación, p. ej. con `read_network_requests`).
+- [ ] Usuario con DEMO activa / propietaria: carga el workspace y ve `AppShell` con datos
+  (mismo comportamiento que hoy).
+- [ ] Activar un DEMO desde la pantalla de activación crea la org demo y entra a la app
+  (regresión: sigue funcionando).
+- [ ] Crear una organización importada grande (fixture tipo BABEL: 500 personas, 480 con
+  manager): termina con pocas peticiones y sin el bucle por persona; jerarquía correcta en
+  BD (`manager_id` poblado).
+- [ ] `resetDemoOrganization` sigue funcionando (comparte `insertChildren`).
+- [ ] No cambió: login, redirección de email, reglas DEMO/DNI-CUIT/12 meses, RLS.
