@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
+import { useOra } from "@/store/OraContext";
 import { Field } from "@/components/entities/field";
 
 type Status = "checking" | "ready" | "invalid";
@@ -13,9 +14,15 @@ type Status = "checking" | "ready" | "invalid";
  * Landing page for the password-reset callback. The recovery token in the URL
  * is processed by the Supabase client into a recovery session; once present,
  * the user can set a new password.
+ *
+ * While the recovery session is pending, OraContext keeps `pendingRecovery`
+ * true so AppGuard never grants access to the dashboard; after a successful
+ * password update this page clears the marker and signs out so the user logs
+ * back in with their new password.
  */
 export function ResetPasswordPage() {
   const navigate = useNavigate();
+  const { clearPendingRecovery, signOut } = useOra();
   const [status, setStatus] = useState<Status>("checking");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -66,8 +73,10 @@ export function ResetPasswordPage() {
     try {
       const { error: updateError } = await supabase.auth.updateUser({ password });
       if (updateError) throw updateError;
+      // The recovery gate can now be released: the password was changed.
+      clearPendingRecovery();
       // Sign out so the user logs in again with their new password.
-      await supabase.auth.signOut();
+      await signOut();
       setDone(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not reset your password.");

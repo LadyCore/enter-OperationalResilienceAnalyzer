@@ -1,4 +1,5 @@
 import { Suspense, lazy } from "react";
+import { Navigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { useOra } from "@/store/OraContext";
 import { LoginPage } from "./LoginPage";
@@ -35,15 +36,18 @@ function LazyGate() {
 /**
  * Guards the authenticated application.
  *
- * Order matters for startup performance:
+ * Order matters for startup performance and for security:
  *  1. Wait only for the session/access restore (fast single RPC).
- *  2. If access is not unlocked (DEMO activation required / blocked), render the
+ *  2. A pending PASSWORD_RECOVERY session can NEVER reach the app: while
+ *     `pendingRecovery` is true every protected route (including "/") redirects
+ *     to /reset-password, regardless of access/license/DEMO state.
+ *  3. If access is not unlocked (DEMO activation required / blocked), render the
  *     gate screen immediately — no organization data is fetched or created.
- *  3. Only once access is unlocked do we wait for the workspace (db) and render
+ *  4. Only once access is unlocked do we wait for the workspace (db) and render
  *     the ORA shell.
  */
 export function AppGuard() {
-  const { user, isLoading, db, access, accessFailed, workspaceFailed, retryWorkspace } = useOra();
+  const { user, isLoading, db, access, accessFailed, pendingRecovery, workspaceFailed, retryWorkspace } = useOra();
 
   // Session restore in progress (initial getSession / auth listener).
   if (isLoading) {
@@ -51,6 +55,12 @@ export function AppGuard() {
   }
 
   if (!user) return <LoginPage />;
+
+  // SECURITY: a recovery session must never unlock the dashboard. Force the
+  // password reset flow even if the user navigates to "/" or a protected route.
+  if (pendingRecovery) {
+    return <Navigate to="/reset-password" replace />;
+  }
 
   // Access still resolving.
   if (!access && !accessFailed) {
