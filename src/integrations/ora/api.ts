@@ -238,23 +238,53 @@ async function insertChildren(db: Db): Promise<void> {
     if (error) throw error;
   };
 
-  await insertAll("processes", db.processes);
-  await insertAll("functions", db.functions);
-  await insertAll("areas", db.areas);
-  await insertAll("competencies", db.competencies);
-  await insertAll("roles", db.roles);
-  await insertAll("tasks", db.tasks);
-  await insertAll("people", db.people);
+  // Wave 1 — independent roots (only reference the organization).
+  await Promise.all([
+    insertAll("processes", db.processes),
+    insertAll("areas", db.areas),
+    insertAll("competencies", db.competencies),
+    insertAll("roles", db.roles),
+  ]);
 
-  for (const p of db.people) {
-    if (!p.managerId) continue;
+  // Wave 2 — depends on wave 1: functions reference processes; people reference
+  // roles/areas. People are inserted with manager_id null: the manager hierarchy
+  // is a self-referencing FK whose resolution must not depend on batch ordering,
+  // so it is applied in a single batched upsert afterwards.
+  await Promise.all([
+    insertAll("functions", db.functions),
+    insertPeopleWithoutManagers(db.people, orgId),
+  ]);
+
+  // Wave 3 — depends on wave 2: tasks reference functions (and areas).
+  await insertAll("tasks", db.tasks);
+
+  // Resolve the manager hierarchy in a single batched upsert. Every manager row
+  // already exists (inserted above), so the self-referencing foreign key is
+  // satisfied — no per-person UPDATE round trips. The full payload is sent so the
+  // row-level security WITH CHECK (organization_id = user's orgs) passes; the
+  // primary-key conflict turns this into an update of manager_id only.
+  const withManager = db.people.filter((p) => p.managerId);
+  if (withManager.length > 0) {
     const { error } = await supabase
       .from("people")
-      .update({ manager_id: p.managerId })
-      .eq("id", p.id)
-      .eq("organization_id", orgId);
+      .upsert(
+        withManager.map((p) => payloadFor("people", p, orgId)),
+        { onConflict: "id" },
+      );
     if (error) throw error;
   }
+}
+
+/** Insert people without manager_id (self-referencing FK resolved separately). */
+async function insertPeopleWithoutManagers(people: Person[], orgId: string): Promise<void> {
+  if (people.length === 0) return;
+  const rows = people.map((e) => {
+    const row = payloadFor("people", e, orgId) as Record<string, unknown>;
+    delete row.manager_id;
+    return row;
+  });
+  const { error } = await supabase.from("people").insert(rows as never);
+  if (error) throw error;
 }
 
 /** Delete an organization. The demo is protected both here and by a DB trigger. */

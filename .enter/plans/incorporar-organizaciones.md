@@ -104,36 +104,22 @@ No se tocan: `index.html`, auth/email/redirect, tablas, RLS, funciones de acceso
 DEMO (15 días / DNI-CUIT / 12 meses), ni la lógica de análisis/importación.
 
 ## Implementation checklist
-- [ ] `OraContext`: el listener de sesión ya no llama `loadWorkspace` directo; solo
-  `refreshAccess()` al restaurar/ingresar.
-- [ ] `OraContext`: efecto que inicia `loadWorkspace(user.id)` únicamente cuando
-  `access` está habilitado (`gateState(access) === "unlocked"`), `db === null` y no se
-  ejecutó ya en esta sesión (ref `workspaceStartedRef`, reseteada en sign-out).
-- [ ] `OraContext`: `isLoading` se libera al resolver el acceso (no al cargar orgs); sin
-  sesión se libera como hoy.
-- [ ] `OraContext`: `loadWorkspace` usa el `Db` devuelto por `ensureDemoOrganization`
-  (orgs = [resumen], sin 2º `listOrganizations` ni `loadOrganization` de lo ya creado).
-- [ ] `AppGuard`: reordenado — sesión → login → acceso (`none`/bloqueado renderizan
-  `AccessGate` sin `db`; habilitado espera `db` y renderiza `AppShell`).
-- [ ] `api.ts`: `insertChildren` en oleadas paralelas (processes/areas/competencies/roles →
-  functions/people → tasks), manteniendo FK y lógica.
-- [ ] `api.ts`: jerarquía de managers en un único `upsert` masivo `{ id, manager_id }`
-  (`onConflict: "id"`), reemplazando el bucle por persona.
-- [ ] `LoginPage`: ajuste de copia (org demo tras activar DEMO). Sin cambios de lógica.
+- [x] `OraContext`: el listener de sesión ya no llama `loadWorkspace` directo; solo `refreshAccess()` al restaurar/ingresar.
+- [x] `OraContext`: efecto que inicia `loadWorkspace(user.id)` únicamente cuando `access` está habilitado (`gateState(access) === "unlocked"`), `db === null` y no se ejecutó ya en esta sesión (ref `workspaceStartedRef`, reseteada en sign-out).
+- [x] `OraContext`: `isLoading` se libera al resolver el acceso (no al cargar orgs); sin sesión se libera como hoy.
+- [x] `OraContext`: `loadWorkspace` usa el `Db` devuelto por `ensureDemoOrganization` (orgs = [resumen], sin 2º `listOrganizations` ni `loadOrganization` de lo ya creado). Añade `workspaceFailed`/`retryWorkspace` para reintento en fallo.
+- [x] `AppGuard`: reordenado — sesión → login → acceso (`none`/bloqueado renderizan `AccessGate` sin `db`; habilitado espera `db` y renderiza `AppShell`).
+- [x] `api.ts`: `insertChildren` en oleadas paralelas (processes/areas/competencies/roles → functions/people → tasks), manteniendo FK y lógica.
+- [x] `api.ts`: jerarquía de managers en un único `upsert` masivo (payload completo para RLS, `onConflict: "id"`), reemplazando el bucle por persona; `people` se inserta sin `manager_id` primero (FK auto-referencial resuelta después).
+- [x] `LoginPage`: ajuste de copia (org demo tras activar DEMO). Sin cambios de lógica.
 
 ## Verification checklist
-- [ ] `pnpm run check` pasa (lint + `tsc --noEmit`).
-- [ ] `pnpm test` pasa (suite actual intacta: análisis/simulación/access).
-- [ ] `pnpm run build` pasa.
-- [ ] Sin acceso (usuario `none`): el login llega directo a la pantalla de activación DEMO
-  **sin** crear/cargar organizaciones (verificado por ausencia de peticiones a
-  `organizations`/tablas antes del render de activación, p. ej. con `read_network_requests`).
-- [ ] Usuario con DEMO activa / propietaria: carga el workspace y ve `AppShell` con datos
-  (mismo comportamiento que hoy).
-- [ ] Activar un DEMO desde la pantalla de activación crea la org demo y entra a la app
-  (regresión: sigue funcionando).
-- [ ] Crear una organización importada grande (fixture tipo BABEL: 500 personas, 480 con
-  manager): termina con pocas peticiones y sin el bucle por persona; jerarquía correcta en
-  BD (`manager_id` poblado).
-- [ ] `resetDemoOrganization` sigue funcionando (comparte `insertChildren`).
+- [x] `pnpm run check` pasa (lint + `tsc --noEmit`).
+- [x] `pnpm test` pasa (54 tests).
+- [x] `pnpm run build` pasa.
+- [x] Sin sesión: la app llega a la pantalla de login sin llamadas a `organizations`/tablas (verificado por red).
+- [ ] Manual (requiere login real): usuario `none` → pantalla de activación DEMO inmediata, sin carga de orgs.
+- [ ] Manual: usuario con DEMO activa / propietaria carga el workspace y ve la app con datos.
+- [ ] Manual: activar un DEMO crea la org demo y entra.
+- [ ] Manual: crear organización importada grande (BABEL-like) termina rápido (sin bucle por persona) y con jerarquía correcta.
 - [ ] No cambió: login, redirección de email, reglas DEMO/DNI-CUIT/12 meses, RLS.

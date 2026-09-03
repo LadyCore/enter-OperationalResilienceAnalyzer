@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { getMyAccess } from "@/lib/access/api";
+import { gateState } from "@/lib/access/status";
 import type { MyAccess } from "@/lib/access/types";
 import {
   createOrganization,
@@ -60,6 +61,9 @@ interface OraApi {
   addOrganization: (db: Db) => Promise<void>;
   setActiveOrganization: (id: string) => Promise<void>;
   removeOrganization: (id: string) => Promise<void>;
+  /** True when the workspace failed to load (unlocked access, no data). */
+  workspaceFailed: boolean;
+  retryWorkspace: () => void;
 
   // Active organization data + existing synchronous API (forms keep working)
   db: Db;
@@ -77,6 +81,7 @@ export function OraProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [access, setAccess] = useState<MyAccess | null>(null);
   const [accessFailed, setAccessFailed] = useState(false);
+  const [workspaceFailed, setWorkspaceFailed] = useState(false);
   const [organizations, setOrganizations] = useState<OrgSummary[]>([]);
   const [activeOrganizationId, setActiveOrganizationId] = useState<string | null>(null);
   const [db, setDb] = useState<Db | null>(null);
@@ -84,6 +89,9 @@ export function OraProvider({ children }: { children: ReactNode }) {
   const activeOrgIdRef = useRef<string | null>(null);
   // Chained promise that preserves write order to the backend.
   const queueRef = useRef<Promise<void>>(Promise.resolve());
+  // Ensures the workspace is loaded only once per signed-in session, right after
+  // access has been resolved to an unlocked state.
+  const workspaceStartedRef = useRef(false);
 
   const enqueue = useCallback((task: () => Promise<void>) => {
     queueRef.current = queueRef.current.then(task).catch((err) => {
@@ -100,14 +108,30 @@ export function OraProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.error("Failed to resolve access:", err);
       setAccessFailed(true);
+    } finally {
+      // Access has been resolved (success or failure): the initial spinner ends
+      // here. The workspace load (if needed) is driven separately by the access
+      // state, so blocked/activation screens never wait for organization data.
+      setIsLoading(false);
     }
   }, []);
 
   const loadWorkspace = useCallback(async (userId: string) => {
     try {
+      setWorkspaceFailed(false);
       let orgs = await listOrganizations();
       if (orgs.length === 0) {
-        await ensureDemoOrganization(userId);
+        const created = await ensureDemoOrganization(userId);
+        if (created) {
+          // The fresh demo Db is already fully materialized: use it directly
+          // instead of re-listing and re-loading what we just created.
+          setOrganizations([{ id: created.organization.id, name: created.organization.name, isDemo: true }]);
+          activeOrgIdRef.current = created.organization.id;
+          setActiveOrganizationId(created.organization.id);
+          localStorage.setItem(ACTIVE_ORG_KEY, created.organization.id);
+          setDb(created);
+          return;
+        }
         orgs = await listOrganizations();
       }
       setOrganizations(orgs);
@@ -125,11 +149,17 @@ export function OraProvider({ children }: { children: ReactNode }) {
       }
     } catch (err) {
       console.error("Failed to load workspace:", err);
+      workspaceStartedRef.current = false;
+      setWorkspaceFailed(true);
       toast.error("Could not load your organizations.");
-    } finally {
-      setIsLoading(false);
     }
   }, []);
+
+  const retryWorkspace = useCallback(() => {
+    if (!user) return;
+    workspaceStartedRef.current = false;
+    void loadWorkspace(user.id);
+  }, [user, loadWorkspace]);
 
   // Register the auth listener BEFORE checking for an existing session, so the
   // initial session restore can never be missed. No async callback here; supabase
@@ -140,15 +170,17 @@ export function OraProvider({ children }: { children: ReactNode }) {
       setUser(nextSession?.user ?? null);
 
       if (nextSession?.user) {
-        // Load the workspace on initial restore and on sign-in only; token
-        // refreshes must not reload data while the user is editing.
+        // Resolve access on initial restore and on sign-in only; token refreshes
+        // must not reload anything while the user is editing. The workspace load
+        // is started by a separate effect once access is known to be unlocked.
         if (event === "INITIAL_SESSION" || event === "SIGNED_IN") {
           setTimeout(() => {
-            void loadWorkspace(nextSession.user!.id);
             void refreshAccess();
           }, 0);
         }
       } else {
+        workspaceStartedRef.current = false;
+        setWorkspaceFailed(false);
         setDb(null);
         setOrganizations([]);
         setActiveOrganizationId(null);
@@ -166,7 +198,19 @@ export function OraProvider({ children }: { children: ReactNode }) {
     });
 
     return () => subscription.subscription.unsubscribe();
-  }, [loadWorkspace, refreshAccess]);
+  }, [refreshAccess]);
+
+  // Load the workspace as soon as the session is restored AND access is resolved
+  // to an unlocked state (owner / license / active or expiring DEMO). Users whose
+  // access is "none" or blocked only see the activation/blocked screens, which do
+  // not need any organization data — so nothing is created or fetched for them.
+  useEffect(() => {
+    if (!user || !access || workspaceStartedRef.current) return;
+    const state = gateState(access);
+    if (state !== "unlocked") return;
+    workspaceStartedRef.current = true;
+    void loadWorkspace(user.id);
+  }, [user, access, loadWorkspace]);
 
   /* ------------------------------------------------ */
   /* Existing synchronous mutations (optimistic + queue) */
@@ -291,6 +335,8 @@ export function OraProvider({ children }: { children: ReactNode }) {
       addOrganization,
       setActiveOrganization,
       removeOrganization,
+      workspaceFailed,
+      retryWorkspace,
       db: db ?? EMPTY_DB,
       setOrganization,
       upsert,
@@ -310,6 +356,8 @@ export function OraProvider({ children }: { children: ReactNode }) {
       addOrganization,
       setActiveOrganization,
       removeOrganization,
+      workspaceFailed,
+      retryWorkspace,
       db,
       setOrganization,
       upsert,

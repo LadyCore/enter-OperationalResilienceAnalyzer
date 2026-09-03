@@ -122,7 +122,7 @@ export function LoginPage() {
                 ? "Your email address must be verified before you can access ORA."
                 : mode === "login"
                   ? "Access your organizations and their operational analysis."
-                  : "Sign up to start analyzing your organization. A demo organization is created for you."}
+                  : "Sign up to start analyzing your organization. Activate your free DEMO on first access."}
             </CardDescription>
           </CardHeader>
           <CardContent>
