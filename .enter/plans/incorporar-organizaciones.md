@@ -1,73 +1,88 @@
-# ORA — Feedback integrado (transversal, contextual, persistente)
+# ORA — Persona multi-área y multi-rol (importación por Legajo + Manager ID)
 
 ## Context
 
-ORA necesita un sistema para reportar problemas, errores, lentitud, bloqueos y sugerencias desde **cualquier pantalla** (pre-login y autenticada), con contexto detectado automáticamente y persistencia para análisis posterior. Es independiente del chatbot y de la telemetría existente. No se agrega panel administrativo en esta etapa. Alcance confirmado por el usuario: acceso en app autenticada **y** pre-login (login/signup, verify-email, forgot/reset password, activación DEMO, bloqueo) porque una falla de auth/email puede impedir el ingreso. Contexto adaptado al nivel de información disponible en cada etapa.
+El archivo de prueba (`ORA_test_bug_manager_multiarea.xlsx`) expresa que **una persona puede pertenecer a varios sectores** y tener **un rol distinto por sector** (Diego Correa / Legajo 2001 aparece en IT Infrastructure con rol "Director de IT" y en Sales con rol "Ejecutivo de Cuentas"), y que **varias personas pueden depender del mismo responsable** (Lucía, Martín y Valeria → Manager ID 2001 = Diego) o de distintos.
 
-## Decisiones de arquitectura (revisadas contra el código real)
+Hoy el modelo es estrictamente "1 fila = 1 persona con 1 sector y 1 rol": `Person.areaId` y `Person.roleId` son únicos, la DB usa `people.area_id`/`people.role_id` (FK únicas), y el validador marca a Diego como "posible duplicado" y al Manager ID 2001 como "ambiguo" (porque el ID se repite en 2 filas).
 
-- Rutas: `createBrowserRouter(routers)` plano (públicas + "/" con `AppGuard` + catch-all). No hay layout raíz hoy.
-- Autenticación/sesión: `OraProvider` (`user`, `session`, `access`) + `AppGuard` (login si no hay usuario; `AccessGate` para activación/bloqueo; `AppShell` autenticado).
-- Persistencia: Enter Cloud (tabla nueva, RLS). Reutiliza `supabase` y la función existente `public.is_owner()` para el owner.
-- Telemetría existente: `@enter-pro/analytics-sdk` (page views / eventos de sitio). El Feedback **no la usa ni la duplica**: su captura técnica es un ring buffer local de errores JS/rejection que solo se adjunta al reporte al enviarlo.
+Decisiones confirmadas por el usuario:
+1. **Multi-área real**: una persona puede tener varios sectores (N:M).
+2. **Rol por sector**: una persona puede tener varios roles.
+3. **Jerarquía por Manager ID (Legajo)**: es la fuente de la relación responsable→persona.
+4. **Análisis**: roles múltiples sin vínculo estricto al área; `capableRoles` pasa a ser el **conjunto de roles de las personas capaces** de la tarea (puede devolver varios).
 
-## Privacidad (obligatorio)
-- El contexto técnico **nunca** agrega automáticamente email, nombre u otros datos personales.
-- Solo identificadores técnicos/funcionales necesarios: user_id (uuid), organización activa (id y nombre — contexto funcional), ruta/module/stage, userAgent, viewport, timestamp, últimos errores JS (message/stack, sin payloads de red).
-- Si el usuario escribe datos personales en la descripción, es contenido que él decidió enviar.
+## Modelo objetivo
 
-## Persistencia (migración única)
-Tabla `public.feedback_reports`:
-- `id uuid pk default gen_random_uuid()`
-- `user_id uuid null references auth.users(id) on delete set null` (null = pre-login)
-- `created_at timestamptz default now()`
-- `kind text check in ('not_working','error','slow','stuck','suggestion','other')`
-- `description text not null`
-- `module text null`, `screen text null`, `stage text null`
-- `is_general boolean default false`
-- `status text default 'new'`
-- `context jsonb default '{}'` (sin datos personales)
+- `Person` pasa de `roleId`/`areaId` a **`roleIds: string[]`** y **`areaIds: string[]`** (mismo patrón que ya usan `taskIds`/`competencyIds` en `people`).
+- El **responsable sigue siendo único por persona** (`managerId`), resuelto desde el archivo por la columna **Manager ID** (referencia a `employeeId` de otra persona), con fallback al nombre del responsable. Si filas de una misma persona declaran responsables distintos, se marca como conflicto a resolver (no se adivina).
+- Análisis: `capableRoles(db, taskId)` = unión de `roleIds` de las personas capaces; la métrica "cubierta por un único rol" pasa a "un único rol en el conjunto de roles de quienes la cubren".
 
-RLS (misma migración): insert `with check (user_id is null or user_id = auth.uid())`; select `user_id = auth.uid() or is_owner()`; grants insert/select a `authenticated, anon` (anon solo puede insertar con user_id null por policy). Verificar con `supabase_get_table_schema`.
+## Migración DB (única)
 
-## Frontend
+Tabla `people`:
+- Agregar `area_ids text[] not null default '{}'` y `role_ids text[] not null default '{}'`.
+- Backfill desde columnas actuales: `area_ids = array[area_id]` cuando `area_id` no es null (idem `role_ids`).
+- **Conservar** `area_id`/`role_id` (legacy): el código nuevo lee/escribe los arrays; no se dropean FKs para no romper datos existentes ni el seed. Verificar RLS intacto con `supabase_get_table_schema`.
 
-- `src/lib/feedback/types.ts` — tipos.
-- `src/lib/feedback/context.ts` — singleton:
-  - `startFeedbackTelemetry()`: listeners `error`/`unhandledrejection` (ring buffer máx ~6), solo para adjuntar al reporte.
-  - `trackRoute(pathname)` y mapa ruta→módulo/etiqueta (login `/`, `/verify-email`, `/forgot-password`, `/reset-password`, `/processes`, `/people`, `/simulation`, `/import`, `/organization`, `/access`, …).
-  - `setFeedbackStage(label|null)` para instrumentación.
-  - `collectContext(scope)`: arma `context` técnico y `module/screen/stage` según sesión (autenticado suma org activa; pre-login solo pantalla/etapa). Sin email/name.
-- `src/lib/feedback/api.ts` — `submitFeedback(input)` inserta con `user_id: user?.id ?? null`.
-- `src/components/feedback/FeedbackDialog.tsx` — 6 tipos, textarea obligatoria, panel "Contexto detectado", checkbox "Feedback general" (no fuerza módulo), botón Enviar, confirmación de recibido + reset.
-- `src/components/feedback/FeedbackFab.tsx` — botón fijo discreto abajo a la derecha, con identidad visual existente; **responsive**: `z-40` (por debajo de modales `z-50`), pequeño, no intercepta el área (solo el botón), sin solapar navegación/wizard/menús; en mobile queda por encima del contenido pero por debajo de modales y sin cubrir controles de la cabecera.
+## Frontend — cambios por archivo
 
-## Integración con la arquitectura real de rutas
-- `src/components/layout/AppLayout.tsx` (nuevo): layout raíz **sin path** que renderiza `<Outlet />` + `<FeedbackFab />` y arranca la telemetría una vez (efecto). No modifica `AppGuard` ni las rutas hijas.
-- `src/router.tsx`: envolver el array existente bajo un objeto `{ element: <AppLayout />, children: routers }`. **AppGuard, rutas públicas, rutas protegidas y el catch-all conservan exactamente su comportamiento** (layout sin path no altera matching). Se conservan `name`, `__routers__` y el lazy-loading.
-- `src/pages/ImportOrganizationPage.tsx`: `useEffect([step])` → `setFeedbackStage(\`Step ${step} · ${STEPS[step-1]}\`)`. Solo lectura del estado existente; sin tocar la lógica del wizard.
-- `src/pages/PeoplePage.tsx`: controlar el Tabs existente (value/onValueChange) para reportar la pestaña activa ("People"/"Roles") vía `setFeedbackStage`. Sin cambios funcionales visibles.
+### Modelo y serialización
+- `src/types/index.ts`: `Person { roleIds: string[]; areaIds: string[] }` (remplaza `roleId`/`areaId`).
+- `src/integrations/ora/api.ts`: `payloadFor("people")` escribe `role_ids`/`area_ids` (arrays) y deja `role_id`/`area_id` como primer elemento o null (compat); `toPerson` lee arrays con fallback a los legacy; `toTask` intacto (`tasks.area_id` es del área de la tarea, no de la persona).
+- RPC `bootstrap_demo_organization` y el seed (`src/data/seed.ts`, remap): enviar `role_ids`/`area_ids` arrays.
+- `src/components/common/MultiSelect.tsx`: ya existe y se reutiliza.
 
-## No se toca
-Chatbot, motor de análisis, simulaciones, DEMO/licencias, lógica de importación, autenticación/SMTP/redirects, identidad visual general, analytics existente. No se agrega panel administrativo.
+### Análisis (sin cambiar fórmulas de cobertura)
+- `src/lib/analysis.ts`:
+  - `capableRoles` → unión de `roleIds` de `capablePeople`.
+  - `taskDependency` → `roleIds` unión; el aviso "single role" solo si el conjunto tiene tamaño 1.
+  - `processOperationalWeight` (áreas del proceso) → usar `flatMap(p => p.areaIds)`.
+  - Revisar todos los usos de `p.roleId`/`p.areaId` (incluye concentración de roles en flags/dashboard) para pasar a conjuntos.
+- `src/lib/simulation.ts`: sin cambio semántico (opera sobre `capablePeople`/`holdersOf`); verificar que no lea `p.roleId`/`p.areaId` directamente (grep indica que no).
+
+### Importación (1 persona = 1 Legajo, multi-fila)
+- `src/lib/importer/types.ts`: `NormalizedRow` ya tiene `area`/`rol` por fila; se agrega semántica de **agrupación**: personas identificadas por `employeeId` (o nombre si no hay ID).
+- `src/lib/importer/validate.ts`:
+  - Agrupar filas por identidad (`employeeId`; si falta, nombre normalizado). Cada persona acumula **áreas y roles únicos** por fila y la **unión** de tareas/competencias.
+  - `people` del resumen = personas únicas; `possibleDuplicates` solo cuando **dos filas comparten identidad pero con rol/área idénticos** (caso a revisar) o cuando no hay ID y el nombre se repite con contenido distinto (sigue siendo warning revisable, nunca se descarta).
+  - Resolución de manager: primero por **Manager ID → employeeId único** (sin ambigüedad tras agrupar); si no hay ID, por nombre único; si el ID no existe o el nombre es ambiguo → error bloqueante a resolver (comportamiento actual).
+  - Si filas de la misma persona declaran **responsables distintos** → marcarlo como conflicto (warning/error) para revisión, no adivinar.
+- `src/lib/importer/buildOrganization.ts`: construir una persona por identidad agrupada con `roleIds`/`areaIds`; la creación de áreas/roles/procesos/funciones/tareas/competencias se mantiene igual (dedupe por nombre). Mantener la resolución de `managerId` a partir de la persona correcta (Diego único → 2001 deja de ser ambiguo).
+
+### UI
+- `src/pages/PeoplePage.tsx`: mostrar **lista de roles** y **lista de áreas** (badges) en la tabla; conteo de roles por tarjeta usa `roleIds.includes`.
+- `src/components/entities/PersonFormDialog.tsx`: selección **múltiple** de roles y áreas con `MultiSelect` (mantiene manager único). Guardado escribe arrays.
+- `src/pages/ImportOrganizationPage.tsx` / `ValidationReport.tsx`: textos y resumen acordes (people = personas únicas; hint de agrupación por Legajo); sin tocar el wizard de pasos.
+- Copy del resumen de confirmación: si el archivo trae "Personas = N filas" pasa a personas únicas.
+
+## Archivos a modificar
+- `supabase` (migración) + regeneración de `types.ts` (no editarla a mano).
+- `src/types/index.ts`
+- `src/integrations/ora/api.ts` (payload/toperson de people)
+- `src/data/seed.ts` + RPC demo si aplica
+- `src/lib/analysis.ts`
+- `src/lib/importer/types.ts`, `validate.ts`, `buildOrganization.ts`
+- `src/pages/PeoplePage.tsx`, `src/components/entities/PersonFormDialog.tsx`
+- Componentes de validación/confirmación del import si muestran contadores
+- Tests: fixtures de `analysis.test.ts`/`simulation.test.ts` (roleId→roleIds), y **nuevo test** de importación multi-área/multi-rol con el fixture del archivo real.
 
 ## Implementation checklist
-- [x] Migración `feedback_reports` + RLS (insert propio/anónimo, select propio/owner) + grants; verificada con `supabase_get_table_schema`.
-- [x] `src/lib/feedback/types.ts` y `context.ts` (telemetría local de errores JS/rejection + mapa de rutas + stage + `collectContext` sin datos personales).
-- [x] `src/lib/feedback/api.ts` (`submitFeedback`, user_id null pre-login).
-- [x] `src/components/feedback/FeedbackDialog.tsx` (6 tipos, textarea obligatoria, contexto detectado, "Feedback general", confirmación de envío).
-- [x] `src/components/feedback/FeedbackFab.tsx` (fijo bottom-right, `z-40` bajo modales `z-50`, `pointer-events-none` en el wrapper para no bloquear controles; responsive desktop+mobile).
-- [x] `src/components/layout/AppLayout.tsx` (Outlet + FAB) y `src/router.tsx` (layout raíz pathless que envuelve las rutas existentes sin cambiar AppGuard/rutas públicas/protegidas/catch-all).
-- [x] `ImportOrganizationPage` (reporta paso del wizard) y `PeoplePage` (reporta tab activa People/Roles vía `setFeedbackStage`).
+- [ ] Migración `people`: columnas `area_ids`, `role_ids` + backfill; RLS intacta (verificar con `supabase_get_table_schema`).
+- [ ] `types/index.ts`: `Person.roleIds[]`, `Person.areaIds[]`.
+- [ ] `api.ts`: serialización/lectura de `role_ids`/`area_ids` (con fallback legacy) en people; seed y RPC demo con arrays.
+- [ ] `analysis.ts`: `capableRoles` y todos los usos de `p.roleId`/`p.areaId` pasan a conjuntos; métricas existentes sin otro cambio.
+- [ ] `validate.ts`: agrupación por identidad (employeeId → nombre), acumulación de áreas/roles/tareas/competencias, resolución de manager por Manager ID, manejo de responsables distintos por persona.
+- [ ] `buildOrganization.ts`: personas únicas por identidad con arrays de roles/áreas.
+- [ ] `PeoplePage` + `PersonFormDialog`: visualización/edición multi-rol y multi-área.
+- [ ] Resumen/validación de import: contadores por persona única y textos.
+- [ ] Tests actualizados + test con el fixture del archivo (Diego 2001 en 2 sectores; 3 personas con manager 2001 → importa sin duplicados ni ambigüedad).
 
 ## Verification checklist
-- [x] `pnpm run check`, `pnpm test` (54), `pnpm run build` pasan.
-- [x] `supabase_get_table_schema`: `feedback_reports` con RLS on y policies `feedback_insert_own_or_anon` + `feedback_select_own_or_owner`.
-- [x] SQL: insert de prueba (anon, is_general) persistió y fue legible; fila de prueba eliminada después.
-- [x] Manual UI (screenshot desktop y mobile): botón "Feedback" visible en login (pre-login), en esquina inferior derecha, sin solapar card/inputs/links.
-- [x] Contexto por pantalla: mapa ruta→módulo incluye login, verify-email, forgot/reset, y módulos autenticados; /import reporta "Step N · <label>" y People reporta tab.
-- [x] "Feedback general" no fuerza módulo/etapa (columnas module/screen/stage null en el submit).
-- [x] FAB no bloquea controles (wrapper pointer-events-none; z-40 < modales z-50).
-- [x] Sin regresión: AppGuard intacto, rutas protegidas y públicas conservadas bajo el layout (build + tests).
-- [x] Sin email/nombre en `context` automático (solo identificadores técnicos/funcionales: org id/name, rutas, viewport, userAgent, errores JS).
-- [ ] Manual restante (requiere navegación con sesión y clicks en el preview): abrir Feedback en verify/forgot/reset y en pantallas autenticadas; enviar un reporte real desde el UI y ver confirmación; confirmar que el FAB no tapa botones del wizard.
+- [ ] `pnpm run check`, `pnpm test`, `pnpm run build` pasan.
+- [ ] Importar `ORA_test_bug_manager_multiarea.xlsx`: **0 duplicados**, **0 managers ambiguos**, personas = únicas (5), áreas = 3, roles = 5, y jerarquía: Lucía/Martín/Valeria → Diego (por ID 2001).
+- [ ] Diego queda como **1 sola persona** con `areaIds` = [IT Infrastructure, Sales] y `roleIds` = [Director de IT, Ejecutivo de Cuentas], tareas/competencias = unión.
+- [ ] Análisis/dashboard/simulación siguen mostrando los mismos tipos de métricas (con roles múltiples, "single role" solo si el conjunto de roles capaces tiene tamaño 1).
+- [ ] Editar persona en People: permite varios roles y áreas y persiste arrays en DB (re-carga correcta).
+- [ ] Personas existentes (demo Meridian, orgs previas) siguen cargando: backfill de arrays = valor legacy.
+- [ ] Sin regresión de flujo DEMO/licencias/feedback/auth.
