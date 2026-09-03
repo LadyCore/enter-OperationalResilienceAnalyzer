@@ -55,7 +55,7 @@ export function capablePeople(db: Db, taskId: string): Person[] {
 }
 
 export function capableRoles(db: Db, taskId: string): string[] {
-  const roleIds = capablePeople(db, taskId).map((p) => p.roleId);
+  const roleIds = capablePeople(db, taskId).flatMap((p) => p.roleIds);
   return Array.from(new Set(roleIds));
 }
 
@@ -143,7 +143,10 @@ export function processOperationalWeight(db: Db, process: Process): number {
   const taskIds = new Set(tasks.map((t) => t.id));
   const people = activePeople(db).filter((p) => p.taskIds.some((tid) => taskIds.has(tid)));
   const areas = new Set(
-    [...tasks.map((t) => t.areaId), ...people.map((p) => p.areaId)].filter((a): a is string => Boolean(a)),
+    [
+      ...tasks.map((t) => t.areaId),
+      ...people.flatMap((p) => p.areaIds),
+    ].filter((a): a is string => Boolean(a)),
   );
   return tasks.length + fnIds.size + people.length + areas.size * 2;
 }
@@ -243,7 +246,7 @@ export function taskDependency(db: Db, taskId: string): TaskDependency {
   const task = db.tasks.find((t) => t.id === taskId);
   const people = capablePeople(db, taskId);
   const capableCount = people.length;
-  const roleIds = Array.from(new Set(people.map((p) => p.roleId)));
+  const roleIds = Array.from(new Set(people.flatMap((p) => p.roleIds)));
   const rolesCount = roleIds.length;
 
   let level: DependencyLevel;

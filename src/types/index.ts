@@ -60,8 +60,10 @@ export interface Person {
   name: string;
   /** Optional source identifier (e.g. payroll/employee id) used during imports. */
   employeeId?: string;
-  roleId: string;
-  areaId?: string;
+  /** Roles this person holds (one per sector when the person spans several). */
+  roleIds: string[];
+  /** Sectors/areas the person belongs to. */
+  areaIds: string[];
   /** Direct manager/superior, referencing another person in the same organization. */
   managerId?: string;
   isActive: boolean;

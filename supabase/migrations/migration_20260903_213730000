@@ -1,0 +1,9 @@
+-- Person may belong to multiple areas and hold multiple roles (per sector).
+alter table public.people
+  add column if not exists area_ids text[] not null default '{}',
+  add column if not exists role_ids text[] not null default '{}';
+
+-- Backfill from the legacy single-value columns.
+update public.people
+set area_ids = case when area_id is not null then array[area_id] else '{}'::text[] end,
+    role_ids = case when role_id is not null then array[role_id] else '{}'::text[] end;

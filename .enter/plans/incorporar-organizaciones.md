@@ -68,21 +68,18 @@ Tabla `people`:
 - Tests: fixtures de `analysis.test.ts`/`simulation.test.ts` (roleId→roleIds), y **nuevo test** de importación multi-área/multi-rol con el fixture del archivo real.
 
 ## Implementation checklist
-- [ ] Migración `people`: columnas `area_ids`, `role_ids` + backfill; RLS intacta (verificar con `supabase_get_table_schema`).
-- [ ] `types/index.ts`: `Person.roleIds[]`, `Person.areaIds[]`.
-- [ ] `api.ts`: serialización/lectura de `role_ids`/`area_ids` (con fallback legacy) en people; seed y RPC demo con arrays.
-- [ ] `analysis.ts`: `capableRoles` y todos los usos de `p.roleId`/`p.areaId` pasan a conjuntos; métricas existentes sin otro cambio.
-- [ ] `validate.ts`: agrupación por identidad (employeeId → nombre), acumulación de áreas/roles/tareas/competencias, resolución de manager por Manager ID, manejo de responsables distintos por persona.
-- [ ] `buildOrganization.ts`: personas únicas por identidad con arrays de roles/áreas.
-- [ ] `PeoplePage` + `PersonFormDialog`: visualización/edición multi-rol y multi-área.
-- [ ] Resumen/validación de import: contadores por persona única y textos.
-- [ ] Tests actualizados + test con el fixture del archivo (Diego 2001 en 2 sectores; 3 personas con manager 2001 → importa sin duplicados ni ambigüedad).
+- [x] Migración `people`: columnas `area_ids`/`role_ids` text[] + backfill desde `area_id`/`role_id` (legacy conservadas); RLS intacta (verificado con `supabase_get_table_schema`).
+- [x] `types/index.ts`: `Person.roleIds[]`, `Person.areaIds[]` (reemplazan `roleId`/`areaId`).
+- [x] `api.ts`: serialización/lectura de `role_ids`/`area_ids` en people con fallback a legacy; `toPerson` lee arrays; seed y RPC demo (`bootstrap_demo_organization`) escriben arrays.
+- [x] `analysis.ts`: `capableRoles` y todos los usos de `p.roleId`/`p.areaId` pasan a conjuntos (`roleIds`/`areaIds`); `taskDependency` y `processOperationalWeight` adaptados.
+- [x] `validate.ts`: agrupación por identidad (`employeeId` → nombre), acumulación de áreas/roles/tareas/competencias, `people` = personas únicas, duplicados solo si se repite (persona+área+rol), resolución de manager por **Manager ID** con fallback por nombre; guarda `managerResolvedKey`.
+- [x] `buildOrganization.ts`: una persona por identidad con arrays de roles/áreas y unión de tareas/competencias; jerarquía resuelta por clave del manager.
+- [x] `PeoplePage` + `PersonFormDialog`: visualización/edición multi-rol y multi-área.
+- [x] Tests actualizados a `roleIds`/`areaIds` (analysis/exposure/simulation) + **nuevo test** con el fixture del archivo (Diego 2001 en 2 sectores; Lucía/Martín/Valeria → manager 2001 sin ambigüedad).
 
 ## Verification checklist
-- [ ] `pnpm run check`, `pnpm test`, `pnpm run build` pasan.
-- [ ] Importar `ORA_test_bug_manager_multiarea.xlsx`: **0 duplicados**, **0 managers ambiguos**, personas = únicas (5), áreas = 3, roles = 5, y jerarquía: Lucía/Martín/Valeria → Diego (por ID 2001).
-- [ ] Diego queda como **1 sola persona** con `areaIds` = [IT Infrastructure, Sales] y `roleIds` = [Director de IT, Ejecutivo de Cuentas], tareas/competencias = unión.
-- [ ] Análisis/dashboard/simulación siguen mostrando los mismos tipos de métricas (con roles múltiples, "single role" solo si el conjunto de roles capaces tiene tamaño 1).
-- [ ] Editar persona en People: permite varios roles y áreas y persiste arrays en DB (re-carga correcta).
-- [ ] Personas existentes (demo Meridian, orgs previas) siguen cargando: backfill de arrays = valor legacy.
-- [ ] Sin regresión de flujo DEMO/licencias/feedback/auth.
+- [x] `pnpm run check`, `pnpm test` (63), `pnpm run build` pasan.
+- [x] Test `import-multiarea.test.ts`: con el archivo real → 0 duplicados, 0 managers ambiguos, 5 personas únicas, jerarquía Lucía/Martín/Valeria → Diego; Diego = 1 persona con `areaIds` [IT Infrastructure, Sales] y `roleIds` [Director de IT, Ejecutivo de Cuentas].
+- [x] Personas demo/previas cargan (backfill `area_ids`/`role_ids` = valor legacy, `toPerson` con fallback).
+- [x] `pnpm test` y build sin regresión de análisis/simulación/exposure (fixtures actualizados a arrays).
+- [ ] Manual (requiere sesión real): PeoplePage muestra listas de roles/sectores; diálogo de persona permite varios; importar el xlsx en el preview y ver confirmación sin bloqueos.

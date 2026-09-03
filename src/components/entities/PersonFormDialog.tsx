@@ -34,8 +34,8 @@ export function PersonFormDialog({ open, onOpenChange, person }: PersonFormDialo
   const { db, upsert } = useOra();
   const [name, setName] = useState("");
   const [employeeId, setEmployeeId] = useState("");
-  const [roleId, setRoleId] = useState("");
-  const [areaId, setAreaId] = useState("");
+  const [roleIds, setRoleIds] = useState<string[]>([]);
+  const [areaIds, setAreaIds] = useState<string[]>([]);
   const [managerId, setManagerId] = useState("");
   const [isActive, setIsActive] = useState(true);
   const [competencyIds, setCompetencyIds] = useState<string[]>([]);
@@ -45,8 +45,8 @@ export function PersonFormDialog({ open, onOpenChange, person }: PersonFormDialo
     if (open) {
       setName(person?.name ?? "");
       setEmployeeId(person?.employeeId ?? "");
-      setRoleId(person?.roleId ?? db.roles[0]?.id ?? "");
-      setAreaId(person?.areaId ?? "");
+      setRoleIds(person?.roleIds?.length ? person.roleIds : db.roles[0] ? [db.roles[0].id] : []);
+      setAreaIds(person?.areaIds ?? []);
       setManagerId(person?.managerId ?? "");
       setIsActive(person?.isActive ?? true);
       setCompetencyIds(person?.competencyIds ?? []);
@@ -54,7 +54,8 @@ export function PersonFormDialog({ open, onOpenChange, person }: PersonFormDialo
     }
   }, [open, person, db.roles]);
 
-  const competencyOptions = db.competencies.map((c) => ({ value: c.id, label: c.name }));
+  const roleOptions = db.roles.map((r) => ({ value: r.id, label: r.name }));
+  const areaOptions = db.areas.map((a) => ({ value: a.id, label: a.name }));
   const managerOptions = db.people
     .filter((p) => p.id !== person?.id)
     .map((p) => ({ value: p.id, label: p.name }));
@@ -65,13 +66,13 @@ export function PersonFormDialog({ open, onOpenChange, person }: PersonFormDialo
   });
 
   const handleSave = () => {
-    if (!name.trim() || !roleId) return;
+    if (!name.trim() || roleIds.length === 0) return;
     upsert("people", {
       id: person?.id ?? uid("p"),
       name: name.trim(),
       employeeId: employeeId.trim() || undefined,
-      roleId,
-      areaId: areaId || undefined,
+      roleIds,
+      areaIds,
       managerId: managerId || undefined,
       isActive,
       competencyIds,
@@ -98,34 +99,21 @@ export function PersonFormDialog({ open, onOpenChange, person }: PersonFormDialo
           <Field label="Person identifier (optional)" hint="Source identifier such as a payroll/employee id.">
             <Input value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} placeholder="e.g. EMP-1024" />
           </Field>
-          <Field label="Role">
-            <Select value={roleId} onValueChange={setRoleId}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {db.roles.map((r) => (
-                  <SelectItem key={r.id} value={r.id}>
-                    {r.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <Field label="Roles" hint="A person may hold several roles (one per sector).">
+            <MultiSelect
+              options={roleOptions}
+              values={roleIds}
+              onChange={setRoleIds}
+              placeholder="Select roles…"
+            />
           </Field>
-          <Field label="Area">
-            <Select value={areaId || "none"} onValueChange={(v) => setAreaId(v === "none" ? "" : v)}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No area</SelectItem>
-                {db.areas.map((a) => (
-                  <SelectItem key={a.id} value={a.id}>
-                    {a.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <Field label="Areas / sectors" hint="A person may belong to several sectors.">
+            <MultiSelect
+              options={areaOptions}
+              values={areaIds}
+              onChange={setAreaIds}
+              placeholder="Select areas…"
+            />
           </Field>
           <Field label="Manager / responsible">
             <Select value={managerId || "none"} onValueChange={(v) => setManagerId(v === "none" ? "" : v)}>
@@ -169,7 +157,7 @@ export function PersonFormDialog({ open, onOpenChange, person }: PersonFormDialo
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={!name.trim() || !roleId}>
+          <Button onClick={handleSave} disabled={!name.trim() || roleIds.length === 0}>
             Save
           </Button>
         </DialogFooter>

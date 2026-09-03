@@ -39,7 +39,9 @@ export function PeoplePage() {
   }, [tab]);
 
   const roleName = (id: string) => db.roles.find((r) => r.id === id)?.name ?? id;
-  const areaName = (id?: string) => (id ? db.areas.find((a) => a.id === id)?.name ?? id : undefined);
+  const roleNames = (ids: string[]) => (ids?.length ? ids.map(roleName).join(", ") : "—");
+  const areaName = (id: string) => db.areas.find((a) => a.id === id)?.name ?? id;
+  const areaNames = (ids: string[]) => (ids?.length ? ids.map(areaName).join(", ") : "—");
   const managerName = (id?: string) => (id ? db.people.find((p) => p.id === id)?.name ?? id : undefined);
 
   return (
@@ -92,10 +94,10 @@ export function PeoplePage() {
                             <span className="text-sm font-medium">{p.name}</span>
                           </TableCell>
                           <TableCell>
-                            <span className="text-sm text-muted-foreground">{roleName(p.roleId)}</span>
+                            <span className="text-sm text-muted-foreground">{roleNames(p.roleIds)}</span>
                           </TableCell>
                           <TableCell className="hidden md:table-cell">
-                            <span className="text-sm text-muted-foreground">{areaName(p.areaId) ?? "—"}</span>
+                            <span className="text-sm text-muted-foreground">{areaNames(p.areaIds)}</span>
                           </TableCell>
                           <TableCell className="hidden lg:table-cell">
                             <span className="text-sm text-muted-foreground">{managerName(p.managerId) ?? "—"}</span>
@@ -159,7 +161,7 @@ export function PeoplePage() {
           ) : (
             <div className="grid gap-3 md:grid-cols-2">
               {db.roles.map((r) => {
-                const peopleCount = db.people.filter((p) => p.roleId === r.id).length;
+                const peopleCount = db.people.filter((p) => p.roleIds.includes(r.id)).length;
                 const comps = r.competencyIds.map((id) => db.competencies.find((c) => c.id === id)?.name ?? id);
                 return (
                   <Card key={r.id}>

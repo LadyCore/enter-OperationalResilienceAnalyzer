@@ -137,6 +137,8 @@ export interface NormalizedRow {
   managerId?: string;
   /** Resolved manager person name (by id, unique name, or user override). */
   managerResolved?: string;
+  /** Identity key of the resolved manager (id:legajo / name:name), when known. */
+  managerResolvedKey?: string;
 }
 
 export interface NormalizedImport {

@@ -3839,6 +3839,7 @@ export type Database = {
       people: {
         Row: {
           area_id: string | null
+          area_ids: string[]
           competency_ids: string[]
           employee_id: string | null
           id: string
@@ -3847,10 +3848,12 @@ export type Database = {
           name: string
           organization_id: string
           role_id: string | null
+          role_ids: string[]
           task_ids: string[]
         }
         Insert: {
           area_id?: string | null
+          area_ids?: string[]
           competency_ids?: string[]
           employee_id?: string | null
           id: string
@@ -3859,10 +3862,12 @@ export type Database = {
           name: string
           organization_id: string
           role_id?: string | null
+          role_ids?: string[]
           task_ids?: string[]
         }
         Update: {
           area_id?: string | null
+          area_ids?: string[]
           competency_ids?: string[]
           employee_id?: string | null
           id?: string
@@ -3871,6 +3876,7 @@ export type Database = {
           name?: string
           organization_id?: string
           role_id?: string | null
+          role_ids?: string[]
           task_ids?: string[]
         }
         Relationships: [

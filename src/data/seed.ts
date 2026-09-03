@@ -80,19 +80,19 @@ export const SEED_ROLES: Role[] = [
 ];
 
 export const SEED_PEOPLE: Person[] = [
-  { id: "p_ana", name: "Ana Silva", roleId: "r_sysadmin", isActive: true, competencyIds: ["c_server", "c_dr", "c_incident"], taskIds: ["t_patch", "t_backup", "t_triage"] },
-  { id: "p_bruno", name: "Bruno Costa", roleId: "r_dba", isActive: true, competencyIds: ["c_db", "c_dr"], taskIds: ["t_backup", "t_restore"] },
-  { id: "p_carlos", name: "Carlos Mendes", roleId: "r_itsupport", isActive: true, competencyIds: ["c_incident", "c_network"], taskIds: ["t_triage"] },
-  { id: "p_diana", name: "Diana Nunes", roleId: "r_order", isActive: true, competencyIds: ["c_order", "c_pricing"], taskIds: ["t_validate", "t_quote"] },
-  { id: "p_elena", name: "Elena Rossi", roleId: "r_billing", isActive: true, competencyIds: ["c_invoicing"], taskIds: ["t_invoice", "t_creditnote"] },
-  { id: "p_franco", name: "Franco Bianchi", roleId: "r_payroll", isActive: true, competencyIds: ["c_payroll", "c_payrollcomp"], taskIds: ["t_payroll", "t_filings"] },
-  { id: "p_gabriela", name: "Gabriela Duarte", roleId: "r_hradmin", isActive: true, competencyIds: ["c_onboarding", "c_payroll"], taskIds: ["t_payroll", "t_onboard", "t_records"] },
-  { id: "p_hugo", name: "Hugo Pereira", roleId: "r_procurement", isActive: true, competencyIds: ["c_procurement"], taskIds: ["t_po"] },
-  { id: "p_ines", name: "Ines Almeida", roleId: "r_compliance", isActive: true, competencyIds: ["c_contract"], taskIds: ["t_contracts"] },
-  { id: "p_jorge", name: "Jorge Ferreira", roleId: "r_ops", isActive: true, competencyIds: ["c_order", "c_invoicing", "c_incident", "c_procurement", "c_onboarding"], taskIds: ["t_validate", "t_invoice", "t_creditnote", "t_onboard", "t_records", "t_po"] },
-  { id: "p_katia", name: "Katia Sousa", roleId: "r_facilities", isActive: true, competencyIds: ["c_facilities"], taskIds: ["t_supplies", "t_reception"] },
-  { id: "p_luis", name: "Luis Martins", roleId: "r_reception", isActive: true, competencyIds: ["c_facilities"], taskIds: ["t_reception", "t_supplies"] },
-  { id: "p_nadia", name: "Nadia Ferreira", roleId: "r_billing", isActive: false, competencyIds: ["c_invoicing"], taskIds: ["t_invoice"] },
+  { id: "p_ana", name: "Ana Silva", roleIds: ["r_sysadmin"], areaIds: [], isActive: true, competencyIds: ["c_server", "c_dr", "c_incident"], taskIds: ["t_patch", "t_backup", "t_triage"] },
+  { id: "p_bruno", name: "Bruno Costa", roleIds: ["r_dba"], areaIds: [], isActive: true, competencyIds: ["c_db", "c_dr"], taskIds: ["t_backup", "t_restore"] },
+  { id: "p_carlos", name: "Carlos Mendes", roleIds: ["r_itsupport"], areaIds: [], isActive: true, competencyIds: ["c_incident", "c_network"], taskIds: ["t_triage"] },
+  { id: "p_diana", name: "Diana Nunes", roleIds: ["r_order"], areaIds: [], isActive: true, competencyIds: ["c_order", "c_pricing"], taskIds: ["t_validate", "t_quote"] },
+  { id: "p_elena", name: "Elena Rossi", roleIds: ["r_billing"], areaIds: [], isActive: true, competencyIds: ["c_invoicing"], taskIds: ["t_invoice", "t_creditnote"] },
+  { id: "p_franco", name: "Franco Bianchi", roleIds: ["r_payroll"], areaIds: [], isActive: true, competencyIds: ["c_payroll", "c_payrollcomp"], taskIds: ["t_payroll", "t_filings"] },
+  { id: "p_gabriela", name: "Gabriela Duarte", roleIds: ["r_hradmin"], areaIds: [], isActive: true, competencyIds: ["c_onboarding", "c_payroll"], taskIds: ["t_payroll", "t_onboard", "t_records"] },
+  { id: "p_hugo", name: "Hugo Pereira", roleIds: ["r_procurement"], areaIds: [], isActive: true, competencyIds: ["c_procurement"], taskIds: ["t_po"] },
+  { id: "p_ines", name: "Ines Almeida", roleIds: ["r_compliance"], areaIds: [], isActive: true, competencyIds: ["c_contract"], taskIds: ["t_contracts"] },
+  { id: "p_jorge", name: "Jorge Ferreira", roleIds: ["r_ops"], areaIds: [], isActive: true, competencyIds: ["c_order", "c_invoicing", "c_incident", "c_procurement", "c_onboarding"], taskIds: ["t_validate", "t_invoice", "t_creditnote", "t_onboard", "t_records", "t_po"] },
+  { id: "p_katia", name: "Katia Sousa", roleIds: ["r_facilities"], areaIds: [], isActive: true, competencyIds: ["c_facilities"], taskIds: ["t_supplies", "t_reception"] },
+  { id: "p_luis", name: "Luis Martins", roleIds: ["r_reception"], areaIds: [], isActive: true, competencyIds: ["c_facilities"], taskIds: ["t_reception", "t_supplies"] },
+  { id: "p_nadia", name: "Nadia Ferreira", roleIds: ["r_billing"], areaIds: [], isActive: false, competencyIds: ["c_invoicing"], taskIds: ["t_invoice"] },
 ];
 
 export const seedDb: Db = {
@@ -154,15 +154,25 @@ export function remapSeedIds(db: Db): Db {
     areaId: t.areaId ? remap(t.areaId, "area") : undefined,
     requiredCompetencyIds: t.requiredCompetencyIds.map((c) => remap(c, "comp")),
   }));
-  const people = db.people.map((p) => ({
-    ...p,
-    id: remap(p.id, "p"),
-    roleId: remap(p.roleId, "role"),
-    areaId: p.areaId ? remap(p.areaId, "area") : undefined,
-    managerId: p.managerId ? remap(p.managerId, "p") : undefined,
-    competencyIds: p.competencyIds.map((c) => remap(c, "comp")),
-    taskIds: p.taskIds.map((t) => remap(t, "task")),
-  }));
+  const people = db.people.map((p) => {
+    const legacyRole = (p as Person & { roleId?: string }).roleId;
+    const legacyArea = (p as Person & { areaId?: string }).areaId;
+    const roleIds = (p.roleIds?.length ? p.roleIds : legacyRole ? [legacyRole] : []).map((id) =>
+      remap(id, "role")
+    );
+    const areaIds = (p.areaIds?.length ? p.areaIds : legacyArea ? [legacyArea] : []).map((id) =>
+      remap(id, "area")
+    );
+    return {
+      ...p,
+      id: remap(p.id, "p"),
+      roleIds,
+      areaIds,
+      managerId: p.managerId ? remap(p.managerId, "p") : undefined,
+      competencyIds: p.competencyIds.map((c) => remap(c, "comp")),
+      taskIds: p.taskIds.map((t) => remap(t, "task")),
+    };
+  });
 
   return { organization, areas, processes, functions, tasks, roles, people, competencies };
 }

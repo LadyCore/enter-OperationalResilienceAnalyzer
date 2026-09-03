@@ -6,12 +6,25 @@ const normalize = (s: string) =>
   s.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
 /**
+ * Identity key of a person: the Legajo/employee id when present, else the name.
+ * Rows sharing this key describe the SAME person across several sectors/roles.
+ */
+function personKey(employeeId?: string, name?: string): string {
+  if (employeeId) return `id:${normalize(employeeId)}`;
+  return `name:${normalize(name ?? "")}`;
+}
+
+/**
  * Build a complete ORA Db from normalized import rows. The flat table is only
  * the input format: entities (areas, roles, processes, functions, tasks,
  * competencies) are deduplicated by name within the organization, so the same
  * value appearing in several rows yields a single entity. Fallback role /
  * process / function are created only when a row needs them and none is mapped.
- * Manager relations are resolved by the already-validated person name.
+ *
+ * People are grouped by identity (Legajo if present, otherwise name): one person
+ * may span several rows (several sectors/roles) and accumulates the union of
+ * roles, areas, competencies and capable tasks. Manager relations are resolved
+ * by the already-validated person name (group name).
  */
 export function buildOrganization(
   name: string,
@@ -146,32 +159,100 @@ export function buildOrganization(
     return fallbackFunction;
   };
 
-  const people: Person[] = normalized.rows.map((row) => {
+  /*
+   * First pass: create all the entities (processes, functions, tasks, areas,
+   * roles, competencies) referenced by any row. Entities dedupe by name; each
+   * person row maps its task list / competency list onto the shared entities.
+   */
+  for (const row of normalized.rows) {
+    row.tareas.forEach((t) => ensureTask(t, row.funcion, row.proceso, row.criticidad, row.documentada));
+    row.competencias.forEach(ensureCompetency);
+    if (row.area) ensureArea(row.area);
+    if (row.rol) ensureRole(row.rol);
+  }
+
+  /*
+   * Second pass: group rows by person identity and build one Person per group.
+   * A person spanning several sectors accumulates roleIds, areaIds and the union
+   * of capable tasks/competencies. fallback role/area are only used when a row
+   * has none.
+   */
+  const groupOrder: string[] = [];
+  const groups = new Map<
+    string,
+    {
+      name: string;
+      employeeId?: string;
+      roleIds: Set<string>;
+      areaIds: Set<string>;
+      competencyIds: Set<string>;
+      taskIds: Set<string>;
+      isActive: boolean;
+      managerKey?: string;
+      managerName?: string;
+    }
+  >();
+
+  for (const row of normalized.rows) {
+    const key = personKey(row.employeeId, row.persona);
+    let group = groups.get(key);
+    if (!group) {
+      group = {
+        name: row.persona,
+        employeeId: row.employeeId,
+        roleIds: new Set(),
+        areaIds: new Set(),
+        competencyIds: new Set(),
+        taskIds: new Set(),
+        isActive: row.activo ?? true,
+        managerKey: row.managerResolvedKey,
+        managerName: row.managerResolved,
+      };
+      groups.set(key, group);
+      groupOrder.push(key);
+    }
     const role = row.rol ? ensureRole(row.rol) : ensureFallbackRole();
     const area = row.area ? ensureArea(row.area) : undefined;
     const tasks = row.tareas.map((t) => ensureTask(t, row.funcion, row.proceso, row.criticidad, row.documentada));
     const competencies = row.competencias.map(ensureCompetency);
+    group.roleIds.add(role.id);
+    if (area) group.areaIds.add(area.id);
+    tasks.forEach((t) => group.taskIds.add(t.id));
+    competencies.forEach((c) => group.competencyIds.add(c.id));
+    // Keep the manager reference of the first row (validation already resolved
+    // ambiguous/not-found cases, so rows of the same person agree).
+    group.managerKey = group.managerKey ?? row.managerResolvedKey;
+    group.managerName = group.managerName ?? row.managerResolved;
+  }
+
+  /*
+   * Build one Person per group, then resolve managers against existing people.
+   * Manager references are matched by identity key (id:legajo / name:name) and
+   * fall back to the display name, so people keyed by Legajo are still found.
+   */
+  const people: Person[] = groupOrder.map((key) => {
+    const group = groups.get(key)!;
     return {
       id: uid("p"),
-      name: row.persona,
-      employeeId: row.employeeId,
-      roleId: role.id,
-      areaId: area?.id,
-      isActive: row.activo ?? true,
-      competencyIds: competencies.map((c) => c.id),
-      taskIds: tasks.map((t) => t.id),
+      name: group.name,
+      employeeId: group.employeeId,
+      roleIds: [...group.roleIds],
+      areaIds: [...group.areaIds],
+      isActive: group.isActive,
+      competencyIds: [...group.competencyIds],
+      taskIds: [...group.taskIds],
     };
   });
+  const peopleByKey = new Map<string, Person>();
+  groupOrder.forEach((key, i) => peopleByKey.set(key, people[i]));
 
-  // Second pass: resolve manager references by validated person name.
-  const personByKey = new Map(people.map((p) => [normalize(p.name), p]));
-  people.forEach((person, i) => {
-    const row = normalized.rows[i];
-    if (!row.managerResolved) return;
-    const manager = personByKey.get(normalize(row.managerResolved));
-    if (manager && manager.id !== person.id) {
-      person.managerId = manager.id;
-    }
+  groupOrder.forEach((key, i) => {
+    const group = groups.get(key)!;
+    const person = people[i];
+    const manager =
+      (group.managerKey && peopleByKey.get(group.managerKey)) ||
+      (group.managerName ? peopleByKey.get(personKey(undefined, group.managerName)) : undefined);
+    if (manager && manager.id !== person.id) person.managerId = manager.id;
   });
 
   const roles = [...roleByName.values()];

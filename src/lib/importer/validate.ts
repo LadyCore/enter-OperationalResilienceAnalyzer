@@ -39,10 +39,20 @@ const parseCriticality = (value?: string): Criticality | undefined => {
   return undefined;
 };
 
+/** Identity key of a person: the Legajo/employee id when present, else the name. */
+function personKey(employeeId?: string, name?: string): string {
+  if (employeeId) return `id:${normalize(employeeId)}`;
+  return `name:${normalize(name ?? "")}`;
+}
+
 /**
  * Validate the parsed flat table against the column mapping.
- * Strict rule: one row = one person. Rows without a person name are excluded
- * and counted as incomplete; repeated names are flagged as possible duplicates.
+ *
+ * A person is identified by their Legajo/employee id (Manager ID references use
+ * it), falling back to their normalized name when no id is present. One person
+ * may span several rows — one row per sector/role — so repeated identifiers are
+ * NOT duplicates unless a row repeats the exact same (area, role) combination.
+ * The manager hierarchy is resolved against unique people by Manager ID first.
  *
  * `resolutions` maps a source row (ambiguous manager reference) to the chosen
  * person name, or null to leave it unresolved.
@@ -55,8 +65,7 @@ export function validateImport(
   const rows: NormalizedRow[] = [];
   const issues: ValidationSummary["issues"] = [];
   const unusableValues: string[] = [];
-  const seenNames = new Map<string, number>();
-  const seenEmployeeIds = new Map<string, number>();
+  const seenKeys = new Map<string, { name: string; employeeId?: string; rowIndexes: number[] }>();
   let excluded = 0;
   let incomplete = 0;
 
@@ -79,12 +88,13 @@ export function validateImport(
       return;
     }
 
-    const nameKey = normalize(persona);
-    seenNames.set(nameKey, (seenNames.get(nameKey) ?? 0) + 1);
-
     const employeeId = value(row, "employeeId") || undefined;
-    if (employeeId) {
-      seenEmployeeIds.set(normalize(employeeId), (seenEmployeeIds.get(normalize(employeeId)) ?? 0) + 1);
+    const key = personKey(employeeId, persona);
+    const existing = seenKeys.get(key);
+    if (existing) {
+      existing.rowIndexes.push(rows.length);
+    } else {
+      seenKeys.set(key, { name: persona, employeeId, rowIndexes: [rows.length] });
     }
 
     const tareas = splitList(value(row, "tarea"));
@@ -129,60 +139,59 @@ export function validateImport(
     });
   });
 
-  /* Possible duplicates — flagged, never silently ignored */
+  /*
+   * Possible duplicates: a person spanning several sectors/roles is valid. Only
+   * rows that repeat the exact same (area, role) for the same person are real
+   * duplicates and are flagged — never silently merged.
+   */
   let possibleDuplicates = 0;
-  for (const [name, count] of seenNames) {
-    if (count > 1) {
+  const seenCombos = new Map<string, Set<string>>();
+  for (const [key, person] of seenKeys) {
+    const combos = new Set<string>();
+    for (const rowIndex of person.rowIndexes) {
+      const r = rows[rowIndex];
+      combos.add(`${normalize(r.area ?? "")}|${normalize(r.rol ?? "")}`);
+    }
+    seenCombos.set(key, combos);
+    if (combos.size < person.rowIndexes.length) {
       possibleDuplicates += 1;
       issues.push({
         severity: "warning",
         code: "duplicate-person",
-        message: `The person "${name}" appears in ${count} rows — possible duplicate.`,
+        message: `The person "${person.name}" appears more than once with the same area and role — possible duplicate.`,
       });
     }
   }
-  const duplicatedEmployeeIds = new Set(
-    [...seenEmployeeIds.entries()].filter(([, c]) => c > 1).map(([id]) => id),
-  );
 
-  /* Manager resolution: by source identifier first, then by name. */
+  /*
+   * Manager resolution: source of truth is Manager ID (the responsable's Legajo)
+   * which must match a unique person's employee id; name is used as fallback.
+   */
   let hierarchyRelations = 0;
   let missingReferences = 0;
   let ambiguousReferences = 0;
   const ambiguousManagers: AmbiguousManagerRef[] = [];
+
+  const peopleByEmployeeId = new Map<string, string>();
+  const peopleByName = new Map<string, string[]>();
+  for (const [key, person] of seenKeys) {
+    if (person.employeeId) peopleByEmployeeId.set(normalize(person.employeeId), key);
+    const nameKey = normalize(person.name);
+    peopleByName.set(nameKey, [...(peopleByName.get(nameKey) ?? []), key]);
+  }
 
   for (const row of rows) {
     if (!row.managerId && !row.responsable) continue;
 
     const managerIdRaw = row.managerId;
     const managerName = row.responsable;
-    let resolved: string | null = null;
+    let resolvedKey: string | null = null;
 
     if (managerIdRaw) {
-      const matches = rows.filter(
-        (r) => r.employeeId && normalize(r.employeeId) === normalize(managerIdRaw),
-      );
-      const isDuplicateId = duplicatedEmployeeIds.has(normalize(managerIdRaw));
-      if (isDuplicateId || matches.length > 1) {
-        ambiguousReferences += 1;
-        ambiguousManagers.push({
-          sourceRow: row.sourceRow,
-          personName: row.persona,
-          managerName: managerIdRaw,
-          candidates: [...new Set(matches.map((m) => m.persona))],
-          resolvedTo: null,
-        });
-        issues.push({
-          severity: "error",
-          code: "manager-ambiguous",
-          message: `Row ${row.sourceRow}: manager identifier "${managerIdRaw}" is ambiguous. Review it before importing.`,
-          row: row.sourceRow,
-        });
-        continue;
-      }
-      if (matches.length === 1) {
-        resolved = matches[0].persona;
-      } else {
+      const targetKey = peopleByEmployeeId.get(normalize(managerIdRaw));
+      if (targetKey && targetKey !== personKey(row.employeeId, row.persona)) {
+        resolvedKey = targetKey;
+      } else if (!targetKey) {
         missingReferences += 1;
         issues.push({
           severity: "error",
@@ -193,8 +202,8 @@ export function validateImport(
         continue;
       }
     } else if (managerName) {
-      const matches = rows.filter(
-        (r) => r.persona !== row.persona && normalize(r.persona) === normalize(managerName),
+      const matches = (peopleByName.get(normalize(managerName)) ?? []).filter(
+        (k) => k !== personKey(row.employeeId, row.persona),
       );
       if (matches.length > 1) {
         ambiguousReferences += 1;
@@ -202,7 +211,7 @@ export function validateImport(
           sourceRow: row.sourceRow,
           personName: row.persona,
           managerName,
-          candidates: matches.map((m) => m.persona),
+          candidates: matches.map((k) => seenKeys.get(k)!.name),
           resolvedTo: null,
         });
         issues.push({
@@ -213,9 +222,8 @@ export function validateImport(
         });
         continue;
       }
-      if (matches.length === 1) {
-        resolved = matches[0].persona;
-      } else {
+      resolvedKey = matches[0] ?? null;
+      if (!resolvedKey) {
         missingReferences += 1;
         issues.push({
           severity: "error",
@@ -227,8 +235,9 @@ export function validateImport(
       }
     }
 
-    if (resolved) {
-      row.managerResolved = resolved;
+    if (resolvedKey) {
+      row.managerResolved = seenKeys.get(resolvedKey)!.name;
+      row.managerResolvedKey = resolvedKey;
       hierarchyRelations += 1;
     }
   }
@@ -239,7 +248,16 @@ export function validateImport(
     if (choice && ref.candidates.includes(choice)) {
       ref.resolvedTo = choice;
       const target = rows.find((r) => r.sourceRow === ref.sourceRow);
-      if (target) target.managerResolved = choice;
+      if (target) {
+        target.managerResolved = choice;
+        // Recover the identity key of the chosen candidate by name.
+        for (const [key, person] of seenKeys) {
+          if (normalize(person.name) === normalize(choice)) {
+            target.managerResolvedKey = key;
+            break;
+          }
+        }
+      }
       hierarchyRelations += 1;
       ambiguousReferences -= 1;
     }
@@ -273,7 +291,7 @@ export function validateImport(
   const summary: ValidationSummary = {
     totalRows: file.rows.length,
     excludedRows: excluded,
-    people: rows.length,
+    people: seenKeys.size,
     areas,
     roles,
     processes,

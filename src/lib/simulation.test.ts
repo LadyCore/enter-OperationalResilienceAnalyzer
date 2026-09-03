@@ -32,9 +32,9 @@ const db: Db = {
   ],
   roles: [{ id: "r1", name: "R1", description: "" }],
   people: [
-    { id: "p_sofia", name: "Sofia Mendoza", roleId: "r1", isActive: true, competencyIds: ["cA", "cB", "cC", "cD"], taskIds: ["tA", "tB", "tC", "tD"] },
-    { id: "p_one", name: "Uno", roleId: "r1", isActive: true, competencyIds: ["cB", "cC"], taskIds: ["tB", "tC"] },
-    { id: "p_two", name: "Dos", roleId: "r1", isActive: true, competencyIds: ["cC"], taskIds: ["tC"] },
+    { id: "p_sofia", name: "Sofia Mendoza", roleIds: ["r1"], isActive: true, competencyIds: ["cA", "cB", "cC", "cD"], taskIds: ["tA", "tB", "tC", "tD"] },
+    { id: "p_one", name: "Uno", roleIds: ["r1"], isActive: true, competencyIds: ["cB", "cC"], taskIds: ["tB", "tC"] },
+    { id: "p_two", name: "Dos", roleIds: ["r1"], isActive: true, competencyIds: ["cC"], taskIds: ["tC"] },
   ],
   competencies: [
     { id: "cA", name: "Competency A", description: "" },

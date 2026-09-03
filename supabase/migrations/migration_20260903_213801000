@@ -1,0 +1,107 @@
+-- Update the transactional demo bootstrap to persist role_ids/area_ids arrays.
+create or replace function public.bootstrap_demo_organization(p_data jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_org_id text := p_data #>> '{organization,id}';
+begin
+  if v_uid is null then
+    return jsonb_build_object('ok', false, 'reason', 'unauthorized');
+  end if;
+
+  if v_org_id is null or (p_data #>> '{organization,name}') is null then
+    return jsonb_build_object('ok', false, 'reason', 'invalid_payload');
+  end if;
+
+  if exists (select 1 from public.organizations where owner_id = v_uid) then
+    return jsonb_build_object('ok', false, 'reason', 'already_has_org');
+  end if;
+
+  begin
+    insert into public.organizations (id, name, description, is_demo, owner_id)
+    values (
+      v_org_id,
+      p_data #>> '{organization,name}',
+      coalesce(p_data #>> '{organization,description}', ''),
+      true,
+      v_uid
+    );
+  exception
+    when unique_violation then
+      return jsonb_build_object('ok', false, 'reason', 'already_has_org');
+  end;
+
+  insert into public.areas (id, organization_id, name, description)
+  select x.id, v_org_id, x.name, coalesce(x.description, '')
+  from jsonb_to_recordset(coalesce(p_data->'areas', '[]'::jsonb))
+    as x(id text, name text, description text);
+
+  insert into public.competencies (id, organization_id, name, description)
+  select x.id, v_org_id, x.name, coalesce(x.description, '')
+  from jsonb_to_recordset(coalesce(p_data->'competencies', '[]'::jsonb))
+    as x(id text, name text, description text);
+
+  insert into public.roles (id, organization_id, name, description, competency_ids)
+  select x.id, v_org_id, x.name, coalesce(x.description, ''), coalesce(x.competency_ids, '{}'::text[])
+  from jsonb_to_recordset(coalesce(p_data->'roles', '[]'::jsonb))
+    as x(id text, name text, description text, competency_ids text[]);
+
+  insert into public.processes (id, organization_id, name, description, criticality)
+  select x.id, v_org_id, x.name, coalesce(x.description, ''), coalesce(x.criticality, 'important')
+  from jsonb_to_recordset(coalesce(p_data->'processes', '[]'::jsonb))
+    as x(id text, name text, description text, criticality text);
+
+  insert into public.org_functions (id, organization_id, process_id, name, description, criticality)
+  select x.id, v_org_id, x.process_id, x.name, coalesce(x.description, ''), coalesce(x.criticality, 'important')
+  from jsonb_to_recordset(coalesce(p_data->'functions', '[]'::jsonb))
+    as x(id text, process_id text, name text, description text, criticality text);
+
+  insert into public.tasks (
+    id, organization_id, function_id, area_id, name, description, criticality,
+    is_documented, system_name, required_competency_ids
+  )
+  select
+    x.id, v_org_id, x.function_id, x.area_id, x.name, coalesce(x.description, ''),
+    coalesce(x.criticality, 'standard'),
+    coalesce(x.is_documented, false), x.system_name,
+    coalesce(x.required_competency_ids, '{}'::text[])
+  from jsonb_to_recordset(coalesce(p_data->'tasks', '[]'::jsonb))
+    as x(
+      id text, function_id text, area_id text, name text, description text,
+      criticality text, is_documented boolean, system_name text,
+      required_competency_ids text[]
+    );
+
+  insert into public.people (
+    id, organization_id, name, employee_id, role_id, area_id, role_ids, area_ids,
+    is_active, competency_ids, task_ids
+  )
+  select
+    x.id, v_org_id, x.name, x.employee_id,
+    coalesce(x.role_ids[1], x.role_id), coalesce(x.area_ids[1], x.area_id),
+    coalesce(x.role_ids, '{}'::text[]), coalesce(x.area_ids, '{}'::text[]),
+    coalesce(x.is_active, true), coalesce(x.competency_ids, '{}'::text[]),
+    coalesce(x.task_ids, '{}'::text[])
+  from jsonb_to_recordset(coalesce(p_data->'people', '[]'::jsonb))
+    as x(
+      id text, name text, employee_id text, role_id text, area_id text,
+      role_ids text[], area_ids text[],
+      is_active boolean, competency_ids text[], task_ids text[]
+    );
+
+  update public.people pe
+  set manager_id = x.manager_id
+  from jsonb_to_recordset(coalesce(p_data->'people', '[]'::jsonb))
+    as x(id text, manager_id text)
+  where x.manager_id is not null
+    and pe.id = x.id
+    and pe.organization_id = v_org_id;
+
+  return jsonb_build_object('ok', true, 'organization_id', v_org_id);
+end;
+$$;
+grant execute on function public.bootstrap_demo_organization(jsonb) to authenticated;

@@ -37,9 +37,9 @@ const db: Db = {
   ],
   roles: [{ id: "r1", name: "R1", description: "" }],
   people: [
-    { id: "p1", name: "Uno", roleId: "r1", isActive: true, competencyIds: [], taskIds: ["t_crit_uncovered", "t_crit_reduced", "t_crit_covered", "t_imp_uncovered", "t_imp", "t_std"] },
-    { id: "p2", name: "Dos", roleId: "r1", isActive: true, competencyIds: [], taskIds: ["t_crit_reduced", "t_crit_covered", "t_imp"] },
-    { id: "p3", name: "Tres", roleId: "r1", isActive: true, competencyIds: [], taskIds: ["t_crit_covered", "t_imp"] },
+    { id: "p1", name: "Uno", roleIds: ["r1"], isActive: true, competencyIds: [], taskIds: ["t_crit_uncovered", "t_crit_reduced", "t_crit_covered", "t_imp_uncovered", "t_imp", "t_std"] },
+    { id: "p2", name: "Dos", roleIds: ["r1"], isActive: true, competencyIds: [], taskIds: ["t_crit_reduced", "t_crit_covered", "t_imp"] },
+    { id: "p3", name: "Tres", roleIds: ["r1"], isActive: true, competencyIds: [], taskIds: ["t_crit_covered", "t_imp"] },
   ],
   competencies: [],
 };

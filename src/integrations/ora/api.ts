@@ -88,13 +88,18 @@ function payloadFor(collection: CollectionKey, entity: Entity, orgId: string): R
     }
     case "people": {
       const e = entity as Person;
+      const areaIds = e.areaIds ?? [];
+      const roleIds = e.roleIds ?? [];
       return {
         id: e.id,
         organization_id: orgId,
         name: e.name,
         employee_id: e.employeeId ?? null,
-        role_id: e.roleId,
-        area_id: e.areaId ?? null,
+        // Legacy single-value columns keep the first value (backfilled arrays).
+        role_id: roleIds[0] ?? null,
+        area_id: areaIds[0] ?? null,
+        role_ids: roleIds,
+        area_ids: areaIds,
         manager_id: e.managerId ?? null,
         is_active: e.isActive,
         competency_ids: e.competencyIds,
@@ -158,8 +163,18 @@ const toPerson = (r: Tables["people"]["Row"]): Person => ({
   id: r.id,
   name: r.name,
   employeeId: r.employee_id ?? undefined,
-  roleId: r.role_id ?? "",
-  areaId: r.area_id ?? undefined,
+  roleIds:
+    r.role_ids && r.role_ids.length > 0
+      ? r.role_ids
+      : r.role_id
+        ? [r.role_id]
+        : [],
+  areaIds:
+    r.area_ids && r.area_ids.length > 0
+      ? r.area_ids
+      : r.area_id
+        ? [r.area_id]
+        : [],
   managerId: r.manager_id ?? undefined,
   isActive: r.is_active,
   competencyIds: r.competency_ids,
