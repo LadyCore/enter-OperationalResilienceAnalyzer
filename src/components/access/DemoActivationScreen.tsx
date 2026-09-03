@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CalendarDays, Loader2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -19,13 +19,19 @@ type TaxKind = "individual" | "company";
  * ORA. The 12-month reuse rule is enforced by the backend via request_demo.
  */
 export function DemoActivationScreen() {
-  const { refreshAccess, signOut } = useOra();
+  const { refreshAccess, applyAccess, signOut } = useOra();
   const [kind, setKind] = useState<TaxKind>("individual");
   const [clientName, setClientName] = useState("");
   const [taxId, setTaxId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [eligibleAfter, setEligibleAfter] = useState<string | null>(null);
+
+  // Preload the Dashboard chunk while the user is still on this screen, so the
+  // transition into the app does not pay the module download afterwards.
+  useEffect(() => {
+    void import("@/pages/Dashboard");
+  }, []);
 
   const taxType: TaxType = kind === "individual" ? "dni" : "cuit";
   const taxLabel = kind === "individual" ? "DNI" : "CUIT";
@@ -54,7 +60,13 @@ export function DemoActivationScreen() {
       });
       if (result.ok) {
         toast.success("Your 15-day DEMO is active. Welcome to ORA.");
-        await refreshAccess();
+        // request_demo already returns the authoritative demo_active access
+        // state — apply it directly and skip the extra get_my_access round trip.
+        if (result.access) {
+          applyAccess(result.access);
+        } else {
+          await refreshAccess();
+        }
       } else {
         if (result.reason === "not_eligible") {
           setEligibleAfter(result.eligible_after ?? null);

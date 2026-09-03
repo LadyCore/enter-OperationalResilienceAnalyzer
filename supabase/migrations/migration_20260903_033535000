@@ -1,0 +1,211 @@
+-- =====================================================================
+-- P0: transactional demo bootstrap + access payload from request_demo
+-- =====================================================================
+
+-- ---------------------------------------------------------------
+-- 1) request_demo now returns the authoritative access payload
+--    (same shape as get_my_access) so the client can set demo_active
+--    without a second round trip.
+-- ---------------------------------------------------------------
+create or replace function public.request_demo(
+  p_tax_type text,
+  p_tax_id text,
+  p_client_name text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_email text;
+  v_client_id uuid;
+  v_demo_id uuid;
+  v_used record;
+  v_eligible_after timestamptz;
+begin
+  if v_uid is null then
+    return jsonb_build_object('ok', false, 'reason', 'unauthorized');
+  end if;
+
+  if public.is_owner() then
+    return jsonb_build_object('ok', false, 'reason', 'owner');
+  end if;
+
+  select email into v_email from public.profiles where id = v_uid;
+
+  if exists (
+    select 1 from public.licenses l
+    join public.license_users lu on lu.license_id = l.id
+    where lu.user_id = v_uid and l.status = 'active'
+  ) then
+    return jsonb_build_object('ok', false, 'reason', 'already_licensed');
+  end if;
+
+  if exists (
+    select 1 from public.demo_sessions where user_id = v_uid and expires_at > now()
+  ) then
+    return jsonb_build_object('ok', false, 'reason', 'demo_already_active');
+  end if;
+
+  select used_at into v_used
+  from public.demo_usage_history
+  where tax_id = p_tax_id and tax_type = p_tax_type
+    and used_at > now() - interval '12 months'
+  order by used_at desc
+  limit 1;
+
+  if v_used.used_at is not null then
+    v_eligible_after := v_used.used_at + interval '12 months';
+    return jsonb_build_object(
+      'ok', false,
+      'reason', 'not_eligible',
+      'eligible_after', v_eligible_after
+    );
+  end if;
+
+  select id into v_client_id
+  from public.clients
+  where tax_id = p_tax_id and tax_type = p_tax_type
+  limit 1;
+
+  if v_client_id is null then
+    insert into public.clients (name, tax_type, tax_id, email)
+    values (coalesce(nullif(p_client_name, ''), v_email), p_tax_type, p_tax_id, v_email)
+    returning id into v_client_id;
+  end if;
+
+  insert into public.demo_sessions (user_id, client_id, started_at, expires_at)
+  values (v_uid, v_client_id, now(), now() + interval '15 days')
+  returning id into v_demo_id;
+
+  insert into public.demo_usage_history (tax_id, tax_type, client_id, demo_session_id, used_at)
+  values (p_tax_id, p_tax_type, v_client_id, v_demo_id, now());
+
+  return jsonb_build_object(
+    'ok', true,
+    'demo_id', v_demo_id,
+    'expires_at', now() + interval '15 days',
+    'access', public.get_my_access()
+  );
+end;
+$$;
+grant execute on function public.request_demo(text, text, text) to authenticated;
+
+-- ---------------------------------------------------------------
+-- 2) Transactional creation of the whole demo organization in a
+--    single round trip. The client sends the exact serialized seed
+--    (same payloads previously inserted request-by-request).
+--    Preserves: one demo per owner, no creation when the user
+--    already owns any organization, same data as before.
+-- ---------------------------------------------------------------
+create or replace function public.bootstrap_demo_organization(p_data jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_org_id text := p_data #>> '{organization,id}';
+begin
+  if v_uid is null then
+    return jsonb_build_object('ok', false, 'reason', 'unauthorized');
+  end if;
+
+  if v_org_id is null or (p_data #>> '{organization,name}') is null then
+    return jsonb_build_object('ok', false, 'reason', 'invalid_payload');
+  end if;
+
+  -- Only when the user owns no organization at all (same rule as before).
+  if exists (select 1 from public.organizations where owner_id = v_uid) then
+    return jsonb_build_object('ok', false, 'reason', 'already_has_org');
+  end if;
+
+  -- Atomic org insert: the partial unique index (one demo per owner) also
+  -- protects against two tabs racing. On conflict we report back and the
+  -- caller falls back to listing organizations normally.
+  begin
+    insert into public.organizations (id, name, description, is_demo, owner_id)
+    values (
+      v_org_id,
+      p_data #>> '{organization,name}',
+      coalesce(p_data #>> '{organization,description}', ''),
+      true,
+      v_uid
+    );
+  exception
+    when unique_violation then
+      return jsonb_build_object('ok', false, 'reason', 'already_has_org');
+  end;
+
+  insert into public.areas (id, organization_id, name, description)
+  select x.id, v_org_id, x.name, coalesce(x.description, '')
+  from jsonb_to_recordset(coalesce(p_data->'areas', '[]'::jsonb))
+    as x(id text, name text, description text);
+
+  insert into public.competencies (id, organization_id, name, description)
+  select x.id, v_org_id, x.name, coalesce(x.description, '')
+  from jsonb_to_recordset(coalesce(p_data->'competencies', '[]'::jsonb))
+    as x(id text, name text, description text);
+
+  insert into public.roles (id, organization_id, name, description, competency_ids)
+  select x.id, v_org_id, x.name, coalesce(x.description, ''), coalesce(x.competency_ids, '{}'::text[])
+  from jsonb_to_recordset(coalesce(p_data->'roles', '[]'::jsonb))
+    as x(id text, name text, description text, competency_ids text[]);
+
+  insert into public.processes (id, organization_id, name, description, criticality)
+  select x.id, v_org_id, x.name, coalesce(x.description, ''), coalesce(x.criticality, 'important')
+  from jsonb_to_recordset(coalesce(p_data->'processes', '[]'::jsonb))
+    as x(id text, name text, description text, criticality text);
+
+  insert into public.org_functions (id, organization_id, process_id, name, description, criticality)
+  select x.id, v_org_id, x.process_id, x.name, coalesce(x.description, ''), coalesce(x.criticality, 'important')
+  from jsonb_to_recordset(coalesce(p_data->'functions', '[]'::jsonb))
+    as x(id text, process_id text, name text, description text, criticality text);
+
+  insert into public.tasks (
+    id, organization_id, function_id, area_id, name, description, criticality,
+    is_documented, system_name, required_competency_ids
+  )
+  select
+    x.id, v_org_id, x.function_id, x.area_id, x.name, coalesce(x.description, ''),
+    coalesce(x.criticality, 'standard'),
+    coalesce(x.is_documented, false), x.system_name,
+    coalesce(x.required_competency_ids, '{}'::text[])
+  from jsonb_to_recordset(coalesce(p_data->'tasks', '[]'::jsonb))
+    as x(
+      id text, function_id text, area_id text, name text, description text,
+      criticality text, is_documented boolean, system_name text,
+      required_competency_ids text[]
+    );
+
+  -- People: insert without manager_id (self-referencing FK), then resolve the
+  -- manager hierarchy from the same payload in a single statement.
+  insert into public.people (
+    id, organization_id, name, employee_id, role_id, area_id,
+    is_active, competency_ids, task_ids
+  )
+  select
+    x.id, v_org_id, x.name, x.employee_id, x.role_id, x.area_id,
+    coalesce(x.is_active, true), coalesce(x.competency_ids, '{}'::text[]),
+    coalesce(x.task_ids, '{}'::text[])
+  from jsonb_to_recordset(coalesce(p_data->'people', '[]'::jsonb))
+    as x(
+      id text, name text, employee_id text, role_id text, area_id text,
+      is_active boolean, competency_ids text[], task_ids text[]
+    );
+
+  update public.people pe
+  set manager_id = x.manager_id
+  from jsonb_to_recordset(coalesce(p_data->'people', '[]'::jsonb))
+    as x(id text, manager_id text)
+  where x.manager_id is not null
+    and pe.id = x.id
+    and pe.organization_id = v_org_id;
+
+  return jsonb_build_object('ok', true, 'organization_id', v_org_id);
+end;
+$$;
+grant execute on function public.bootstrap_demo_organization(jsonb) to authenticated;

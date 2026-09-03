@@ -348,32 +348,33 @@ export async function resetDemoOrganization(orgId: string): Promise<Db> {
 
 /**
  * Idempotent demo creation for a new user. If the user already has any
- * organization nothing happens. The partial unique index (one demo per owner)
+ * organization nothing happens. The whole creation (org + all children) runs in
+ * a single transactional RPC; the partial unique index (one demo per owner)
  * guards against concurrent initializations from multiple tabs.
  */
-export async function ensureDemoOrganization(ownerId: string): Promise<Db | null> {
-  const { count, error: countErr } = await supabase
-    .from("organizations")
-    .select("id", { count: "exact", head: true });
-  if (countErr) throw countErr;
-  if ((count ?? 0) > 0) return null;
-
+export async function ensureDemoOrganization(): Promise<Db | null> {
   const db = remapSeedIds(seedDb);
-  const { error } = await supabase.from("organizations").insert({
-    id: db.organization.id,
-    name: db.organization.name,
-    description: db.organization.description,
-    is_demo: true,
-    owner_id: ownerId,
+  const orgId = db.organization.id;
+
+  const data = {
+    organization: { id: orgId, name: db.organization.name, description: db.organization.description },
+    processes: db.processes.map((e) => payloadFor("processes", e, orgId)),
+    functions: db.functions.map((e) => payloadFor("functions", e, orgId)),
+    areas: db.areas.map((e) => payloadFor("areas", e, orgId)),
+    competencies: db.competencies.map((e) => payloadFor("competencies", e, orgId)),
+    roles: db.roles.map((e) => payloadFor("roles", e, orgId)),
+    tasks: db.tasks.map((e) => payloadFor("tasks", e, orgId)),
+    people: db.people.map((e) => payloadFor("people", e, orgId)),
+  };
+
+  const { data: result, error } = await supabase.rpc("bootstrap_demo_organization", {
+    p_data: data,
   } as never);
-  if (error) {
-    // 23505 = unique violation on organizations_one_demo_per_owner from a
-    // concurrent initialization; another tab already created the demo.
-    if (error.code === "23505") return null;
-    throw error;
-  }
-  await insertChildren(db);
-  return db;
+  if (error) throw error;
+
+  const res = result as { ok?: boolean } | null;
+  // ok=false (already has an org / race) → caller lists organizations normally.
+  return res?.ok ? db : null;
 }
 
 /* ------------------------------------------------------------------ */

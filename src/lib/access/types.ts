@@ -44,6 +44,8 @@ export interface RpcResult {
   license_id?: string;
   expires_at?: string;
   eligible_after?: string;
+  /** Present when the mutation unlocks access (server-computed access state). */
+  access?: MyAccess;
 }
 
 /* Commercial constants — single source of truth for the UI. */

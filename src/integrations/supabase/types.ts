@@ -4013,6 +4013,10 @@ export type Database = {
         }
         Returns: Json
       }
+      bootstrap_demo_organization: {
+        Args: { p_data: Json }
+        Returns: Json
+      }
       get_my_access: {
         Args: Record<PropertyKey, never>
         Returns: Json

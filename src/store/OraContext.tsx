@@ -54,6 +54,8 @@ interface OraApi {
   accessFailed: boolean;
   isOwner: boolean;
   refreshAccess: () => Promise<void>;
+  /** Apply a server-computed access state without a second round trip. */
+  applyAccess: (next: MyAccess) => void;
 
   // Multi-organization
   organizations: OrgSummary[];
@@ -116,12 +118,12 @@ export function OraProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const loadWorkspace = useCallback(async (userId: string) => {
+  const loadWorkspace = useCallback(async () => {
     try {
       setWorkspaceFailed(false);
       let orgs = await listOrganizations();
       if (orgs.length === 0) {
-        const created = await ensureDemoOrganization(userId);
+        const created = await ensureDemoOrganization();
         if (created) {
           // The fresh demo Db is already fully materialized: use it directly
           // instead of re-listing and re-loading what we just created.
@@ -158,8 +160,14 @@ export function OraProvider({ children }: { children: ReactNode }) {
   const retryWorkspace = useCallback(() => {
     if (!user) return;
     workspaceStartedRef.current = false;
-    void loadWorkspace(user.id);
+    void loadWorkspace();
   }, [user, loadWorkspace]);
+
+  /** Apply a server-computed access state (e.g. returned by request_demo). */
+  const applyAccess = useCallback((next: MyAccess) => {
+    setAccessFailed(false);
+    setAccess(next);
+  }, []);
 
   // Register the auth listener BEFORE checking for an existing session, so the
   // initial session restore can never be missed. No async callback here; supabase
@@ -209,7 +217,7 @@ export function OraProvider({ children }: { children: ReactNode }) {
     const state = gateState(access);
     if (state !== "unlocked") return;
     workspaceStartedRef.current = true;
-    void loadWorkspace(user.id);
+    void loadWorkspace();
   }, [user, access, loadWorkspace]);
 
   /* ------------------------------------------------ */
@@ -330,6 +338,7 @@ export function OraProvider({ children }: { children: ReactNode }) {
       accessFailed,
       isOwner: access?.is_owner === true,
       refreshAccess,
+      applyAccess,
       organizations,
       activeOrganizationId,
       addOrganization,
@@ -351,6 +360,7 @@ export function OraProvider({ children }: { children: ReactNode }) {
       access,
       accessFailed,
       refreshAccess,
+      applyAccess,
       organizations,
       activeOrganizationId,
       addOrganization,
