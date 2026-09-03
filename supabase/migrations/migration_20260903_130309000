@@ -1,0 +1,30 @@
+-- =====================================================================
+-- ORA integrated feedback (transversal, contextual, persistent)
+-- =====================================================================
+
+create table if not exists public.feedback_reports (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now(),
+  kind text not null check (kind in ('not_working','error','slow','stuck','suggestion','other')),
+  description text not null,
+  module text,
+  screen text,
+  stage text,
+  is_general boolean not null default false,
+  status text not null default 'new',
+  context jsonb not null default '{}'
+);
+alter table public.feedback_reports enable row level security;
+
+-- Authenticated users report with their own id; pre-login reports are anonymous
+-- (user_id null). RLS keeps the user's own rows readable and lets the owner read
+-- all reports for future analysis.
+create policy "feedback_insert_own_or_anon" on public.feedback_reports
+  for insert with check (user_id is null or user_id = auth.uid());
+
+create policy "feedback_select_own_or_owner" on public.feedback_reports
+  for select using (user_id = auth.uid() or public.is_owner());
+
+grant insert, select on public.feedback_reports to authenticated;
+grant insert on public.feedback_reports to anon;

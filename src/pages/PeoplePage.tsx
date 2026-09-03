@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Pencil, Plus, Trash2, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -20,14 +20,23 @@ import { PersonFormDialog } from "@/components/entities/PersonFormDialog";
 import { RoleFormDialog } from "@/components/entities/RoleFormDialog";
 import { useOra } from "@/store/OraContext";
 import { criticalTasks } from "@/lib/analysis";
+import { setFeedbackStage } from "@/lib/feedback/context";
 import type { Person, Role } from "@/types";
 
 export function PeoplePage() {
   const { db, remove } = useOra();
+  const [tab, setTab] = useState("people");
   const [personDialog, setPersonDialog] = useState<{ open: boolean; person?: Person }>({ open: false });
   const [roleDialog, setRoleDialog] = useState<{ open: boolean; role?: Role }>({ open: false });
   const [deletePerson, setDeletePerson] = useState<Person | null>(null);
   const [deleteRole, setDeleteRole] = useState<Role | null>(null);
+
+  // Report the active tab to the feedback context so reports from this screen
+  // carry the section the user was in ("People" vs "Roles").
+  useEffect(() => {
+    setFeedbackStage(tab === "roles" ? "Roles" : "People");
+    return () => setFeedbackStage(null);
+  }, [tab]);
 
   const roleName = (id: string) => db.roles.find((r) => r.id === id)?.name ?? id;
   const areaName = (id?: string) => (id ? db.areas.find((a) => a.id === id)?.name ?? id : undefined);
@@ -40,7 +49,7 @@ export function PeoplePage() {
         description="People hold competencies and can perform tasks. Coverage is calculated from active people only."
       />
 
-      <Tabs defaultValue="people">
+      <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="people">People</TabsTrigger>
           <TabsTrigger value="roles">Roles</TabsTrigger>

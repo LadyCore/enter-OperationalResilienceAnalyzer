@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { setFeedbackStage } from "@/lib/feedback/context";
 import {
   ArrowLeft,
   ArrowRight,
@@ -43,6 +44,14 @@ export function ImportOrganizationPage() {
   const [error, setError] = useState<string | null>(null);
 
   const canContinueFromStep1 = name.trim().length > 0 && file !== null;
+
+  // Report the active wizard step to the feedback context (read-only: it does
+  // not alter the import flow).
+  useEffect(() => {
+    const label = STEPS[step - 1];
+    setFeedbackStage(label ? `Step ${step} · ${label}` : null);
+    return () => setFeedbackStage(null);
+  }, [step]);
 
   const handleNextFromStep1 = async () => {
     if (!file) return;

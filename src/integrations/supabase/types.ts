@@ -3616,6 +3616,48 @@ export type Database = {
           },
         ]
       }
+      feedback_reports: {
+        Row: {
+          context: Json
+          created_at: string
+          description: string
+          id: string
+          is_general: boolean
+          kind: string
+          module: string | null
+          screen: string | null
+          stage: string | null
+          status: string
+          user_id: string | null
+        }
+        Insert: {
+          context?: Json
+          created_at?: string
+          description: string
+          id?: string
+          is_general?: boolean
+          kind: string
+          module?: string | null
+          screen?: string | null
+          stage?: string | null
+          status?: string
+          user_id?: string | null
+        }
+        Update: {
+          context?: Json
+          created_at?: string
+          description?: string
+          id?: string
+          is_general?: boolean
+          kind?: string
+          module?: string | null
+          screen?: string | null
+          stage?: string | null
+          status?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       license_users: {
         Row: {
           granted_at: string

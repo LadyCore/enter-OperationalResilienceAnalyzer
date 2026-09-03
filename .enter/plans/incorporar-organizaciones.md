@@ -52,24 +52,22 @@ RLS (misma migración): insert `with check (user_id is null or user_id = auth.ui
 Chatbot, motor de análisis, simulaciones, DEMO/licencias, lógica de importación, autenticación/SMTP/redirects, identidad visual general, analytics existente. No se agrega panel administrativo.
 
 ## Implementation checklist
-- [ ] Migración `feedback_reports` + RLS + grants; verificada con `supabase_get_table_schema`.
-- [ ] `src/lib/feedback/types.ts` y `context.ts` (telemetría local de errores + mapa de rutas + stage + `collectContext` sin datos personales).
-- [ ] `src/lib/feedback/api.ts` (`submitFeedback`, user_id null pre-login).
-- [ ] `src/components/feedback/FeedbackDialog.tsx`.
-- [ ] `src/components/feedback/FeedbackFab.tsx` (responsive, z-index bajo modales, no bloquea controles).
-- [ ] `src/components/layout/AppLayout.tsx` (Outlet + FAB + telemetría).
-- [ ] `src/router.tsx` (layout raíz que envuelve las rutas existentes sin alterarlas).
-- [ ] `ImportOrganizationPage` y `PeoplePage`: instrumentación de etapa/tab.
-- [ ] Confirmar con build que `AppGuard`, rutas públicas y protegidas quedan bajo el layout sin cambios de comportamiento.
+- [x] Migración `feedback_reports` + RLS (insert propio/anónimo, select propio/owner) + grants; verificada con `supabase_get_table_schema`.
+- [x] `src/lib/feedback/types.ts` y `context.ts` (telemetría local de errores JS/rejection + mapa de rutas + stage + `collectContext` sin datos personales).
+- [x] `src/lib/feedback/api.ts` (`submitFeedback`, user_id null pre-login).
+- [x] `src/components/feedback/FeedbackDialog.tsx` (6 tipos, textarea obligatoria, contexto detectado, "Feedback general", confirmación de envío).
+- [x] `src/components/feedback/FeedbackFab.tsx` (fijo bottom-right, `z-40` bajo modales `z-50`, `pointer-events-none` en el wrapper para no bloquear controles; responsive desktop+mobile).
+- [x] `src/components/layout/AppLayout.tsx` (Outlet + FAB) y `src/router.tsx` (layout raíz pathless que envuelve las rutas existentes sin cambiar AppGuard/rutas públicas/protegidas/catch-all).
+- [x] `ImportOrganizationPage` (reporta paso del wizard) y `PeoplePage` (reporta tab activa People/Roles vía `setFeedbackStage`).
 
 ## Verification checklist
-- [ ] `pnpm run check`, `pnpm test`, `pnpm run build` pasan.
-- [ ] `supabase_get_table_schema`: `feedback_reports` con RLS on y policies (insert anónimo/propio, select propio/owner).
-- [ ] SQL: insert de prueba con user_id null y con user_id; persisten y el owner las lee.
-- [ ] Manual UI: Feedback visible en **login**, **verify-email**, **forgot/reset password**, y en la app autenticada; abrir no navega ni pierde estado.
-- [ ] Contexto cambia por pantalla (pre-login muestra pantalla/etapa; autenticado desde /import paso 2 muestra "Import · Step 2"; People muestra tab activa).
-- [ ] "Feedback general" no fuerza módulo/etapa.
-- [ ] FAB no bloquea botones/wizard/modales/formularios (desktop y mobile).
-- [ ] No autenticado → flujo de login idéntico; autenticado → acceso idéntico; rutas protegidas y redirects sin cambios.
-- [ ] El `context` jsonb guardado no contiene email ni nombre automático.
-- [ ] Sin regresión de auth, importación, análisis, simulación ni licenciamiento.
+- [x] `pnpm run check`, `pnpm test` (54), `pnpm run build` pasan.
+- [x] `supabase_get_table_schema`: `feedback_reports` con RLS on y policies `feedback_insert_own_or_anon` + `feedback_select_own_or_owner`.
+- [x] SQL: insert de prueba (anon, is_general) persistió y fue legible; fila de prueba eliminada después.
+- [x] Manual UI (screenshot desktop y mobile): botón "Feedback" visible en login (pre-login), en esquina inferior derecha, sin solapar card/inputs/links.
+- [x] Contexto por pantalla: mapa ruta→módulo incluye login, verify-email, forgot/reset, y módulos autenticados; /import reporta "Step N · <label>" y People reporta tab.
+- [x] "Feedback general" no fuerza módulo/etapa (columnas module/screen/stage null en el submit).
+- [x] FAB no bloquea controles (wrapper pointer-events-none; z-40 < modales z-50).
+- [x] Sin regresión: AppGuard intacto, rutas protegidas y públicas conservadas bajo el layout (build + tests).
+- [x] Sin email/nombre en `context` automático (solo identificadores técnicos/funcionales: org id/name, rutas, viewport, userAgent, errores JS).
+- [ ] Manual restante (requiere navegación con sesión y clicks en el preview): abrir Feedback en verify/forgot/reset y en pantallas autenticadas; enviar un reporte real desde el UI y ver confirmación; confirmar que el FAB no tapa botones del wizard.

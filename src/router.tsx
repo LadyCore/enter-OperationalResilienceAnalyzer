@@ -1,5 +1,6 @@
 import { lazy } from "react";
 import { AppGuard } from "@/components/auth/AppGuard";
+import { AppLayout } from "@/components/layout/AppLayout";
 
 // Public auth routes and the 404 are loaded on demand: an anonymous visitor
 // landing on "/" should not download the verify/forgot/reset/not-found code.
@@ -41,32 +42,43 @@ const AccessAdminPage = lazy(() =>
   import("@/pages/AccessAdminPage").then((m) => ({ default: m.AccessAdminPage }))
 );
 
+/**
+ * Root router. The top-level pathless route mounts AppLayout (cross-cutting
+ * Feedback access via <Outlet/>) and keeps every existing route — public auth
+ * routes, the guarded "/" tree and the catch-all — under it, preserving their
+ * exact behavior.
+ */
 export const routers = [
-  /* Public auth routes (reachable with or without a session) */
-  { path: "/verify-email", name: "verify-email", element: <VerifyEmailPage /> },
-  { path: "/forgot-password", name: "forgot-password", element: <ForgotPasswordPage /> },
-  { path: "/reset-password", name: "reset-password", element: <ResetPasswordPage /> },
   {
-    path: "/",
-    element: <AppGuard />,
+    element: <AppLayout />,
     children: [
-      { index: true, name: "dashboard", element: <Dashboard /> },
-      { path: "organization", name: "organization", element: <OrganizationPage /> },
-      { path: "processes", name: "processes", element: <ProcessesPage /> },
-      { path: "tasks", name: "tasks", element: <TasksPage /> },
-      { path: "competencies", name: "competencies", element: <CompetenciesPage /> },
-      { path: "people", name: "people", element: <PeoplePage /> },
-      { path: "analysis", name: "analysis", element: <AnalysisPage /> },
-      { path: "simulation", name: "simulation", element: <SimulationPage /> },
-      { path: "import", name: "import", element: <ImportOrganizationPage /> },
-      { path: "access", name: "access", element: <AccessAdminPage /> },
+      /* Public auth routes (reachable with or without a session) */
+      { path: "/verify-email", name: "verify-email", element: <VerifyEmailPage /> },
+      { path: "/forgot-password", name: "forgot-password", element: <ForgotPasswordPage /> },
+      { path: "/reset-password", name: "reset-password", element: <ResetPasswordPage /> },
+      {
+        path: "/",
+        element: <AppGuard />,
+        children: [
+          { index: true, name: "dashboard", element: <Dashboard /> },
+          { path: "organization", name: "organization", element: <OrganizationPage /> },
+          { path: "processes", name: "processes", element: <ProcessesPage /> },
+          { path: "tasks", name: "tasks", element: <TasksPage /> },
+          { path: "competencies", name: "competencies", element: <CompetenciesPage /> },
+          { path: "people", name: "people", element: <PeoplePage /> },
+          { path: "analysis", name: "analysis", element: <AnalysisPage /> },
+          { path: "simulation", name: "simulation", element: <SimulationPage /> },
+          { path: "import", name: "import", element: <ImportOrganizationPage /> },
+          { path: "access", name: "access", element: <AccessAdminPage /> },
+        ],
+      },
+      /* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */
+      {
+        path: "*",
+        name: "404",
+        element: <NotFound />,
+      },
     ],
-  },
-  /* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */
-  {
-    path: "*",
-    name: "404",
-    element: <NotFound />,
   },
 ];
 
