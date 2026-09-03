@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { useOra } from "@/store/OraContext";
+import { PASSWORD_PLACEHOLDER, validatePassword } from "@/lib/passwordPolicy";
 import { Field } from "@/components/entities/field";
 
 type Status = "checking" | "ready" | "invalid";
@@ -60,8 +61,9 @@ export function ResetPasswordPage() {
     event.preventDefault();
     setError(null);
 
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters.");
+    const policyError = validatePassword(password);
+    if (policyError) {
+      setError(policyError);
       return;
     }
     if (password !== confirm) {
@@ -150,13 +152,13 @@ export function ResetPasswordPage() {
 
             {status === "ready" && !done && (
               <form onSubmit={handleSubmit} className="space-y-4">
-                <Field label="New password">
+                <Field label="New password" hint="Exactly 8 characters, with a letter, a number and a special character. No spaces.">
                   <Input
                     type="password"
                     autoComplete="new-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="At least 6 characters"
+                    placeholder={PASSWORD_PLACEHOLDER}
                   />
                 </Field>
                 <Field label="Confirm new password">

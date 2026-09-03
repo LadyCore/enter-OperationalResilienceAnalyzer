@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { Field } from "@/components/entities/field";
 import { useOra } from "@/store/OraContext";
+import { PASSWORD_PLACEHOLDER, validatePassword } from "@/lib/passwordPolicy";
 
 type Mode = "login" | "signup";
 
@@ -33,9 +34,18 @@ export function LoginPage() {
     setError(null);
     setResent(false);
 
-    if (!email.trim() || password.length < 6) {
-      setError("Enter a valid email and a password of at least 6 characters.");
+    if (!email.trim() || !password) {
+      setError("Enter a valid email and your password.");
       return;
+    }
+    // The password policy applies when creating a new password (signup), not
+    // when signing in with an existing account.
+    if (mode === "signup") {
+      const policyError = validatePassword(password);
+      if (policyError) {
+        setError(policyError);
+        return;
+      }
     }
 
     setBusy(true);
@@ -170,13 +180,16 @@ export function LoginPage() {
                     placeholder="you@company.com"
                   />
                 </Field>
-                <Field label="Password">
+                <Field
+                  label="Password"
+                  hint={mode === "signup" ? "Exactly 8 characters, with a letter, a number and a special character. No spaces." : undefined}
+                >
                   <Input
                     type="password"
                     autoComplete={mode === "login" ? "current-password" : "new-password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="At least 6 characters"
+                    placeholder={mode === "signup" ? PASSWORD_PLACEHOLDER : "Your password"}
                   />
                 </Field>
 

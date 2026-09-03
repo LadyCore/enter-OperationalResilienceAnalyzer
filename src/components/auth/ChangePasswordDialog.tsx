@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
+import { PASSWORD_PLACEHOLDER, validatePassword } from "@/lib/passwordPolicy";
 import { Field } from "@/components/entities/field";
 
 interface ChangePasswordDialogProps {
@@ -41,8 +42,9 @@ export function ChangePasswordDialog({ open, onOpenChange }: ChangePasswordDialo
       setError("Enter your current password.");
       return;
     }
-    if (next.length < 6) {
-      setError("New password must be at least 6 characters.");
+    const policyError = validatePassword(next);
+    if (policyError) {
+      setError(policyError);
       return;
     }
     if (next !== confirm) {
@@ -88,13 +90,13 @@ export function ChangePasswordDialog({ open, onOpenChange }: ChangePasswordDialo
               placeholder="Current password"
             />
           </Field>
-          <Field label="New password">
+          <Field label="New password" hint="Exactly 8 characters, with a letter, a number and a special character. No spaces.">
             <Input
               type="password"
               autoComplete="new-password"
               value={next}
               onChange={(e) => setNext(e.target.value)}
-              placeholder="At least 6 characters"
+              placeholder={PASSWORD_PLACEHOLDER}
             />
           </Field>
           <Field label="Confirm new password">
