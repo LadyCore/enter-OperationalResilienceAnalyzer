@@ -27,8 +27,24 @@ export const ROUTE_MODULES: Record<string, string> = {
   "/access": "Access & licensing",
 };
 
-/** Distinct human-readable module labels, for admin filters. */
-export const FEEDBACK_MODULES: string[] = Array.from(new Set(Object.values(ROUTE_MODULES)));
+/**
+ * Distinct human-readable module labels, for admin filters. The index route
+ * ("/") resolves to "Sign in" pre-login but to "Dashboard" once authenticated,
+ * so both labels are filterable here.
+ */
+export const FEEDBACK_MODULES: string[] = Array.from(
+  new Set([...Object.values(ROUTE_MODULES), "Dashboard"]),
+);
+
+/**
+ * Resolve the module label for a route. The index route ("/") is the login
+ * screen for anonymous visitors and the Dashboard for authenticated users, so
+ * it is resolved by the session state instead of a fixed default.
+ */
+export function moduleForRoute(pathname: string, authenticated = false): string | null {
+  if (pathname === "/") return authenticated ? "Dashboard" : "Sign in";
+  return ROUTE_MODULES[pathname] ?? null;
+}
 
 interface RecentError {
   at: string;
@@ -81,10 +97,14 @@ export function setFeedbackStage(label: string | null): void {
   stage = label;
 }
 
-/** Functional context visible to the user before sending. */
-export function getFeedbackContext(pathname?: string): FeedbackContext {
+/**
+ * Functional context visible to the user before sending. `authenticated` is
+ * required to resolve the index route ("/") correctly: Dashboard for a signed-in
+ * session, Sign in otherwise.
+ */
+export function getFeedbackContext(pathname?: string, authenticated = false): FeedbackContext {
   const route = pathname ?? currentRoute;
-  const module = ROUTE_MODULES[route] ?? null;
+  const module = moduleForRoute(route, authenticated);
   return {
     module,
     screen: route,
@@ -114,9 +134,4 @@ export function collectTechnicalContext(opts: {
       typeof navigator !== "undefined" ? navigator.userAgent : null,
     recentErrors: [...recentErrors],
   };
-}
-
-/** Resolve the module label for a route without side effects (exported for tests). */
-export function moduleForRoute(pathname: string): string | null {
-  return ROUTE_MODULES[pathname] ?? null;
 }
