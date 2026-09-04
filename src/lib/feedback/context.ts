@@ -11,7 +11,7 @@ import type { FeedbackContext, FeedbackTechnicalContext } from "./types";
  */
 
 /** Route → human-readable module label. Pre-login routes included. */
-const ROUTE_MODULES: Record<string, string> = {
+export const ROUTE_MODULES: Record<string, string> = {
   "/": "Sign in",
   "/verify-email": "Email verification",
   "/forgot-password": "Password recovery",
@@ -26,6 +26,9 @@ const ROUTE_MODULES: Record<string, string> = {
   "/import": "Import",
   "/access": "Access & licensing",
 };
+
+/** Distinct human-readable module labels, for admin filters. */
+export const FEEDBACK_MODULES: string[] = Array.from(new Set(Object.values(ROUTE_MODULES)));
 
 interface RecentError {
   at: string;

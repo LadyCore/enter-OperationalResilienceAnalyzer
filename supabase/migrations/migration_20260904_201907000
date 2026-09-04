@@ -1,0 +1,7 @@
+-- Owner-only status management for feedback reports.
+-- Adds an UPDATE policy scoped to is_owner(); the existing INSERT/SELECT
+-- policies are untouched and no row is exposed to non-owners.
+create policy "feedback_update_owner" on public.feedback_reports
+  for update using (public.is_owner()) with check (public.is_owner());
+
+grant update on public.feedback_reports to authenticated;

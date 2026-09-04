@@ -13,6 +13,7 @@ import {
   LayoutDashboard,
   ListChecks,
   LogOut,
+  MessageSquareText,
   Plus,
   ShieldCheck,
   Users,
@@ -40,6 +41,7 @@ const nav = [
   { to: "/simulation", label: "Simulation", icon: CalendarClock },
   { to: "/organization", label: "Organization", icon: Building2 },
   { to: "/access", label: "Access & licensing", icon: KeyRound, ownerOnly: true },
+  { to: "/feedback", label: "Feedback", icon: MessageSquareText, ownerOnly: true },
 ];
 
 function SidebarNav() {

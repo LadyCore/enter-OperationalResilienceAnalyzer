@@ -41,6 +41,9 @@ const ImportOrganizationPage = lazy(() =>
 const AccessAdminPage = lazy(() =>
   import("@/pages/AccessAdminPage").then((m) => ({ default: m.AccessAdminPage }))
 );
+const FeedbackAdminPage = lazy(() =>
+  import("@/pages/FeedbackAdminPage").then((m) => ({ default: m.FeedbackAdminPage }))
+);
 
 /**
  * Root router. The top-level pathless route mounts AppLayout (cross-cutting
@@ -70,6 +73,7 @@ export const routers = [
           { path: "simulation", name: "simulation", element: <SimulationPage /> },
           { path: "import", name: "import", element: <ImportOrganizationPage /> },
           { path: "access", name: "access", element: <AccessAdminPage /> },
+          { path: "feedback", name: "feedback", element: <FeedbackAdminPage /> },
         ],
       },
       /* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */
