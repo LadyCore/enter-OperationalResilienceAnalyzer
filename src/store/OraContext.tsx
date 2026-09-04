@@ -61,6 +61,12 @@ interface OraApi {
   pendingRecovery: boolean;
   /** Clears the pending-recovery marker (called after the password is updated). */
   clearPendingRecovery: () => void;
+  /**
+   * True while the signed-in user's email is NOT confirmed. An unverified
+   * account must never reach the app: access/DEMO resolution and the workspace
+   * load are suppressed and every protected route shows the verification screen.
+   */
+  emailUnverified: boolean;
 
   // Access & licensing
   access: MyAccess | null;
@@ -95,6 +101,7 @@ export function OraProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [pendingRecovery, setPendingRecovery] = useState(false);
+  const [emailUnverified, setEmailUnverified] = useState(false);
   const [access, setAccess] = useState<MyAccess | null>(null);
   const [accessFailed, setAccessFailed] = useState(false);
   const [workspaceFailed, setWorkspaceFailed] = useState(false);
@@ -227,6 +234,7 @@ export function OraProvider({ children }: { children: ReactNode }) {
       if (!nextSession?.user) {
         // Sign-out / no session: the recovery gate no longer applies.
         setFlag(false);
+        setEmailUnverified(false);
         workspaceStartedRef.current = false;
         setWorkspaceFailed(false);
         setDb(null);
@@ -238,6 +246,25 @@ export function OraProvider({ children }: { children: ReactNode }) {
         setIsLoading(false);
         return;
       }
+
+      // SECURITY: a session whose email is not confirmed must never unlock ORA.
+      // Do not resolve access, do not load the workspace, and keep the app
+      // behind the verification screen until email_confirmed_at is set.
+      if (!nextSession.user.email_confirmed_at) {
+        setEmailUnverified(true);
+        workspaceStartedRef.current = false;
+        setWorkspaceFailed(false);
+        setDb(null);
+        setOrganizations([]);
+        setActiveOrganizationId(null);
+        activeOrgIdRef.current = null;
+        setAccess(null);
+        setAccessFailed(false);
+        setFlag(false);
+        setIsLoading(false);
+        return;
+      }
+      setEmailUnverified(false);
 
       // Supabase emits PASSWORD_RECOVERY when the recovery link is processed.
       // That session must NOT be treated as a normal authenticated session.
@@ -285,12 +312,12 @@ export function OraProvider({ children }: { children: ReactNode }) {
   // not need any organization data — so nothing is created or fetched for them.
   // A pending password recovery never loads the workspace.
   useEffect(() => {
-    if (!user || !access || pendingRecovery || workspaceStartedRef.current) return;
+    if (!user || !access || pendingRecovery || emailUnverified || workspaceStartedRef.current) return;
     const state = gateState(access);
     if (state !== "unlocked") return;
     workspaceStartedRef.current = true;
     void loadWorkspace();
-  }, [user, access, pendingRecovery, loadWorkspace]);
+  }, [user, access, pendingRecovery, emailUnverified, loadWorkspace]);
 
   /* ------------------------------------------------ */
   /* Existing synchronous mutations (optimistic + queue) */
@@ -408,6 +435,7 @@ export function OraProvider({ children }: { children: ReactNode }) {
       signOut,
       pendingRecovery,
       clearPendingRecovery,
+      emailUnverified,
       access,
       accessFailed,
       isOwner: access?.is_owner === true,
@@ -433,6 +461,7 @@ export function OraProvider({ children }: { children: ReactNode }) {
       signOut,
       pendingRecovery,
       clearPendingRecovery,
+      emailUnverified,
       access,
       accessFailed,
       refreshAccess,

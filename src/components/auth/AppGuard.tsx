@@ -3,6 +3,8 @@ import { Navigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { useOra } from "@/store/OraContext";
 import { LoginPage } from "./LoginPage";
+import { EmailVerificationScreen } from "./EmailVerificationScreen";
+import { isEmailVerified } from "@/lib/emailVerification";
 import { gateState } from "@/lib/access/status";
 
 // AppShell (the whole authenticated layout: nav, dropdowns, dialogs) and the
@@ -47,7 +49,7 @@ function LazyGate() {
  *     the ORA shell.
  */
 export function AppGuard() {
-  const { user, isLoading, db, access, accessFailed, pendingRecovery, workspaceFailed, retryWorkspace } = useOra();
+  const { user, isLoading, db, access, accessFailed, pendingRecovery, emailUnverified, workspaceFailed, retryWorkspace } = useOra();
 
   // Session restore in progress (initial getSession / auth listener).
   if (isLoading) {
@@ -60,6 +62,13 @@ export function AppGuard() {
   // password reset flow even if the user navigates to "/" or a protected route.
   if (pendingRecovery) {
     return <Navigate to="/reset-password" replace />;
+  }
+
+  // SECURITY: an account whose email is not confirmed must never reach the
+  // app. This is enforced on every protected route (direct URL included) and is
+  // backed by the store, which suppresses access resolution and workspace load.
+  if (emailUnverified || !isEmailVerified(user)) {
+    return <EmailVerificationScreen />;
   }
 
   // Access still resolving.
