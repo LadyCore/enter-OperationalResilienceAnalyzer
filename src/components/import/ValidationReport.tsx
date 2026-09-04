@@ -12,8 +12,8 @@ import type { ValidationSummary } from "@/lib/importer/types";
 
 interface ValidationReportProps {
   summary: ValidationSummary;
-  resolutions: Record<number, string | null>;
-  onResolve: (sourceRow: number, personName: string | null) => void;
+  resolutions: Record<string, string | null>;
+  onResolve: (kind: "manager" | "coverage", sourceRow: number, personName: string | null) => void;
 }
 
 function Stat({ label, value }: { label: string; value: number }) {
@@ -42,6 +42,8 @@ export function ValidationReport({ summary, resolutions, onResolve }: Validation
         <Stat label="Functions" value={summary.functions} />
         <Stat label="Tasks" value={summary.tasks} />
         <Stat label="Competencies" value={summary.competencies} />
+        <Stat label="On-call (guardia)" value={summary.onCallAssignments} />
+        <Stat label="Vacation coverages" value={summary.vacationCoverages} />
         <Stat label="Possible duplicates" value={summary.possibleDuplicates} />
         <Stat label="Incomplete records" value={summary.incompleteRows} />
       </div>
@@ -55,39 +57,48 @@ export function ValidationReport({ summary, resolutions, onResolve }: Validation
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {summary.ambiguousManagers.length > 0 && (
+            {summary.ambiguousPersons.length > 0 && (
               <div className="space-y-2">
-                {summary.ambiguousManagers.map((ref) => (
-                  <div
-                    key={ref.sourceRow}
-                    className="flex flex-col gap-2 rounded-md border px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div className="min-w-0 text-sm">
-                      <p className="font-medium">
-                        {ref.personName} → manager "{ref.managerName}"
-                      </p>
-                      <p className="text-muted-foreground">
-                        Matches {ref.candidates.length} people. Choose the intended manager.
-                      </p>
-                    </div>
-                    <Select
-                      value={resolutions[ref.sourceRow] ?? "unresolved"}
-                      onValueChange={(v) => onResolve(ref.sourceRow, v === "unresolved" ? null : v)}
+                {summary.ambiguousPersons.map((ref) => {
+                  const key = `${ref.kind}:${ref.sourceRow}`;
+                  const label =
+                    ref.kind === "manager"
+                      ? `manager "${ref.refName}"`
+                      : `covered person "${ref.refName}"`;
+                  return (
+                    <div
+                      key={key}
+                      className="flex flex-col gap-2 rounded-md border px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
                     >
-                      <SelectTrigger className="w-full sm:w-64">
-                        <SelectValue placeholder="Choose manager" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="unresolved">Leave unresolved</SelectItem>
-                        {ref.candidates.map((c) => (
-                          <SelectItem key={c} value={c}>
-                            {c}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ))}
+                      <div className="min-w-0 text-sm">
+                        <p className="font-medium">
+                          {ref.personName} → {label}
+                        </p>
+                        <p className="text-muted-foreground">
+                          Matches {ref.candidates.length} people. Choose the intended person.
+                        </p>
+                      </div>
+                      <Select
+                        value={resolutions[key] ?? "unresolved"}
+                        onValueChange={(v) =>
+                          onResolve(ref.kind, ref.sourceRow, v === "unresolved" ? null : v)
+                        }
+                      >
+                        <SelectTrigger className="w-full sm:w-64">
+                          <SelectValue placeholder="Choose person" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="unresolved">Leave unresolved</SelectItem>
+                          {ref.candidates.map((c) => (
+                            <SelectItem key={c} value={c}>
+                              {c}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  );
+                })}
               </div>
             )}
 

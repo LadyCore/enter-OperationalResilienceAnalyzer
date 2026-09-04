@@ -8,6 +8,7 @@ import {
   FileWarning,
   GitBranch,
   ListChecks,
+  PhoneCall,
   RotateCcw,
   ShieldAlert,
   ShieldCheck,
@@ -22,6 +23,7 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { OrganizationFormDialog } from "@/components/entities/OrganizationFormDialog";
 import { useOra } from "@/store/OraContext";
 import { computeDashboardMetrics, detectRiskFlags } from "@/lib/analysis";
+import { buildOnCallMetrics } from "@/lib/oncall";
 import { ImportHelpCard } from "@/components/import/ImportHelpCard";
 import { DemoBanner } from "@/components/access/DemoBanner";
 
@@ -30,6 +32,7 @@ export function Dashboard() {
   const [orgOpen, setOrgOpen] = useState(false);
   const metrics = computeDashboardMetrics(db);
   const flags = detectRiskFlags(db);
+  const onCall = buildOnCallMetrics(db);
   const isDemo = Boolean(db.organization.isDemo);
 
   const severityOrder = { critical: 0, high: 1, medium: 2 };
@@ -135,6 +138,61 @@ export function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* On-call (guardia pasiva) — only shown when the org declares on-call data */}
+      {onCall.assignments > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <PhoneCall className="h-4 w-4 text-primary" />
+              Passive on-call (guardia pasiva)
+            </CardTitle>
+            <CardDescription>
+              Permanent availability outside ordinary hours — an independent capability dimension,
+              never part of the base dependency analysis.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <StatCard
+                label="People on call"
+                value={onCall.peopleCount}
+                hint={onCall.assignments === 1 ? "1 assignment" : `${onCall.assignments} assignments`}
+                icon={Users}
+                tone="primary"
+              />
+              <StatCard
+                label="Capabilities covered on call"
+                value={onCall.taskCount}
+                hint={`${onCall.criticalTaskCount} critical`}
+                icon={ListChecks}
+                tone={onCall.criticalTaskCount > 0 ? "medium" : "default"}
+              />
+              <StatCard
+                label="H24 assignments"
+                value={onCall.h24Count}
+                hint="Around-the-clock availability declared"
+                icon={ShieldCheck}
+                tone={onCall.h24Count > 0 ? "low" : "default"}
+              />
+              <StatCard
+                label="Shift / custom assignments"
+                value={onCall.customCount}
+                hint="Shifts or the organization's own scheme"
+                icon={AlertTriangle}
+                tone={onCall.customCount > 0 ? "medium" : "default"}
+              />
+            </div>
+            {onCall.singlePersonTasks.length > 0 && (
+              <p className="mt-3 rounded-md border border-risk-medium/20 bg-risk-medium/5 px-3 py-2 text-xs leading-relaxed text-risk-medium">
+                On-call concentration: {onCall.singlePersonTasks.length}{" "}
+                {onCall.singlePersonTasks.length === 1 ? "capability is" : "capabilities are"} covered
+                by a single on-call person ({onCall.singlePersonTasks.join(", ")}).
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Risk highlights */}
       <Card>

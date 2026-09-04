@@ -41,6 +41,14 @@ const tips = [
     body: "If your file includes a criticality column, use only the values ORA recognizes. Otherwise ORA derives criticality from the analysis.",
   },
   {
+    title: "On-call / guardia (optional)",
+    body: "Guardia columns are optional. Leave them empty when the organization has no passive on-call; a filled row describes one on-call assignment. Modality and shift are free text — ORA does not impose a fixed shift structure.",
+  },
+  {
+    title: "Vacation coverage (optional)",
+    body: "In 'Cubre ausencias de' write the Legajo or name of the person whose vacation you can cover — the person of the row is the coverer. Coverage only applies to planned absences categorized as Vacation.",
+  },
+  {
     title: "Check the mapping",
     body: "Before running Validation, review the automatic column mapping — ORA never assumes column names.",
   },

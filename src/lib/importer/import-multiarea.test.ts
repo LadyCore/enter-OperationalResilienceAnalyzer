@@ -18,6 +18,15 @@ const mapping: ColumnMapping = {
   documentada: "Documentada",
   activo: "Activo",
   criticidad: null,
+  guardiaActiva: null,
+  guardiaModalidad: null,
+  guardiaPeriodo: null,
+  guardiaTareas: null,
+  guardiaCompetencias: null,
+  coverageObjetivo: null,
+  coverageRol: null,
+  coverageTareas: null,
+  coverageCompetencias: null,
 };
 
 /**

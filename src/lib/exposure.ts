@@ -1,6 +1,6 @@
 import type { Criticality, Db } from "@/types";
 import { deriveTaskCriticality } from "@/lib/analysis";
-import type { SimulationResult } from "@/lib/simulation";
+import type { ScenarioResult } from "@/lib/simulation";
 
 export type ExposureLevel = "none" | "short" | "prolonged" | "sustained";
 
@@ -24,20 +24,18 @@ export const EXPOSURE_LABELS: Record<ExposureLevel, string> = {
   sustained: "Sustained exposure",
 };
 
-/** Coverage impact of the absence on a task (reuses the existing 1→0 / 2+→1 logic). */
+/** Coverage impact of the absences on a task (reuses the existing 1→0 / 2+→1 logic). */
 export type CoverageImpact = "none" | "reduced-to-single" | "uncovered";
 
 /**
- * Temporal exposure of a task. This dimension is driven by BOTH the scenario
- * type (isPermanent) and the duration — it never changes the underlying
- * coverage or criticality.
+ * Temporal exposure of a task. This dimension is driven by the scenario absences
+ * that actually govern the task (those whose people were capable before the
+ * scenario) — it never changes the underlying coverage or criticality.
  *
- *   - impact "none" (coverage maintained)          → no exposure
- *   - Permanent loss (any impact)                  → sustained (no return expected)
- *   - otherwise (uncovered 1→0 OR reduced 2+→1)    → by duration: short / prolonged / sustained
- *
- * A 2+→1 reduction is therefore NOT treated as "no coverage": it is classified
- * as a single-person dependency whose severity depends on how long it lasts.
+ *   - impact "none" (coverage maintained)                 → no exposure
+ *   - any governing absence is Permanent                  → sustained (no return)
+ *   - otherwise (uncovered 1→0 OR reduced 2+→1)           → by duration:
+ *         duration = the longest non-permanent governing absence
  */
 export function computeTaskExposure(
   impact: CoverageImpact,
@@ -64,7 +62,8 @@ const pluralDays = (days: number) => `${days} ${days === 1 ? "day" : "days"}`;
 
 /**
  * Human interpretation of a task's exposure. The same structural impact is
- * described differently depending on scenario type and duration.
+ * described differently depending on whether a permanent loss governs it and how
+ * long the governing absence lasts.
  */
 export function describeExposure(
   impact: CoverageImpact,
@@ -143,33 +142,37 @@ export interface ExposureReport {
 }
 
 /**
- * Interpret a completed absence simulation as a temporal-exposure view. This is
- * presentation/interpretation only: it reads the existing coverage results and
- * the chosen scenario/duration and never mutates the task, its criticality or
- * coverage.
- *
- * @param isPermanent true when the scenario is a Permanent loss (no return).
+ * Interpret a completed scenario as a temporal-exposure view. For each affected
+ * task the exposure is derived from the absences that govern that task: any
+ * permanent governing absence → sustained; otherwise the level follows the
+ * longest governing (non-permanent) duration. This is presentation/interpretation
+ * only: it reads the existing coverage results and never mutates the task, its
+ * criticality or coverage.
  */
-export function buildExposureReport(
-  db: Db,
-  result: SimulationResult,
-  isPermanent = false,
-): ExposureReport {
+export function buildExposureReport(db: Db, result: ScenarioResult): ExposureReport {
   const tasks: TaskExposure[] = result.taskChanges.map((change) => {
     const task = db.tasks.find((t) => t.id === change.taskId);
     const criticality = task ? deriveTaskCriticality(db, task).level : "standard";
     const uncovered = result.uncoveredTaskIds.includes(change.taskId);
     const reduced = result.reducedToSingleTaskIds.includes(change.taskId);
     const impact: CoverageImpact = uncovered ? "uncovered" : reduced ? "reduced-to-single" : "none";
-    const level = computeTaskExposure(impact, isPermanent, result.days);
+
+    const governing = result.governingAbsencesByTask[change.taskId] ?? [];
+    const isPermanent = governing.some((a) => a.kind === "permanent");
+    const days = governing.reduce(
+      (max, a) => (a.kind !== "permanent" ? Math.max(max, a.days) : max),
+      0,
+    );
+
+    const level = computeTaskExposure(impact, isPermanent, days);
     return {
       taskId: change.taskId,
       taskName: change.taskName,
       criticality,
       impact,
-      days: result.days,
+      days,
       level,
-      description: describeExposure(impact, isPermanent, result.days, criticality),
+      description: describeExposure(impact, isPermanent, days, criticality),
     };
   });
 

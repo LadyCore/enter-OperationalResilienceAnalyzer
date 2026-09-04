@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Db } from "@/types";
-import { simulateAbsence } from "@/lib/simulation";
+import { simulateAbsence, simulateScenario } from "@/lib/simulation";
 
 /**
  * "Critical competencies left with a single holder" must evaluate the
@@ -42,6 +42,8 @@ const db: Db = {
     { id: "cC", name: "Competency C", description: "" },
     { id: "cD", name: "Competency D", description: "" },
   ],
+  vacationCoverages: [],
+  onCallAssignments: [],
 };
 
 describe("Critical competencies left with a single holder — post-absence semantics", () => {
@@ -76,11 +78,11 @@ describe("Critical competencies left with a single holder — post-absence seman
   });
 });
 
-describe("single-holder definition is identical across scenarios (duration never changes it)", () => {
+describe("single-holder definition is identical across scenarios (duration/kind never changes it)", () => {
   it("short temporary, long planned, and permanent loss produce the same single-holder set", () => {
     const temporary = simulateAbsence(db, "p_sofia", 3);
-    const planned = simulateAbsence(db, "p_sofia", 62);
-    const permanent = simulateAbsence(db, "p_sofia", 365); // days param is not a scenario flag
+    const planned = simulateScenario(db, [{ personId: "p_sofia", kind: "planned", days: 62 }]);
+    const permanent = simulateScenario(db, [{ personId: "p_sofia", kind: "permanent" }]); // kind, not days, flags the scenario
 
     expect(planned.singleHolderCriticalCompetencyIds).toEqual(temporary.singleHolderCriticalCompetencyIds);
     expect(permanent.singleHolderCriticalCompetencyIds).toEqual(temporary.singleHolderCriticalCompetencyIds);

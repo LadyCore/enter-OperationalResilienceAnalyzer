@@ -18,6 +18,8 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { ConfirmDeleteDialog } from "@/components/common/ConfirmDeleteDialog";
 import { PersonFormDialog } from "@/components/entities/PersonFormDialog";
 import { RoleFormDialog } from "@/components/entities/RoleFormDialog";
+import { VacationCoveragePanel } from "@/components/entities/VacationCoveragePanel";
+import { OnCallPanel } from "@/components/entities/OnCallPanel";
 import { useOra } from "@/store/OraContext";
 import { criticalTasks } from "@/lib/analysis";
 import { setFeedbackStage } from "@/lib/feedback/context";
@@ -34,7 +36,9 @@ export function PeoplePage() {
   // Report the active tab to the feedback context so reports from this screen
   // carry the section the user was in ("People" vs "Roles").
   useEffect(() => {
-    setFeedbackStage(tab === "roles" ? "Roles" : "People");
+    setFeedbackStage(
+      tab === "roles" ? "Roles" : tab === "coverage" ? "Coverage & on-call" : "People",
+    );
     return () => setFeedbackStage(null);
   }, [tab]);
 
@@ -55,6 +59,7 @@ export function PeoplePage() {
         <TabsList>
           <TabsTrigger value="people">People</TabsTrigger>
           <TabsTrigger value="roles">Roles</TabsTrigger>
+          <TabsTrigger value="coverage">Coverage & on-call</TabsTrigger>
         </TabsList>
 
         <TabsContent value="people" className="space-y-4">
@@ -203,6 +208,11 @@ export function PeoplePage() {
               })}
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="coverage" className="space-y-4">
+          <VacationCoveragePanel />
+          <OnCallPanel />
         </TabsContent>
       </Tabs>
 

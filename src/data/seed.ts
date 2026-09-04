@@ -1,4 +1,4 @@
-import type { Competency, Db, OrgFunction, Person, Process, Role, Task } from "@/types";
+import type { Competency, Db, OnCallAssignment, OrgFunction, Person, Process, Role, Task, VacationCoverage } from "@/types";
 import { uid } from "@/lib/id";
 
 export const SEED_ORG = {
@@ -95,6 +95,28 @@ export const SEED_PEOPLE: Person[] = [
   { id: "p_nadia", name: "Nadia Ferreira", roleIds: ["r_billing"], areaIds: [], isActive: false, competencyIds: ["c_invoicing"], taskIds: ["t_invoice"] },
 ];
 
+/**
+ * Example vacation coverages (B covers A during A's vacation). Only used in
+ * planned-absence simulations whose category is Vacation. Examples are chosen
+ * so the coverer is NOT normally capable of the covered tasks — the coverage is
+ * a temporary capability that must not leak into the base analysis.
+ */
+export const SEED_VACATION_COVERAGES: VacationCoverage[] = [
+  // Elena (billing) covers Diana's order-intake tasks while Diana is away.
+  { id: "vc_elena_diana", coveringPersonId: "p_elena", coveredPersonId: "p_diana", roleId: "r_order", taskIds: ["t_validate", "t_quote"], competencyIds: ["c_order", "c_pricing"] },
+  // Gabriela (HR admin) covers Franco's statutory-filings task on vacation.
+  { id: "vc_gabriela_franco", coveringPersonId: "p_gabriela", coveredPersonId: "p_franco", roleId: "r_payroll", taskIds: ["t_filings"], competencyIds: ["c_payrollcomp"] },
+];
+
+/**
+ * Example passive on-call assignments (guardia pasiva) — permanent availability
+ * outside ordinary hours. Independent of the base analysis.
+ */
+export const SEED_ON_CALL: OnCallAssignment[] = [
+  { id: "oc_carlos_night", personId: "p_carlos", modality: "Shifts", period: "Night", taskIds: ["t_triage"], competencyIds: ["c_incident", "c_network"] },
+  { id: "oc_ana_h24", personId: "p_ana", modality: "H24", period: "H24", taskIds: ["t_patch", "t_triage"], competencyIds: ["c_server", "c_incident"] },
+];
+
 export const seedDb: Db = {
   organization: SEED_ORG,
   areas: [],
@@ -104,6 +126,8 @@ export const seedDb: Db = {
   roles: SEED_ROLES,
   people: SEED_PEOPLE,
   competencies: SEED_COMPETENCIES,
+  vacationCoverages: SEED_VACATION_COVERAGES,
+  onCallAssignments: SEED_ON_CALL,
 };
 
 /** Deep clone helper used to avoid mutating shared seed objects. */
@@ -173,6 +197,22 @@ export function remapSeedIds(db: Db): Db {
       taskIds: p.taskIds.map((t) => remap(t, "task")),
     };
   });
+  const vacationCoverages = (db.vacationCoverages ?? []).map((c) => ({
+    ...c,
+    id: remap(c.id, "vc"),
+    coveringPersonId: remap(c.coveringPersonId, "p"),
+    coveredPersonId: remap(c.coveredPersonId, "p"),
+    roleId: c.roleId ? remap(c.roleId, "role") : undefined,
+    taskIds: c.taskIds.map((t) => remap(t, "task")),
+    competencyIds: c.competencyIds.map((k) => remap(k, "comp")),
+  }));
+  const onCallAssignments = (db.onCallAssignments ?? []).map((a) => ({
+    ...a,
+    id: remap(a.id, "oc"),
+    personId: remap(a.personId, "p"),
+    taskIds: a.taskIds.map((t) => remap(t, "task")),
+    competencyIds: a.competencyIds.map((k) => remap(k, "comp")),
+  }));
 
-  return { organization, areas, processes, functions, tasks, roles, people, competencies };
+  return { organization, areas, processes, functions, tasks, roles, people, competencies, vacationCoverages, onCallAssignments };
 }

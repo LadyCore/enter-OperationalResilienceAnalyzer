@@ -73,6 +73,8 @@ const db: Db = {
     { id: "c_signon", name: "Payment authorization", description: "" },
     { id: "c_facilities", name: "Facilities", description: "" },
   ],
+  vacationCoverages: [],
+  onCallAssignments: [],
 };
 
 const task = (id: string) => db.tasks.find((t) => t.id === id)!;
@@ -220,6 +222,8 @@ describe("derived mode: orgs imported without criticality data", () => {
       { id: "pb1", name: "B1", roleIds: ["r2"], isActive: true, competencyIds: [], taskIds: ["tb1"] },
     ],
     competencies: [],
+    vacationCoverages: [],
+    onCallAssignments: [],
   };
 
   it("tiers processes by operational weight and inherits down to tasks", () => {

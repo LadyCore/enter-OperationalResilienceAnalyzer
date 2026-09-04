@@ -7,12 +7,14 @@ import type {
   Criticality,
   Db,
   Entity,
+  OnCallAssignment,
   OrgFunction,
   Organization,
   Person,
   Process,
   Role,
   Task,
+  VacationCoverage,
 } from "@/types";
 import { remapSeedIds, seedDb } from "@/data/seed";
 
@@ -29,7 +31,9 @@ type TableName =
   | "people"
   | "processes"
   | "org_functions"
-  | "tasks";
+  | "tasks"
+  | "vacation_coverages"
+  | "on_call_assignments";
 
 const COLLECTION_TABLE: Record<CollectionKey, TableName> = {
   areas: "areas",
@@ -39,9 +43,13 @@ const COLLECTION_TABLE: Record<CollectionKey, TableName> = {
   processes: "processes",
   functions: "org_functions",
   tasks: "tasks",
+  vacationCoverages: "vacation_coverages",
+  onCallAssignments: "on_call_assignments",
 };
 
 const CHILD_TABLES: TableName[] = [
+  "vacation_coverages",
+  "on_call_assignments",
   "people",
   "tasks",
   "org_functions",
@@ -113,6 +121,30 @@ function payloadFor(collection: CollectionKey, entity: Entity, orgId: string): R
     case "areas": {
       const e = entity as Area;
       return { id: e.id, organization_id: orgId, name: e.name, description: e.description ?? "" };
+    }
+    case "vacationCoverages": {
+      const e = entity as VacationCoverage;
+      return {
+        id: e.id,
+        organization_id: orgId,
+        covering_person_id: e.coveringPersonId,
+        covered_person_id: e.coveredPersonId,
+        role_id: e.roleId ?? null,
+        task_ids: e.taskIds,
+        competency_ids: e.competencyIds,
+      };
+    }
+    case "onCallAssignments": {
+      const e = entity as OnCallAssignment;
+      return {
+        id: e.id,
+        organization_id: orgId,
+        person_id: e.personId,
+        modality: e.modality,
+        period: e.period,
+        task_ids: e.taskIds,
+        competency_ids: e.competencyIds,
+      };
     }
   }
 }
@@ -191,6 +223,24 @@ const toArea = (r: Tables["areas"]["Row"]): Area => ({
   id: r.id,
   name: r.name,
   description: r.description,
+});
+
+const toVacationCoverage = (r: Tables["vacation_coverages"]["Row"]): VacationCoverage => ({
+  id: r.id,
+  coveringPersonId: r.covering_person_id,
+  coveredPersonId: r.covered_person_id,
+  roleId: r.role_id ?? undefined,
+  taskIds: r.task_ids,
+  competencyIds: r.competency_ids,
+});
+
+const toOnCallAssignment = (r: Tables["on_call_assignments"]["Row"]): OnCallAssignment => ({
+  id: r.id,
+  personId: r.person_id,
+  modality: r.modality,
+  period: r.period,
+  taskIds: r.task_ids,
+  competencyIds: r.competency_ids,
 });
 
 /* ------------------------------------------------------------------ */
@@ -288,6 +338,13 @@ async function insertChildren(db: Db): Promise<void> {
       );
     if (error) throw error;
   }
+
+  // Wave 4 — vacation coverages and on-call assignments reference people, roles
+  // and tasks (by id arrays), all of which exist after waves 1–3.
+  await Promise.all([
+    insertAll("vacationCoverages", db.vacationCoverages),
+    insertAll("onCallAssignments", db.onCallAssignments),
+  ]);
 }
 
 /** Insert people without manager_id (self-referencing FK resolved separately). */
@@ -311,17 +368,31 @@ export async function deleteOrganization(orgId: string): Promise<void> {
 }
 
 export async function loadOrganization(orgId: string): Promise<Db> {
-  const [org, areas, processes, functions, tasks, roles, people, competencies] = await Promise.all([
-    supabase.from("organizations").select("*").eq("id", orgId).maybeSingle(),
-    supabase.from("areas").select("*").eq("organization_id", orgId),
-    supabase.from("processes").select("*").eq("organization_id", orgId),
-    supabase.from("org_functions").select("*").eq("organization_id", orgId),
-    supabase.from("tasks").select("*").eq("organization_id", orgId),
-    supabase.from("roles").select("*").eq("organization_id", orgId),
-    supabase.from("people").select("*").eq("organization_id", orgId),
-    supabase.from("competencies").select("*").eq("organization_id", orgId),
-  ]);
-  for (const [name, res] of Object.entries({ org, areas, processes, functions, tasks, roles, people, competencies })) {
+  const [org, areas, processes, functions, tasks, roles, people, competencies, vacationCoverages, onCallAssignments] =
+    await Promise.all([
+      supabase.from("organizations").select("*").eq("id", orgId).maybeSingle(),
+      supabase.from("areas").select("*").eq("organization_id", orgId),
+      supabase.from("processes").select("*").eq("organization_id", orgId),
+      supabase.from("org_functions").select("*").eq("organization_id", orgId),
+      supabase.from("tasks").select("*").eq("organization_id", orgId),
+      supabase.from("roles").select("*").eq("organization_id", orgId),
+      supabase.from("people").select("*").eq("organization_id", orgId),
+      supabase.from("competencies").select("*").eq("organization_id", orgId),
+      supabase.from("vacation_coverages").select("*").eq("organization_id", orgId),
+      supabase.from("on_call_assignments").select("*").eq("organization_id", orgId),
+    ]);
+  for (const [name, res] of Object.entries({
+    org,
+    areas,
+    processes,
+    functions,
+    tasks,
+    roles,
+    people,
+    competencies,
+    vacationCoverages,
+    onCallAssignments,
+  })) {
     if (res.error) throw res.error;
   }
   if (!org.data) throw new Error("Organization not found");
@@ -335,6 +406,8 @@ export async function loadOrganization(orgId: string): Promise<Db> {
     roles: (roles.data ?? []).map(toRole),
     people: (people.data ?? []).map(toPerson),
     competencies: (competencies.data ?? []).map(toCompetency),
+    vacationCoverages: (vacationCoverages.data ?? []).map(toVacationCoverage),
+    onCallAssignments: (onCallAssignments.data ?? []).map(toOnCallAssignment),
   };
 }
 
@@ -380,6 +453,8 @@ export async function ensureDemoOrganization(): Promise<Db | null> {
     roles: db.roles.map((e) => payloadFor("roles", e, orgId)),
     tasks: db.tasks.map((e) => payloadFor("tasks", e, orgId)),
     people: db.people.map((e) => payloadFor("people", e, orgId)),
+    vacation_coverages: db.vacationCoverages.map((e) => payloadFor("vacationCoverages", e, orgId)),
+    on_call_assignments: db.onCallAssignments.map((e) => payloadFor("onCallAssignments", e, orgId)),
   };
 
   const { data: result, error } = await supabase.rpc("bootstrap_demo_organization", {

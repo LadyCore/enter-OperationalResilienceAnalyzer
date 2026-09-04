@@ -1,0 +1,28 @@
+create table if not exists public.vacation_coverages (
+  id text primary key,
+  organization_id text not null references public.organizations (id) on delete cascade,
+  covering_person_id text not null references public.people (id) on delete cascade,
+  covered_person_id text not null references public.people (id) on delete cascade,
+  role_id text references public.roles (id) on delete set null,
+  task_ids text[] not null default '{}',
+  competency_ids text[] not null default '{}',
+  check (covering_person_id <> covered_person_id)
+);
+alter table public.vacation_coverages enable row level security;
+create policy "vacation_coverages_org_scoped" on public.vacation_coverages for all
+  using (organization_id = any(user_org_ids()))
+  with check (organization_id = any(user_org_ids()));
+
+create table if not exists public.on_call_assignments (
+  id text primary key,
+  organization_id text not null references public.organizations (id) on delete cascade,
+  person_id text not null references public.people (id) on delete cascade,
+  modality text not null default '',
+  period text not null default '',
+  task_ids text[] not null default '{}',
+  competency_ids text[] not null default '{}'
+);
+alter table public.on_call_assignments enable row level security;
+create policy "on_call_assignments_org_scoped" on public.on_call_assignments for all
+  using (organization_id = any(user_org_ids()))
+  with check (organization_id = any(user_org_ids()));

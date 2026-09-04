@@ -39,7 +39,7 @@ export function ImportOrganizationPage() {
   const [parsed, setParsed] = useState<ParsedFile | null>(null);
   const [mapping, setMapping] = useState<ColumnMapping | null>(null);
   const [normalized, setNormalized] = useState<NormalizedImport | null>(null);
-  const [resolutions, setResolutions] = useState<Record<number, string | null>>({});
+  const [resolutions, setResolutions] = useState<Record<string, string | null>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -75,8 +75,8 @@ export function ImportOrganizationPage() {
     setStep(3);
   };
 
-  const handleResolve = (sourceRow: number, personName: string | null) => {
-    const next = { ...resolutions, [sourceRow]: personName };
+  const handleResolve = (kind: "manager" | "coverage", sourceRow: number, personName: string | null) => {
+    const next = { ...resolutions, [`${kind}:${sourceRow}`]: personName };
     setResolutions(next);
     if (parsed && mapping) setNormalized(validateImport(parsed, mapping, next));
   };
@@ -285,6 +285,8 @@ export function ImportOrganizationPage() {
                 <div><p className="font-mono text-xl font-semibold tabular-nums">{nextDbPreview.functions.length}</p><p className="text-xs text-muted-foreground">Functions</p></div>
                 <div><p className="font-mono text-xl font-semibold tabular-nums">{nextDbPreview.competencies.length}</p><p className="text-xs text-muted-foreground">Competencies</p></div>
                 <div><p className="font-mono text-xl font-semibold tabular-nums">{nextDbPreview.people.filter((p) => p.managerId).length}</p><p className="text-xs text-muted-foreground">Hierarchy links</p></div>
+                <div><p className="font-mono text-xl font-semibold tabular-nums">{nextDbPreview.onCallAssignments.length}</p><p className="text-xs text-muted-foreground">On-call (guardia)</p></div>
+                <div><p className="font-mono text-xl font-semibold tabular-nums">{nextDbPreview.vacationCoverages.length}</p><p className="text-xs text-muted-foreground">Vacation coverages</p></div>
               </div>
             </div>
 

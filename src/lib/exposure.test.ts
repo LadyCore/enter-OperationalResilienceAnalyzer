@@ -7,7 +7,7 @@ import {
   SHORT_MAX_DAYS,
   PROLONGED_MAX_DAYS,
 } from "@/lib/exposure";
-import { simulateAbsence } from "@/lib/simulation";
+import { simulateAbsence, simulateScenario } from "@/lib/simulation";
 import { seedDb } from "@/data/seed";
 
 /**
@@ -42,6 +42,8 @@ const db: Db = {
     { id: "p3", name: "Tres", roleIds: ["r1"], isActive: true, competencyIds: [], taskIds: ["t_crit_covered", "t_imp"] },
   ],
   competencies: [],
+  vacationCoverages: [],
+  onCallAssignments: [],
 };
 
 describe("computeTaskExposure — scenario + duration drive exposure, never criticality/coverage", () => {
@@ -131,7 +133,7 @@ describe("buildExposureReport over a real simulation", () => {
   });
 
   it("permanent loss → sustained for every affected coverage change", () => {
-    const permanent = buildExposureReport(db, simulateAbsence(db, "p1", 1), true);
+    const permanent = buildExposureReport(db, simulateScenario(db, [{ personId: "p1", kind: "permanent" }]));
     expect(permanent.overall).toBe("sustained");
     expect(permanent.tasks.find((t) => t.taskId === "t_crit_uncovered")!.level).toBe("sustained");
     expect(permanent.tasks.find((t) => t.taskId === "t_crit_reduced")!.level).toBe("sustained");
@@ -158,8 +160,8 @@ describe("validation A/B/C — Carlos Mendes", () => {
 
   it("structural coverage is the same, but interpretation differs between scenarios", () => {
     const a = buildExposureReport(seedDb, simulateAbsence(seedDb, carlos.id, 3)); // Temporary 3d
-    const b = buildExposureReport(seedDb, simulateAbsence(seedDb, carlos.id, 62)); // Planned 62d
-    const c = buildExposureReport(seedDb, simulateAbsence(seedDb, carlos.id, 62), true); // Permanent
+    const b = buildExposureReport(seedDb, simulateScenario(seedDb, [{ personId: carlos.id, kind: "planned", days: 62 }])); // Planned 62d
+    const c = buildExposureReport(seedDb, simulateScenario(seedDb, [{ personId: carlos.id, kind: "permanent" }])); // Permanent
 
     const aTask = a.tasks.find((t) => t.taskId === triage.id)!;
     const bTask = b.tasks.find((t) => t.taskId === triage.id)!;
@@ -183,5 +185,28 @@ describe("validation A/B/C — Carlos Mendes", () => {
 
     const titles = new Set([aTask.description.title, bTask.description.title, cTask.description.title]);
     expect(titles.size).toBe(3);
+  });
+});
+
+describe("mixed scenarios classify exposure per task by its governing absences", () => {
+  it("a 10-day vacation and a permanent loss coexist: permanent only marks its own tasks", () => {
+    // Diana owns t_quote alone; Franco owns t_filings alone. One planned 10-day
+    // absence plus one permanent loss in the SAME scenario.
+    const result = simulateScenario(seedDb, [
+      { personId: "p_diana", kind: "planned", days: 10 },
+      { personId: "p_franco", kind: "permanent" },
+    ]);
+    const report = buildExposureReport(seedDb, result);
+
+    // t_quote governed by Diana's 10-day absence → prolonged, not sustained.
+    const quote = report.tasks.find((t) => t.taskId === "t_quote")!;
+    expect(quote.impact).toBe("uncovered");
+    expect(quote.days).toBe(10);
+    expect(quote.level).toBe("prolonged");
+
+    // t_filings governed by Franco's permanent loss → sustained.
+    const filings = report.tasks.find((t) => t.taskId === "t_filings")!;
+    expect(filings.impact).toBe("uncovered");
+    expect(filings.level).toBe("sustained");
   });
 });

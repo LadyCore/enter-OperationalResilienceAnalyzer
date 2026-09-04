@@ -56,6 +56,7 @@ export function PersonFormDialog({ open, onOpenChange, person }: PersonFormDialo
 
   const roleOptions = db.roles.map((r) => ({ value: r.id, label: r.name }));
   const areaOptions = db.areas.map((a) => ({ value: a.id, label: a.name }));
+  const competencyOptions = db.competencies.map((c) => ({ value: c.id, label: c.name }));
   const managerOptions = db.people
     .filter((p) => p.id !== person?.id)
     .map((p) => ({ value: p.id, label: p.name }));

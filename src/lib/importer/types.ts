@@ -15,7 +15,16 @@ export type ImportField =
   | "competencia"
   | "documentada"
   | "activo"
-  | "criticidad";
+  | "criticidad"
+  | "guardiaActiva"
+  | "guardiaModalidad"
+  | "guardiaPeriodo"
+  | "guardiaTareas"
+  | "guardiaCompetencias"
+  | "coverageObjetivo"
+  | "coverageRol"
+  | "coverageTareas"
+  | "coverageCompetencias";
 
 export const IMPORT_FIELDS: ImportField[] = [
   "persona",
@@ -32,6 +41,15 @@ export const IMPORT_FIELDS: ImportField[] = [
   "documentada",
   "activo",
   "criticidad",
+  "guardiaActiva",
+  "guardiaModalidad",
+  "guardiaPeriodo",
+  "guardiaTareas",
+  "guardiaCompetencias",
+  "coverageObjetivo",
+  "coverageRol",
+  "coverageTareas",
+  "coverageCompetencias",
 ];
 
 export const IMPORT_FIELD_LABELS: Record<ImportField, string> = {
@@ -49,6 +67,15 @@ export const IMPORT_FIELD_LABELS: Record<ImportField, string> = {
   documentada: "Documented",
   activo: "Active",
   criticidad: "Criticality",
+  guardiaActiva: "On-call (guardia) — has passive on-call?",
+  guardiaModalidad: "On-call modality (free text: H24, Shifts…)",
+  guardiaPeriodo: "On-call shift / period (free text)",
+  guardiaTareas: "On-call capabilities (task names, ;)",
+  guardiaCompetencias: "On-call enabling competencies (;)",
+  coverageObjetivo: "Covers vacations of (Legajo/name of the absent person)",
+  coverageRol: "Covered role (optional)",
+  coverageTareas: "Tasks covered during the absence (;)",
+  coverageCompetencias: "Competencies enabling the coverage (;)",
 };
 
 export type ColumnMapping = Record<ImportField, string | null>;
@@ -69,6 +96,15 @@ export function emptyMapping(): ColumnMapping {
     documentada: null,
     activo: null,
     criticidad: null,
+    guardiaActiva: null,
+    guardiaModalidad: null,
+    guardiaPeriodo: null,
+    guardiaTareas: null,
+    guardiaCompetencias: null,
+    coverageObjetivo: null,
+    coverageRol: null,
+    coverageTareas: null,
+    coverageCompetencias: null,
   };
 }
 
@@ -86,11 +122,13 @@ export interface ImportIssue {
   row?: number;
 }
 
-/** An ambiguous manager reference that the user must resolve before importing. */
-export interface AmbiguousManagerRef {
+/** An ambiguous person reference that the user must resolve before importing. */
+export interface AmbiguousPersonRef {
   sourceRow: number;
+  /** "manager" when the row's manager is ambiguous, "coverage" for the covered person. */
+  kind: "manager" | "coverage";
   personName: string;
-  managerName: string;
+  refName: string;
   candidates: string[];
   resolvedTo: string | null;
 }
@@ -106,6 +144,8 @@ export interface ValidationSummary {
   tasks: number;
   competencies: number;
   hierarchyRelations: number;
+  onCallAssignments: number;
+  vacationCoverages: number;
   incompleteRows: number;
   possibleDuplicates: number;
   missingReferences: number;
@@ -113,7 +153,7 @@ export interface ValidationSummary {
   unmappedColumns: string[];
   unusableValues: string[];
   issues: ImportIssue[];
-  ambiguousManagers: AmbiguousManagerRef[];
+  ambiguousPersons: AmbiguousPersonRef[];
   /** True when error-level issues remain and the import must not be confirmed. */
   blocking: boolean;
 }
@@ -139,6 +179,26 @@ export interface NormalizedRow {
   managerResolved?: string;
   /** Identity key of the resolved manager (id:legajo / name:name), when known. */
   managerResolvedKey?: string;
+  /** Optional passive on-call (guardia) data carried by this row. */
+  guardia?: {
+    hasGuardia?: boolean;
+    modality?: string;
+    period?: string;
+    tareas: string[];
+    competencias: string[];
+  };
+  /** Optional vacation-coverage data: this person (B) covers the referenced person (A). */
+  coverage?: {
+    /** Legajo or name of the covered person (A). */
+    objetivo?: string;
+    rol?: string;
+    tareas: string[];
+    competencias: string[];
+    /** Resolved covered person name (by id, unique name, or user override). */
+    objetivoResolved?: string;
+    /** Identity key of the resolved covered person, when known. */
+    objetivoResolvedKey?: string;
+  };
 }
 
 export interface NormalizedImport {

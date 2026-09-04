@@ -1,4 +1,4 @@
-import type { Area, Competency, Criticality, Db, OrgFunction, Person, Process, Role, Task } from "@/types";
+import type { Area, Competency, Criticality, Db, OnCallAssignment, OrgFunction, Person, Process, Role, Task, VacationCoverage } from "@/types";
 import { uid } from "@/lib/id";
 import type { NormalizedImport } from "./types";
 
@@ -262,6 +262,91 @@ export function buildOrganization(
   const functions = [...functionByKey.values()];
   if (fallbackFunction) functions.push(fallbackFunction);
 
+  /*
+   * Third pass: build the optional on-call (guardia) and vacation-coverage
+   * collections. They are resolved by name against entities created above:
+   *   - a row with guardia data → one OnCallAssignment for that person
+   *   - a row with coverage data → one VacationCoverage (this person covers A)
+   * People, roles, tasks and competencies are matched by identity key/name.
+   */
+  const tasksByName = new Map<string, Task>();
+  for (const t of taskByKey.values()) {
+    const key = normalize(t.name);
+    if (!tasksByName.has(key)) tasksByName.set(key, t);
+  }
+  const rolesByName = new Map<string, Role>();
+  for (const r of roles) {
+    const key = normalize(r.name);
+    if (!rolesByName.has(key)) rolesByName.set(key, r);
+  }
+  const competenciesByName = new Map<string, Competency>();
+  for (const c of competencyByName.values()) {
+    const key = normalize(c.name);
+    if (!competenciesByName.has(key)) competenciesByName.set(key, c);
+  }
+
+  const onCallAssignments: OnCallAssignment[] = [];
+  const vacationCoverages: VacationCoverage[] = [];
+  const seenOnCall = new Set<string>();
+  const seenCoverage = new Set<string>();
+
+  for (const row of normalized.rows) {
+    const personKeyForRow = personKey(row.employeeId, row.persona);
+    const person = peopleByKey.get(personKeyForRow);
+
+    if (row.guardia && person) {
+      const taskIds = row.guardia.tareas
+        .map((n) => tasksByName.get(normalize(n)))
+        .filter((t): t is Task => Boolean(t))
+        .map((t) => t.id);
+      const competencyIds = row.guardia.competencias
+        .map((n) => competenciesByName.get(normalize(n)))
+        .filter((c): c is Competency => Boolean(c))
+        .map((c) => c.id);
+      const onCallSig = [personKeyForRow, normalize(row.guardia.modality ?? ""), normalize(row.guardia.period ?? ""), taskIds.slice().sort().join(",")].join("|");
+      if (!seenOnCall.has(onCallSig)) {
+        seenOnCall.add(onCallSig);
+        onCallAssignments.push({
+          id: uid("oc"),
+          personId: person.id,
+          modality: row.guardia.modality ?? "",
+          period: row.guardia.period ?? "",
+          taskIds,
+          competencyIds,
+        });
+      }
+    }
+
+    if (row.coverage && row.coverage.objetivoResolvedKey && person) {
+      const covered = peopleByKey.get(row.coverage.objetivoResolvedKey);
+      if (covered) {
+        const taskIds = row.coverage.tareas
+          .map((n) => tasksByName.get(normalize(n)))
+          .filter((t): t is Task => Boolean(t))
+          .map((t) => t.id);
+        const competencyIds = row.coverage.competencias
+          .map((n) => competenciesByName.get(normalize(n)))
+          .filter((c): c is Competency => Boolean(c))
+          .map((c) => c.id);
+        const role = row.coverage.rol
+          ? rolesByName.get(normalize(row.coverage.rol))
+          : undefined;
+        const covSig = [personKeyForRow, row.coverage.objetivoResolvedKey, role?.id ?? "", taskIds.slice().sort().join(",")].join("|");
+        if (!seenCoverage.has(covSig)) {
+          seenCoverage.add(covSig);
+          vacationCoverages.push({
+            id: uid("vc"),
+            coveringPersonId: person.id,
+            coveredPersonId: covered.id,
+            roleId: role?.id,
+            taskIds,
+            competencyIds,
+          });
+        }
+      }
+    }
+  }
+
   return {
     organization,
     areas: [...areaByName.values()],
@@ -271,5 +356,7 @@ export function buildOrganization(
     roles,
     people,
     competencies: [...competencyByName.values()],
+    vacationCoverages,
+    onCallAssignments,
   };
 }

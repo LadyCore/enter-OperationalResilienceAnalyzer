@@ -5,8 +5,8 @@ export function SimulationPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Absence simulation"
-        description="Select a person and simulate their temporary absence. ORA recalculates coverage with that person unavailable and shows what changes."
+        title="Scenario simulation"
+        description="Select one or more people who become unavailable at the same time — vacations, medical leaves, simultaneous losses or mixed scenarios. ORA recalculates the coverage of the whole organization as a single joint state."
       />
       <SimulationPanel />
     </div>

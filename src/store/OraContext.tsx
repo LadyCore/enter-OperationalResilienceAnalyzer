@@ -40,6 +40,8 @@ const EMPTY_DB: Db = {
   roles: [],
   people: [],
   competencies: [],
+  vacationCoverages: [],
+  onCallAssignments: [],
 };
 
 interface OraApi {

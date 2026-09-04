@@ -77,6 +77,44 @@ export interface Competency {
   description: string;
 }
 
+/**
+ * Vacation coverage: person B (coveringPersonId) can temporarily perform
+ * concrete tasks of person A (coveredPersonId) while A is on a planned
+ * vacation. It is a relation between two people, never a change to either
+ * person's ordinary profile, and it only applies to planned-absence
+ * simulations whose category is "Vacation".
+ */
+export interface VacationCoverage {
+  id: string;
+  coveringPersonId: string;
+  coveredPersonId: string;
+  /** Role of the covered dependency that B can cover (optional). */
+  roleId?: string;
+  /** Concrete tasks of A that B can perform during the absence. */
+  taskIds: string[];
+  /** Competencies that enable B for this coverage. */
+  competencyIds: string[];
+}
+
+/**
+ * Passive on-call (guardia pasiva): permanent operational availability of a
+ * person outside ordinary hours. It is an independent permanent capability —
+ * it never replaces anyone and never feeds vacation-coverage simulations or
+ * the base holdersOf/capablePeople analysis.
+ */
+export interface OnCallAssignment {
+  id: string;
+  personId: string;
+  /** Free text coverage scheme: "H24", "Shifts", an organization's own scheme. */
+  modality: string;
+  /** Free text shift/period: "Night", "Weekend", "Semana 2", … */
+  period: string;
+  /** Functions/capabilities covered while on call, as concrete tasks. */
+  taskIds: string[];
+  /** Competencies that enable the person for this on-call function. */
+  competencyIds: string[];
+}
+
 export interface Db {
   organization: Organization;
   areas: Area[];
@@ -86,6 +124,8 @@ export interface Db {
   roles: Role[];
   people: Person[];
   competencies: Competency[];
+  vacationCoverages: VacationCoverage[];
+  onCallAssignments: OnCallAssignment[];
 }
 
 export type CollectionKey =
@@ -95,6 +135,17 @@ export type CollectionKey =
   | "roles"
   | "people"
   | "competencies"
-  | "areas";
+  | "areas"
+  | "vacationCoverages"
+  | "onCallAssignments";
 
-export type Entity = Process | OrgFunction | Task | Role | Person | Competency | Area;
+export type Entity =
+  | Process
+  | OrgFunction
+  | Task
+  | Role
+  | Person
+  | Competency
+  | Area
+  | VacationCoverage
+  | OnCallAssignment;

@@ -3769,6 +3769,49 @@ export type Database = {
           },
         ]
       }
+      on_call_assignments: {
+        Row: {
+          competency_ids: string[]
+          id: string
+          modality: string
+          organization_id: string
+          period: string
+          person_id: string
+          task_ids: string[]
+        }
+        Insert: {
+          competency_ids?: string[]
+          id: string
+          modality?: string
+          organization_id: string
+          period?: string
+          person_id: string
+          task_ids?: string[]
+        }
+        Update: {
+          competency_ids?: string[]
+          id?: string
+          modality?: string
+          organization_id?: string
+          period?: string
+          person_id?: string
+          task_ids?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "on_call_assignments_organization_id_fkey"
+            columns: ["organization_id"]
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "on_call_assignments_person_id_fkey"
+            columns: ["person_id"]
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       org_functions: {
         Row: {
           criticality: string
@@ -4043,6 +4086,61 @@ export type Database = {
             foreignKeyName: "tasks_organization_id_fkey"
             columns: ["organization_id"]
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vacation_coverages: {
+        Row: {
+          competency_ids: string[]
+          covered_person_id: string
+          covering_person_id: string
+          id: string
+          organization_id: string
+          role_id: string | null
+          task_ids: string[]
+        }
+        Insert: {
+          competency_ids?: string[]
+          covered_person_id: string
+          covering_person_id: string
+          id: string
+          organization_id: string
+          role_id?: string | null
+          task_ids?: string[]
+        }
+        Update: {
+          competency_ids?: string[]
+          covered_person_id?: string
+          covering_person_id?: string
+          id?: string
+          organization_id?: string
+          role_id?: string | null
+          task_ids?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vacation_coverages_covered_person_id_fkey"
+            columns: ["covered_person_id"]
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vacation_coverages_covering_person_id_fkey"
+            columns: ["covering_person_id"]
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vacation_coverages_organization_id_fkey"
+            columns: ["organization_id"]
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vacation_coverages_role_id_fkey"
+            columns: ["role_id"]
+            referencedRelation: "roles"
             referencedColumns: ["id"]
           },
         ]

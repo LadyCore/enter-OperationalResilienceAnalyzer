@@ -28,6 +28,15 @@ const KEYWORDS: Partial<Record<ImportField, string[]>> = {
   documentada: ["documentada", "documentado", "documented", "tiene documentacion", "documentacion", "doc"],
   activo: ["activo", "active", "estado", "alta", "baja", "status"],
   criticidad: ["criticidad", "criticality", "critico", "critical", "prioridad", "criticidad tarea"],
+  guardiaActiva: ["guardia pasiva", "guardia activa", "on call", "on-call", "guardia", "disponibilidad guardia", "tiene guardia"],
+  guardiaModalidad: ["modalidad guardia", "modalidad de guardia", "guardia modalidad", "cobertura guardia", "modalidad on call", "on call modality"],
+  guardiaPeriodo: ["turno guardia", "periodo guardia", "período guardia", "periodo de guardia", "turno de guardia", "guardia periodo", "guardia turno", "horario guardia"],
+  guardiaTareas: ["tareas de guardia", "capacidades en guardia", "funcion de guardia", "funciones de guardia", "guardia tareas", "on call tasks", "tareas on call"],
+  guardiaCompetencias: ["competencias de guardia", "competencias guardia", "guardia competencias", "on call skills", "competencias on call"],
+  coverageObjetivo: ["cubre ausencias de", "cubre a", "cobertura ausencias", "cubre vacaciones de", "reemplaza en vacaciones a", "cubre a (legajo", "cubre a persona", "backup de", "cubridor de"],
+  coverageRol: ["rol que cubre", "rol cubierto", "puesto que cubre", "cargo que cubre", "funcion que cubre", "coverage role"],
+  coverageTareas: ["tareas que cubre", "tareas de cobertura", "tareas cubiertas", "cobertura tareas", "tasks covered", "tasks que cubre"],
+  coverageCompetencias: ["competencias de cobertura", "competencias cobertura", "competencias que habilitan la cobertura", "coverage skills", "competencias habilitantes"],
 };
 
 export function suggestMapping(columns: string[]): ColumnMapping {
@@ -46,6 +55,15 @@ export function suggestMapping(columns: string[]): ColumnMapping {
     documentada: null,
     activo: null,
     criticidad: null,
+    guardiaActiva: null,
+    guardiaModalidad: null,
+    guardiaPeriodo: null,
+    guardiaTareas: null,
+    guardiaCompetencias: null,
+    coverageObjetivo: null,
+    coverageRol: null,
+    coverageTareas: null,
+    coverageCompetencias: null,
   };
 
   const used = new Set<string>();

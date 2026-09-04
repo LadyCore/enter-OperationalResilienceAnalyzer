@@ -26,6 +26,15 @@ const ORGANIZACION_HEADERS = [
   "Competencias",
   "Documentada",
   "Activo",
+  "Guardia pasiva",
+  "Modalidad guardia",
+  "Turno/Período guardia",
+  "Tareas de guardia",
+  "Competencias de guardia",
+  "Cubre ausencias de",
+  "Rol que cubre",
+  "Tareas que cubre",
+  "Competencias de cobertura",
 ] as const;
 
 /** Fictional, clearly-marked example rows — never real data. */
@@ -44,6 +53,15 @@ const EXAMPLE_ROWS: string[][] = [
     "Análisis; Comunicación",
     "Sí",
     "Sí",
+    "Sí",
+    "H24",
+    "H24",
+    "Controlar operaciones",
+    "Análisis",
+    "",
+    "",
+    "",
+    "",
   ],
   [
     "EJEMPLO: Juan Pérez",
@@ -59,6 +77,15 @@ const EXAMPLE_ROWS: string[][] = [
     "Organización; Excel",
     "No",
     "Sí",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "EMP-0001",
+    "Jefe de Área",
+    "Planificación operativa",
+    "Comunicación",
   ],
 ];
 
@@ -78,6 +105,15 @@ const INSTRUCCIONES_ROWS: string[][] = [
   ["Competencias", "Competencias de la persona. Varios valores separados por ;", "No", "Análisis; Comunicación"],
   ["Documentada", "¿La tarea está documentada? Valores admitidos: Sí / No.", "No", "Sí"],
   ["Activo", "¿La persona está activa? Valores admitidos: Sí / No.", "No", "Sí"],
+  ["Guardia pasiva", "¿La persona está en guardia pasiva (on-call)? Vacío = sin guardia. Campos opcionales.", "No", "Sí"],
+  ["Modalidad guardia", "Esquema de cobertura, texto libre: H24, turnos u otro propio.", "No", "H24"],
+  ["Turno/Período guardia", "Turno o período, texto libre (no se impone una estructura fija).", "No", "Noche"],
+  ["Tareas de guardia", "Funciones/capacidades cubiertas en guardia (tareas existentes, ;).", "No", "Controlar operaciones"],
+  ["Competencias de guardia", "Competencias que habilitan la guardia (;).", "No", "Análisis"],
+  ["Cubre ausencias de", "La persona de esta fila cubre vacaciones de la persona referida (Legajo o nombre).", "No", "EMP-0001"],
+  ["Rol que cubre", "Rol/puesto cubierto durante la ausencia (opcional).", "No", "Jefe de Área"],
+  ["Tareas que cubre", "Tareas concretas que puede realizar durante la ausencia (;).", "No", "Planificación operativa"],
+  ["Competencias de cobertura", "Competencias que habilitan esa cobertura (;).", "No", "Comunicación"],
 ];
 
 const XLSX_MIME =
@@ -91,7 +127,7 @@ const EXAMPLE_FONT = { italic: true, color: { rgb: "FF7F6000" } };
 const HEADER_ALIGN = { horizontal: "center" as const, vertical: "center" as const, wrapText: true };
 const WRAP_ALIGN = { vertical: "top" as const, wrapText: true };
 
-const COL_WIDTHS = [20, 12, 16, 18, 14, 16, 12, 22, 24, 34, 30, 12, 10];
+const COL_WIDTHS = [20, 12, 16, 18, 14, 16, 12, 22, 24, 34, 30, 12, 10, 12, 14, 16, 24, 24, 18, 16, 26, 26];
 
 function cellStyle(opts: {
   fill?: string;
