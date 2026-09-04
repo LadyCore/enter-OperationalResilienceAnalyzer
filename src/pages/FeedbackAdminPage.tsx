@@ -34,7 +34,9 @@ import { FEEDBACK_MODULES } from "@/lib/feedback/context";
 import {
   FEEDBACK_STATUSES,
   listFeedback,
+  resolvePageAfterRefresh,
   updateFeedbackStatus,
+  type FeedbackPage,
   type FeedbackStatus,
 } from "@/lib/feedback/admin";
 import { FeedbackDetailDialog } from "@/components/feedback/FeedbackDetailDialog";
@@ -79,7 +81,7 @@ export function FeedbackAdminPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (): Promise<FeedbackPage | null> => {
     setLoading(true);
     setError(null);
     try {
@@ -98,9 +100,11 @@ export function FeedbackAdminPage() {
       setRows(result.rows);
       setTotal(result.total);
       setEmails(result.emails);
+      return result;
     } catch (err) {
       console.error("Failed to load feedback:", err);
       setError("Could not load the feedback reports.");
+      return null;
     } finally {
       setLoading(false);
     }
@@ -122,8 +126,15 @@ export function FeedbackAdminPage() {
   const handleStatusChange = async (id: string, next: FeedbackStatus) => {
     try {
       await updateFeedbackStatus(id, next);
-      setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status: next } : r)));
       toast.success("Feedback status updated");
+      // Refresh the list after a successful UPDATE so rows that no longer match
+      // the active filters disappear immediately, while keeping the current
+      // page when it remains valid (stepping back only if it became empty).
+      const result = await load();
+      if (result) {
+        const nextPage = resolvePageAfterRefresh(page, result.rows.length, result.total, PAGE_SIZE);
+        if (nextPage !== page) setPage(nextPage);
+      }
     } catch (err) {
       console.error(err);
       toast.error("Could not update the feedback status.");
