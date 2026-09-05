@@ -134,6 +134,38 @@ export async function updateFeedbackStatus(id: string, status: FeedbackStatus): 
   if (error) throw error;
 }
 
+export interface ResolveFeedbackResult {
+  ok: boolean;
+  alreadyResolved?: boolean;
+  emailState?: "sent" | "failed" | "none" | "skipped";
+  screenshotsRemoved?: number;
+}
+
+/**
+ * Owner-only resolution: marks the report `resolved`, deletes its screenshots
+ * from the private bucket and clears `context.screenshots` server-side, then
+ * sends a best-effort notification email when the report has a reporter email.
+ * The backend function enforces is_owner() and RLS; this client call is only a
+ * thin wrapper.
+ */
+export async function resolveFeedback(reportId: string): Promise<ResolveFeedbackResult> {
+  const { data, error } = await supabase.functions.invoke("resolve-feedback", {
+    body: { reportId },
+  });
+  if (error) {
+    let message = "Could not resolve this feedback.";
+    try {
+      const ctx = error.context as { json?: () => Promise<{ error?: string }> } | undefined;
+      const body = await ctx?.json?.();
+      if (body?.error) message = body.error;
+    } catch {
+      // fall back to the generic message
+    }
+    throw new Error(message);
+  }
+  return (data ?? {}) as ResolveFeedbackResult;
+}
+
 /** Parse the stored JSON context into a typed shape for the detail view. */
 export function parseFeedbackContext(context: FeedbackRow["context"]): Partial<FeedbackTechnicalContext> {
   if (!context || typeof context !== "object" || Array.isArray(context)) return {};

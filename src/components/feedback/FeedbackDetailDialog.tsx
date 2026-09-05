@@ -7,7 +7,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -15,7 +26,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2 } from "lucide-react";
+import { CheckCircle2, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import type { Database } from "@/integrations/supabase/types";
 import { FEEDBACK_KINDS } from "@/lib/feedback/types";
 import { feedbackKindLabelKeys, feedbackStatusLabelKeys } from "./feedbackI18n";
@@ -26,7 +38,9 @@ import {
   parseFeedbackContext,
   parseFeedbackReporterEmail,
   parseFeedbackScreenshots,
+  resolveFeedback,
   type FeedbackStatus,
+  type ResolveFeedbackResult,
 } from "@/lib/feedback/admin";
 
 type FeedbackRow = Database["public"]["Tables"]["feedback_reports"]["Row"];
@@ -37,6 +51,8 @@ interface FeedbackDetailDialogProps {
   email?: string;
   onClose: () => void;
   onStatusChange: (next: FeedbackStatus) => void;
+  /** Called after a successful resolution so the parent can refresh and inform. */
+  onResolved?: (result: ResolveFeedbackResult) => void;
 }
 
 function InfoRow({ label, value }: { label: string; value: string }) {
@@ -53,6 +69,7 @@ export function FeedbackDetailDialog({
   email,
   onClose,
   onStatusChange,
+  onResolved,
 }: FeedbackDetailDialogProps) {
   const { t } = useTranslation();
   const ctx = feedback ? parseFeedbackContext(feedback.context) : {};
@@ -60,6 +77,8 @@ export function FeedbackDetailDialog({
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
   const [loadingShots, setLoadingShots] = useState(false);
   const [shotError, setShotError] = useState(false);
+  const [confirmResolve, setConfirmResolve] = useState(false);
+  const [resolving, setResolving] = useState(false);
 
   // Resolve private-bucket screenshots to temporary signed URLs every time the
   // dialog opens with a report (legacy inline data: entries need no resolution).
@@ -92,10 +111,27 @@ export function FeedbackDetailDialog({
   const kindEntry = FEEDBACK_KINDS.find((k) => k.value === feedback.kind);
   const kindLabel = kindEntry ? t(feedbackKindLabelKeys[kindEntry.value]) : feedback.kind;
   const reporterEmail = email ?? parseFeedbackReporterEmail(feedback.context) ?? undefined;
+  const resolvedAt = typeof ctx.resolvedAt === "string" && ctx.resolvedAt ? ctx.resolvedAt : null;
+  const isResolved = feedback.status === "resolved" || Boolean(resolvedAt);
 
   const resolveShotSrc = (shot: string): string | null => {
     if (isLegacyDataUrl(shot)) return shot;
     return signedUrls[shot] ?? null;
+  };
+
+  const handleResolve = async () => {
+    if (!feedback) return;
+    setResolving(true);
+    try {
+      const result = await resolveFeedback(feedback.id);
+      setConfirmResolve(false);
+      onResolved?.(result);
+    } catch (err) {
+      setConfirmResolve(false);
+      toast.error(err instanceof Error ? err.message : t("feedback.resolve.failed"));
+    } finally {
+      setResolving(false);
+    }
   };
 
   return (
@@ -141,6 +177,21 @@ export function FeedbackDetailDialog({
             </div>
           </div>
 
+          {/* Resolution record — kept with the report after resolving */}
+          {isResolved && (
+            <div className="space-y-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                {t("feedback.resolve.title")}
+              </p>
+              {resolvedAt && (
+                <InfoRow
+                  label={t("feedback.resolve.resolvedAt")}
+                  value={new Date(resolvedAt).toLocaleString()}
+                />
+              )}
+            </div>
+          )}
+
           {/* Description */}
           <div className="space-y-1.5">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
@@ -156,7 +207,12 @@ export function FeedbackDetailDialog({
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
               {t("feedback.screenshotsLabel")} ({screenshots.length})
             </p>
-            {screenshots.length === 0 ? (
+            {isResolved ? (
+              <p className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                {t("feedback.resolve.screenshotsDeleted")}
+              </p>
+            ) : screenshots.length === 0 ? (
               <p className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
                 {t("feedback.noScreenshots")}
               </p>
@@ -286,7 +342,37 @@ export function FeedbackDetailDialog({
             )}
           </div>
         </div>
+
+        {!isResolved && (
+          <div className="flex justify-end border-t pt-4">
+            <Button
+              variant="outline"
+              onClick={() => setConfirmResolve(true)}
+              disabled={resolving}
+            >
+              {resolving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4 text-emerald-600" />}
+              {t("feedback.resolve.action")}
+            </Button>
+          </div>
+        )}
       </DialogContent>
+
+      <AlertDialog open={confirmResolve} onOpenChange={setConfirmResolve}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("feedback.resolve.confirmTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("feedback.resolve.confirmDescription")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={resolving}>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void handleResolve()} disabled={resolving}>
+              {t("feedback.resolve.action")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }

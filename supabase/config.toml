@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.ora-assistant]
 verify_jwt = true
+
+[functions.resolve-feedback]
+verify_jwt = true

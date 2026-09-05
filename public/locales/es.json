@@ -875,5 +875,17 @@
   "assistant.thinking": "ORA está preparando la respuesta…",
   "assistant.title": "Asistente de ORA",
   "assistant.welcomeBody": "Puedo ayudarte a cargar tus datos desde el Excel oficial, a navegar ORA y a entender los resultados reales de tu organización. Mis respuestas se fundamentan en los datos y reglas reales de ORA.",
-  "assistant.welcomeTitle": "¡Hola! Soy el asistente de ORA."
+  "assistant.welcomeTitle": "¡Hola! Soy el asistente de ORA.",
+  "feedback.resolve.action": "Marcar como resuelto",
+  "feedback.resolve.alreadyResolved": "Este comentario ya estaba resuelto.",
+  "feedback.resolve.confirmDescription": "El informe se marcará como resuelto y sus capturas se eliminarán definitivamente. El texto del informe se conserva como registro.",
+  "feedback.resolve.confirmTitle": "¿Resolver este comentario?",
+  "feedback.resolve.failed": "No se pudo resolver este comentario.",
+  "feedback.resolve.resolvedAt": "Resuelto el",
+  "feedback.resolve.screenshotsDeleted": "Las capturas se eliminaron al resolverse este informe.",
+  "feedback.resolve.success": "Comentario resuelto y capturas eliminadas.",
+  "feedback.resolve.successEmail": "Comentario resuelto y capturas eliminadas. Se notificó al reportador por correo.",
+  "feedback.resolve.successEmailFailed": "Comentario resuelto y capturas eliminadas, pero no se pudo enviar el correo de notificación.",
+  "feedback.resolve.successNoEmail": "Comentario resuelto y capturas eliminadas. No se envió correo porque el informe no tenía dirección de email.",
+  "feedback.resolve.title": "Resolución"
 }

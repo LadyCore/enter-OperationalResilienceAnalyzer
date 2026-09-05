@@ -41,6 +41,7 @@ import {
   updateFeedbackStatus,
   type FeedbackPage,
   type FeedbackStatus,
+  type ResolveFeedbackResult,
 } from "@/lib/feedback/admin";
 import { FeedbackDetailDialog } from "@/components/feedback/FeedbackDetailDialog";
 import {
@@ -147,8 +148,26 @@ export function FeedbackAdminPage() {
     }
   };
 
-  const handleMigrate = async () => {
-    setMigrating(true);
+  const handleResolved = async (result: ResolveFeedbackResult) => {
+    // Refresh the list so the row immediately shows status "resolved" and the
+    // detail dialog re-renders with the cleared screenshots / resolution data.
+    await load();
+    if (result.alreadyResolved) {
+      toast.success(t("feedback.resolve.alreadyResolved"));
+      return;
+    }
+    if (result.emailState === "sent") {
+      toast.success(t("feedback.resolve.successEmail"));
+    } else if (result.emailState === "none") {
+      toast.success(t("feedback.resolve.successNoEmail"));
+    } else if (result.emailState === "failed") {
+      toast.success(t("feedback.resolve.successEmailFailed"));
+    } else {
+      toast.success(t("feedback.resolve.success"));
+    }
+  };
+
+  const handleMigrate = async () => {    setMigrating(true);
     try {
       const result = await migrateFeedbackScreenshots();
       toast.success(
@@ -411,6 +430,7 @@ export function FeedbackAdminPage() {
         onStatusChange={(next) => {
           if (selected) void handleStatusChange(selected.id, next);
         }}
+        onResolved={(result) => void handleResolved(result)}
       />
     </div>
   );

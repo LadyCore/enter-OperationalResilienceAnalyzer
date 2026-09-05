@@ -875,5 +875,17 @@
   "assistant.thinking": "ORA is preparing an answer…",
   "assistant.title": "ORA Assistant",
   "assistant.welcomeBody": "I can help you load your data from the official Excel, navigate ORA and understand the real results of your organization. My answers are grounded in ORA's actual data and rules.",
-  "assistant.welcomeTitle": "Hi! I am ORA's assistant."
+  "assistant.welcomeTitle": "Hi! I am ORA's assistant.",
+  "feedback.resolve.action": "Mark as resolved",
+  "feedback.resolve.alreadyResolved": "This feedback was already resolved.",
+  "feedback.resolve.confirmDescription": "The report will be marked as resolved and its screenshots will be permanently deleted. The report text is kept as a record.",
+  "feedback.resolve.confirmTitle": "Resolve this feedback?",
+  "feedback.resolve.failed": "Could not resolve this feedback.",
+  "feedback.resolve.resolvedAt": "Resolved on",
+  "feedback.resolve.screenshotsDeleted": "Screenshots were deleted when this report was resolved.",
+  "feedback.resolve.success": "Feedback resolved and screenshots deleted.",
+  "feedback.resolve.successEmail": "Feedback resolved and screenshots deleted. The reporter was notified by email.",
+  "feedback.resolve.successEmailFailed": "Feedback resolved and screenshots deleted, but the notification email could not be sent.",
+  "feedback.resolve.successNoEmail": "Feedback resolved and screenshots deleted. No email was sent because the report had no email address.",
+  "feedback.resolve.title": "Resolution"
 }
