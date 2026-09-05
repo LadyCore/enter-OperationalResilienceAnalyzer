@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { CheckCircle2, Loader2, MessageSquareText, Send } from "lucide-react";
+import { useRef, useState } from "react";
+import { Camera, CheckCircle2, ImagePlus, Loader2, MessageSquareText, Send, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,6 +14,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { submitFeedback } from "@/lib/feedback/api";
 import { FEEDBACK_KINDS, type FeedbackContext, type FeedbackKind, type FeedbackTechnicalContext } from "@/lib/feedback/types";
+import {
+  fileToCompressedDataUrl,
+  MAX_FEEDBACK_SCREENSHOTS,
+} from "@/lib/feedback/screenshots";
 import { cn } from "@/lib/utils";
 
 interface FeedbackDialogProps {
@@ -30,20 +34,28 @@ type Status = "idle" | "sending" | "sent";
  * the detected functional context (and technical context stored silently) and
  * submits without leaving the current screen. "Feedback general" avoids forcing
  * a module association. No personal data is captured automatically.
+ *
+ * H-010: at least one and at most three screenshots are required per report.
+ * The rules are enforced both here (UI) and again at the submission entry point
+ * (api.ts), so a report without a capture can never be persisted.
  */
 export function FeedbackDialog({ open, onOpenChange, context, technical }: FeedbackDialogProps) {
   const [kind, setKind] = useState<FeedbackKind>("not_working");
   const [description, setDescription] = useState("");
   const [isGeneral, setIsGeneral] = useState(false);
+  const [screenshots, setScreenshots] = useState<string[]>([]);
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const canSubmit = description.trim().length > 0 && status !== "sending";
+  const atMaxScreenshots = screenshots.length >= MAX_FEEDBACK_SCREENSHOTS;
 
   const reset = () => {
     setKind("not_working");
     setDescription("");
     setIsGeneral(false);
+    setScreenshots([]);
     setStatus("idle");
     setError(null);
   };
@@ -54,8 +66,41 @@ export function FeedbackDialog({ open, onOpenChange, context, technical }: Feedb
     if (!next) reset();
   };
 
+  const addScreenshots = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setError(null);
+    // Reject any attempt to exceed the maximum of three captures.
+    if (atMaxScreenshots) {
+      toast.error(`A maximum of ${MAX_FEEDBACK_SCREENSHOTS} screenshots is allowed per report.`);
+      return;
+    }
+    const remaining = MAX_FEEDBACK_SCREENSHOTS - screenshots.length;
+    const selected = Array.from(files).slice(0, remaining);
+    if (files.length > remaining) {
+      toast.error(`A maximum of ${MAX_FEEDBACK_SCREENSHOTS} screenshots is allowed per report.`);
+    }
+    try {
+      const converted = await Promise.all(selected.map((f) => fileToCompressedDataUrl(f)));
+      setScreenshots((prev) => [...prev, ...converted].slice(0, MAX_FEEDBACK_SCREENSHOTS));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "The screenshot could not be added.");
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const removeScreenshot = (index: number) => {
+    setScreenshots((prev) => prev.filter((_, i) => i !== index));
+    setError(null);
+  };
+
   const handleSubmit = async () => {
     if (!description.trim()) return;
+    // H-010 block: a report without at least one capture must not be sent.
+    if (screenshots.length === 0) {
+      setError("Please attach at least one screenshot before sending the report.");
+      return;
+    }
     setStatus("sending");
     setError(null);
     try {
@@ -67,6 +112,7 @@ export function FeedbackDialog({ open, onOpenChange, context, technical }: Feedb
         screen: context.screen,
         stage: context.stage,
         context: technical,
+        screenshots,
       });
       setStatus("sent");
     } catch (err) {
@@ -91,8 +137,9 @@ export function FeedbackDialog({ open, onOpenChange, context, technical }: Feedb
             <DialogHeader className="items-center">
               <DialogTitle>Thank you for your feedback</DialogTitle>
               <DialogDescription className="text-center">
-                Your report was received and will help us improve ORA. You can continue
-                working where you left off.
+                Your report with {screenshots.length}{" "}
+                {screenshots.length === 1 ? "screenshot" : "screenshots"} was received and will
+                help us improve ORA. You can continue working where you left off.
               </DialogDescription>
             </DialogHeader>
             <Button
@@ -160,6 +207,70 @@ export function FeedbackDialog({ open, onOpenChange, context, technical }: Feedb
                   <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
                     {error}
                   </p>
+                )}
+              </div>
+
+              {/* Screenshots — H-010 */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Screenshots
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {screenshots.length}/{MAX_FEEDBACK_SCREENSHOTS}
+                  </p>
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => void addScreenshots(e.target.files)}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={atMaxScreenshots}
+                  className={cn(
+                    "flex w-full items-center justify-center gap-2 rounded-md border border-dashed px-3 py-3 text-sm transition-colors",
+                    atMaxScreenshots
+                      ? "cursor-not-allowed border-muted bg-muted/30 text-muted-foreground"
+                      : "border-muted-foreground/40 text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                  )}
+                >
+                  {atMaxScreenshots ? (
+                    <>
+                      <X className="h-4 w-4" />
+                      Maximum of {MAX_FEEDBACK_SCREENSHOTS} screenshots reached
+                    </>
+                  ) : (
+                    <>
+                      <ImagePlus className="h-4 w-4" />
+                      Add screenshot ({screenshots.length === 0 ? "required" : "optional up to 3"})
+                    </>
+                  )}
+                </button>
+                <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                  <Camera className="h-3.5 w-3.5" />
+                  Attach between 1 and 3 screenshots. A report cannot be sent without at least one.
+                </p>
+                {screenshots.length > 0 && (
+                  <div className="grid grid-cols-3 gap-2">
+                    {screenshots.map((shot, index) => (
+                      <div key={index} className="group relative overflow-hidden rounded-md border">
+                        <img src={shot} alt={`Screenshot ${index + 1}`} className="h-20 w-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => removeScreenshot(index)}
+                          aria-label={`Remove screenshot ${index + 1}`}
+                          className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white opacity-90 transition-opacity hover:opacity-100"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
 

@@ -58,4 +58,6 @@ export interface FeedbackInput {
   stage?: string | null;
   /** Technical context (no personal data). */
   context: FeedbackTechnicalContext;
+  /** H-010: 1–3 screenshots attached to the report (compressed data URLs). */
+  screenshots: string[];
 }
