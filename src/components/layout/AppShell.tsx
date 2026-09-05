@@ -1,6 +1,6 @@
 import { Suspense, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import {
   Activity,
@@ -215,6 +215,12 @@ export function AppShell() {
           <p className="text-[11px] leading-relaxed text-sidebar-foreground/55">
             {t("shell.sidebarFootnote")}
           </p>
+          <Link
+            to="/terms"
+            className="block text-[11px] text-sidebar-foreground/60 underline-offset-2 transition-colors hover:text-sidebar-foreground hover:underline"
+          >
+            {t("terms.title")}
+          </Link>
           <UserMenu />
         </div>
       </aside>

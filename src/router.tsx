@@ -14,6 +14,7 @@ const ResetPasswordPage = lazy(() =>
   import("@/components/auth/ResetPasswordPage").then((m) => ({ default: m.ResetPasswordPage }))
 );
 const NotFound = lazy(() => import("./pages/NotFound"));
+const TermsPage = lazy(() => import("./pages/TermsPage").then((m) => ({ default: m.TermsPage })));
 
 // Route-level code splitting: each page is loaded on demand, keeping the
 // initial module graph (and first paint) small.
@@ -59,6 +60,7 @@ export const routers = [
       { path: "/verify-email", name: "verify-email", element: <VerifyEmailPage /> },
       { path: "/forgot-password", name: "forgot-password", element: <ForgotPasswordPage /> },
       { path: "/reset-password", name: "reset-password", element: <ResetPasswordPage /> },
+      { path: "/terms", name: "terms", element: <TermsPage /> },
       {
         path: "/",
         element: <AppGuard />,
