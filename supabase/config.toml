@@ -2,3 +2,6 @@ project_id = "spb-t4n439pnk183od5j"
 
 [functions.smtp-diagnose]
 verify_jwt = false
+
+[functions.submit-feedback]
+verify_jwt = false
