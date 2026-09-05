@@ -7,13 +7,18 @@ describe("validatePassword (ORA password policy)", () => {
     expect(validatePassword("Ab1!cdef")).toBeNull();
   });
 
+  it("accepts passwords longer than 8 characters (no artificial upper limit)", () => {
+    expect(validatePassword("Ora8#x2kq")).toBeNull();
+    expect(validatePassword("Ab1!cdefghijklmnop")).toBeNull();
+  });
+
   it("rejects empty passwords", () => {
     expect(validatePassword("")).toBe("passwordPolicy.empty");
   });
 
-  it("rejects lengths other than exactly 8", () => {
+  it("rejects passwords shorter than 8 characters", () => {
     expect(validatePassword("Ora8#x2")).toBe("passwordPolicy.length");
-    expect(validatePassword("Ora8#x2kq")).toBe("passwordPolicy.length");
+    expect(validatePassword("Ab1!cde")).toBe("passwordPolicy.length");
   });
 
   it("rejects spaces", () => {

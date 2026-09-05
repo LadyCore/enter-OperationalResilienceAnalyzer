@@ -3,7 +3,7 @@
  * (signup, password recovery, and in-app password change).
  *
  * Rules:
- *  - exactly 8 characters
+ *  - at least 8 characters (no artificial upper limit)
  *  - at least one letter
  *  - at least one number
  *  - at least one special character
@@ -11,9 +11,9 @@
  */
 
 export const PASSWORD_POLICY_HINT =
-  "Exactly 8 characters with at least one letter, one number and one special character. No spaces.";
+  "At least 8 characters with at least one letter, one number and one special character. No spaces.";
 
-export const PASSWORD_PLACEHOLDER = "Exactly 8 characters";
+export const PASSWORD_PLACEHOLDER = "At least 8 characters";
 
 export const PASSWORD_EXAMPLE = "e.g. Ora8#x2k";
 
@@ -33,7 +33,7 @@ export const PASSWORD_ERROR_KEYS = {
  */
 export function validatePassword(password: string): string | null {
   if (password.length === 0) return PASSWORD_ERROR_KEYS.empty;
-  if (password.length !== 8) return PASSWORD_ERROR_KEYS.length;
+  if (password.length < 8) return PASSWORD_ERROR_KEYS.length;
   if (/\s/.test(password)) return PASSWORD_ERROR_KEYS.spaces;
   if (!/[A-Za-z]/.test(password)) return PASSWORD_ERROR_KEYS.letter;
   if (!/[0-9]/.test(password)) return PASSWORD_ERROR_KEYS.number;
