@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ChangePasswordDialog } from "@/components/auth/ChangePasswordDialog";
 import { LanguageSwitcher } from "@/components/language-switcher";
+import { AssistantFab } from "@/components/assistant/AssistantFab";
 import { cn } from "@/lib/utils";
 import { useOra } from "@/store/OraContext";
 
@@ -243,6 +244,9 @@ export function AppShell() {
           </div>
         </main>
       </div>
+
+      {/* Contextual assistant — authenticated area only */}
+      <AssistantFab />
     </div>
   );
 }

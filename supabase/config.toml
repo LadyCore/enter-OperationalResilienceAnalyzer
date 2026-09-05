@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.submit-feedback]
 verify_jwt = false
+
+[functions.ora-assistant]
+verify_jwt = true

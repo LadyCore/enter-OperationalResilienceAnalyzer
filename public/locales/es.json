@@ -860,5 +860,20 @@
   "feedbackAdmin.statusUpdateFailed": "No se pudo actualizar el estado del comentario.",
   "feedbackAdmin.subtitle": "Informes enviados mediante el botón Comentarios de la aplicación, de más reciente a más antiguo. Solo el propietario de ORA puede verlos o gestionarlos.",
   "feedbackAdmin.th.moduleScreen": "Módulo / pantalla",
-  "feedbackAdmin.th.user": "Usuario"
+  "feedbackAdmin.th.user": "Usuario",
+  "assistant.close": "Cerrar asistente",
+  "assistant.contextNote": "El asistente usa los datos de tu organización activa y la pantalla actual.",
+  "assistant.goTo": "Ir a {{label}}",
+  "assistant.new": "Nueva conversación",
+  "assistant.open": "Abrir asistente",
+  "assistant.placeholder": "Pregunta sobre ORA, la plantilla Excel o lo que ves en pantalla…",
+  "assistant.send": "Enviar mensaje",
+  "assistant.subtitle": "Excel, navegación y resultados — fundamentado en tus datos de ORA.",
+  "assistant.suggest.analysis": "Explícame mis números del panel",
+  "assistant.suggest.excel": "¿Qué admite el Excel?",
+  "assistant.suggest.navigate": "¿Dónde veo los resultados?",
+  "assistant.thinking": "ORA está preparando la respuesta…",
+  "assistant.title": "Asistente de ORA",
+  "assistant.welcomeBody": "Puedo ayudarte a cargar tus datos desde el Excel oficial, a navegar ORA y a entender los resultados reales de tu organización. Mis respuestas se fundamentan en los datos y reglas reales de ORA.",
+  "assistant.welcomeTitle": "¡Hola! Soy el asistente de ORA."
 }

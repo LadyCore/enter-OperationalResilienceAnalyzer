@@ -860,5 +860,20 @@
   "feedbackAdmin.statusUpdateFailed": "Could not update the feedback status.",
   "feedbackAdmin.subtitle": "Reports sent through the in-app Feedback button, newest first. Only the ORA owner can view or manage them.",
   "feedbackAdmin.th.moduleScreen": "Module / screen",
-  "feedbackAdmin.th.user": "User"
+  "feedbackAdmin.th.user": "User",
+  "assistant.close": "Close assistant",
+  "assistant.contextNote": "The assistant uses your active organization's data and the current screen.",
+  "assistant.goTo": "Go to {{label}}",
+  "assistant.new": "New conversation",
+  "assistant.open": "Open assistant",
+  "assistant.placeholder": "Ask about ORA, the Excel template or what you see on screen…",
+  "assistant.send": "Send message",
+  "assistant.subtitle": "Excel, navigation and results — grounded in your ORA data.",
+  "assistant.suggest.analysis": "Explain my dashboard numbers",
+  "assistant.suggest.excel": "What does the Excel accept?",
+  "assistant.suggest.navigate": "Where do I see the results?",
+  "assistant.thinking": "ORA is preparing an answer…",
+  "assistant.title": "ORA Assistant",
+  "assistant.welcomeBody": "I can help you load your data from the official Excel, navigate ORA and understand the real results of your organization. My answers are grounded in ORA's actual data and rules.",
+  "assistant.welcomeTitle": "Hi! I am ORA's assistant."
 }
