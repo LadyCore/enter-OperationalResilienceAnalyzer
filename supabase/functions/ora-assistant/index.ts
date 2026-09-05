@@ -144,15 +144,15 @@ const TEMPLATE_COLUMNS: { column: string; meaningEn: string; meaningEs: string; 
   },
   {
     column: "Responsable",
-    meaningEn: "Manager name. Must exist in the file.",
-    meaningEs: "Nombre del responsable. Debe existir en el archivo.",
+    meaningEn: "Manager name — only when the person has a manager. If provided, it must exist in the file.",
+    meaningEs: "Nombre del responsable, solo si la persona tiene uno. Si se informa, debe existir en el archivo.",
     required: "No",
     example: "Ana García",
   },
   {
     column: "Manager ID",
-    meaningEn: "Manager identifier. Empty only for the root of the hierarchy.",
-    meaningEs: "Identificador del responsable. Vacío solo para la raíz de la jerarquía.",
+    meaningEn: "Manager identifier (Legajo). Optional: leave empty when there is no applicable manager. If provided, it must match a person in the file.",
+    meaningEs: "Identificador del responsable (Legajo). Opcional: déjalo vacío cuando no hay un responsable aplicable. Si se informa, debe coincidir con una persona del archivo.",
     required: "No",
     example: "EMP-0001",
   },
@@ -299,7 +299,10 @@ IMPORT RULES (source of truth: ORA's importer):
 - "Documentada" and "Activo" (and guardia "Sí/No") accept, case-insensitively and ignoring accents: yes: "si","sí","yes","true","1","activo","active","alta","documentada","documentado","documented"; no: "no","false","0","inactivo","inactive","baja".
 - Criticality accepts, case-insensitively and ignoring accents: critical: "critical","critico","crítico","alta","alto","1","c"; important: "important","importante","media","2","i"; standard: "standard","normal","estandar","estándar","baja","bajo","3","s". Any other value is recorded as an unusable value and ignored.
 - There is NO "Criticidad" column in the official template; if the source file has one it can be mapped. Without criticality data, ORA derives process criticality from operational weight.
-- Manager reference: "Manager ID" must reference an existing Legajo in the file; when only "Responsable" (name) is given, the name must match exactly one person. More than one match → blocking ambiguity; zero matches → blocking error.
+- EMPTY vs REFERENCE: an EMPTY field is not, by itself, an import error. Leave a cell empty when there is no applicable data (e.g. a person with no manager, or role/on-call/coverage data that does not apply to the row). Empty cells never produce a blocking incidence.
+- REFERENCE INTEGRITY: only when a name or Legajo IS provided as a reference to another person (Responsable / Manager ID, or "Cubre ausencias de") must that reference exist and resolve unambiguously inside the imported data. A reference that is missing, ambiguous or incongruent (e.g. writing "N/A" in a manager cell) CAN produce a blocking incidence — the empty cell would not have.
+- Manager reference: "Manager ID" must reference an existing Legajo in the file; when only "Responsable" (name) is given, the name must match exactly one person. More than one match → blocking ambiguity; zero matches → blocking error. A person without a manager simply leaves these cells empty.
+- Verified behaviour: a sheet whose manager/coverage references to a removed person (Legajo LEG-002) were deleted passed the column mapping and the validation with no blocking incidences for those references, even though many cells were left unmapped/empty.
 - Vacation coverage: "Cubre ausencias de" references the person (A) whose vacation the row's person (B) covers. Resolution by Legajo first, then unique name. A person cannot cover their own absence (ignored with warning). It only applies to planned-absence simulations categorized as Vacation.
 - On-call (guardia): columns optional. If a row has on-call tasks but no modality, ORA warns that H24/Shifts/own scheme should be filled.
 - Ambiguous or missing manager/coverage references BLOCK the import until resolved. Warnings never block.
