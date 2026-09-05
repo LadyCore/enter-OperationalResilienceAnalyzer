@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Camera, CheckCircle2, ImagePlus, Loader2, MessageSquareText, Send, X } from "lucide-react";
+import { AtSign, Camera, CheckCircle2, ImagePlus, Loader2, MailWarning, MessageSquareText, Send, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { submitFeedback } from "@/lib/feedback/api";
@@ -25,39 +26,48 @@ interface FeedbackDialogProps {
   onOpenChange: (open: boolean) => void;
   context: FeedbackContext;
   technical: FeedbackTechnicalContext;
+  /** Reporter email to prefill (session account); the field is always required. */
+  initialEmail?: string;
 }
 
 type Status = "idle" | "sending" | "sent";
 
 /**
- * Integrated feedback form. The user picks a kind, writes a description, sees
- * the detected functional context (and technical context stored silently) and
- * submits without leaving the current screen. "Feedback general" avoids forcing
- * a module association. No personal data is captured automatically.
+ * Integrated feedback form. The user picks a kind, writes a description, gives
+ * an email to receive the confirmation copy, sees the detected functional
+ * context (and technical context stored silently) and submits without leaving
+ * the current screen. "Feedback general" avoids forcing a module association.
+ * No personal data is captured automatically beyond the email the user types.
  *
- * H-010: at least one and at most three screenshots are required per report.
- * The rules are enforced both here (UI) and again at the submission entry point
- * (api.ts), so a report without a capture can never be persisted.
+ * H-010: at least one and at most three screenshots are required per report and
+ * a reporter email is mandatory (also for anonymous reporters). The rules are
+ * enforced both here (UI) and again at the submission entry point (api.ts) and
+ * in the backend function, so an invalid report can never be persisted.
  */
-export function FeedbackDialog({ open, onOpenChange, context, technical }: FeedbackDialogProps) {
+export function FeedbackDialog({ open, onOpenChange, context, technical, initialEmail = "" }: FeedbackDialogProps) {
   const [kind, setKind] = useState<FeedbackKind>("not_working");
   const [description, setDescription] = useState("");
+  const [email, setEmail] = useState(initialEmail);
   const [isGeneral, setIsGeneral] = useState(false);
   const [screenshots, setScreenshots] = useState<string[]>([]);
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [emailState, setEmailState] = useState<"sent" | "failed" | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const canSubmit = description.trim().length > 0 && status !== "sending";
+  const canSubmit =
+    description.trim().length > 0 && email.trim().length > 0 && status !== "sending";
   const atMaxScreenshots = screenshots.length >= MAX_FEEDBACK_SCREENSHOTS;
 
   const reset = () => {
     setKind("not_working");
     setDescription("");
+    setEmail(initialEmail);
     setIsGeneral(false);
     setScreenshots([]);
     setStatus("idle");
     setError(null);
+    setEmailState(null);
   };
 
   const handleOpenChange = (next: boolean) => {
@@ -101,10 +111,14 @@ export function FeedbackDialog({ open, onOpenChange, context, technical }: Feedb
       setError("Please attach at least one screenshot before sending the report.");
       return;
     }
+    if (!email.trim()) {
+      setError("Please provide your email to receive the confirmation.");
+      return;
+    }
     setStatus("sending");
     setError(null);
     try {
-      await submitFeedback({
+      const result = await submitFeedback({
         kind,
         description: description.trim(),
         isGeneral,
@@ -112,8 +126,10 @@ export function FeedbackDialog({ open, onOpenChange, context, technical }: Feedb
         screen: context.screen,
         stage: context.stage,
         context: technical,
+        email,
         screenshots,
       });
+      setEmailState(result.emailState);
       setStatus("sent");
     } catch (err) {
       console.error("Feedback submission failed:", err);
@@ -142,6 +158,19 @@ export function FeedbackDialog({ open, onOpenChange, context, technical }: Feedb
                 help us improve ORA. You can continue working where you left off.
               </DialogDescription>
             </DialogHeader>
+            {emailState === "failed" ? (
+              <p className="mx-auto flex max-w-sm items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-left text-xs text-amber-700">
+                <MailWarning className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>
+                  Your report was saved, but the confirmation email to {email.trim()} could not be
+                  delivered right now. We will still review it.
+                </span>
+              </p>
+            ) : (
+              <p className="mx-auto max-w-sm text-xs text-muted-foreground">
+                A confirmation email was sent to <span className="font-medium">{email.trim()}</span>.
+              </p>
+            )}
             <Button
               className="w-full"
               onClick={() => {
@@ -199,7 +228,7 @@ export function FeedbackDialog({ open, onOpenChange, context, technical }: Feedb
                   id="feedback-description"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Tell us what happened. If you add contact details here, they become part of the content you choose to send."
+                  placeholder="Tell us what happened. If you add other contact details here, they become part of the content you choose to send."
                   rows={4}
                   autoFocus
                 />
@@ -208,6 +237,28 @@ export function FeedbackDialog({ open, onOpenChange, context, technical }: Feedb
                     {error}
                   </p>
                 )}
+              </div>
+
+              {/* Reporter email — H-010 mandatory */}
+              <div className="space-y-1.5">
+                <label htmlFor="feedback-email" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Your email
+                </label>
+                <div className="relative">
+                  <AtSign className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="feedback-email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    className="pl-8"
+                    autoComplete="email"
+                  />
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Used only to send you a confirmation that your report was received.
+                </p>
               </div>
 
               {/* Screenshots — H-010 */}

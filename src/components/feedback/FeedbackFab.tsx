@@ -87,6 +87,7 @@ export function FeedbackFab() {
             screen: location.pathname,
           })
         }
+        initialEmail={user?.email ?? ""}
       />
     </>
   );

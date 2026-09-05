@@ -47,7 +47,7 @@ export interface FeedbackTechnicalContext {
   recentErrors: { at: string; message: string; stack?: string }[];
 }
 
-/** What the UI sends to the API. */
+/** What the UI sends to the backend function. */
 export interface FeedbackInput {
   kind: FeedbackKind;
   description: string;
@@ -58,6 +58,18 @@ export interface FeedbackInput {
   stage?: string | null;
   /** Technical context (no personal data). */
   context: FeedbackTechnicalContext;
+  /**
+   * Reporter email — required for every report (also anonymous ones). It is
+   * used to send the confirmation copy and stored under context.reporterEmail.
+   */
+  email: string;
   /** H-010: 1–3 screenshots attached to the report (compressed data URLs). */
   screenshots: string[];
+}
+
+/** Result of a successful submission (H-010 confirmation email outcome). */
+export interface FeedbackSubmitResult {
+  id: string;
+  duplicate: boolean;
+  emailState: "sent" | "failed";
 }

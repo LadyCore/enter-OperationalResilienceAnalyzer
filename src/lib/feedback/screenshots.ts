@@ -65,3 +65,22 @@ export function assertFeedbackScreenshotsValid(screenshots: string[]): void {
     }
   }
 }
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * H-010: every report requires a reporter email so the confirmation copy can be
+ * sent after the report is persisted. Shared by the UI and the submit entry
+ * point (api.ts); the backend function enforces the same rule again.
+ */
+export function assertFeedbackEmailValid(email: string): void {
+  const value = typeof email === "string" ? email.trim() : "";
+  if (!EMAIL_PATTERN.test(value)) {
+    throw new Error("Please provide a valid email to receive the confirmation.");
+  }
+}
+
+/** True when a stored screenshot entry is a legacy inline data URL. */
+export function isLegacyDataUrl(value: string): boolean {
+  return typeof value === "string" && value.startsWith("data:");
+}

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   AlertCircle,
+  Archive,
   Loader2,
   MessageSquareText,
   RefreshCw,
@@ -34,6 +35,7 @@ import { FEEDBACK_MODULES } from "@/lib/feedback/context";
 import {
   FEEDBACK_STATUSES,
   listFeedback,
+  migrateFeedbackScreenshots,
   resolvePageAfterRefresh,
   updateFeedbackStatus,
   type FeedbackPage,
@@ -80,6 +82,7 @@ export function FeedbackAdminPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [migrating, setMigrating] = useState(false);
 
   const load = useCallback(async (): Promise<FeedbackPage | null> => {
     setLoading(true);
@@ -138,6 +141,24 @@ export function FeedbackAdminPage() {
     } catch (err) {
       console.error(err);
       toast.error("Could not update the feedback status.");
+    }
+  };
+
+  const handleMigrate = async () => {
+    setMigrating(true);
+    try {
+      const result = await migrateFeedbackScreenshots();
+      toast.success(
+        result.migrated > 0
+          ? `Moved ${result.migrated} report(s) to secure storage.`
+          : "No legacy screenshots left to migrate.",
+      );
+      await load();
+    } catch (err) {
+      console.error(err);
+      toast.error("Could not migrate the historical screenshots.");
+    } finally {
+      setMigrating(false);
     }
   };
 
@@ -245,9 +266,19 @@ export function FeedbackAdminPage() {
             view or manage them.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
-          <RefreshCw className="h-4 w-4" /> Refresh
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => void handleMigrate()} disabled={loading || migrating}>
+            {migrating ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Archive className="h-4 w-4" />
+            )}
+            Move historical screenshots to storage
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
+            <RefreshCw className="h-4 w-4" /> Refresh
+          </Button>
+        </div>
       </div>
 
       {filterPanel}

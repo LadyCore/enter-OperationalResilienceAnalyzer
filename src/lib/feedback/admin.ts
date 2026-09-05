@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, SUPABASE_URL } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import type { FeedbackTechnicalContext } from "./types";
 
@@ -142,12 +142,74 @@ export function parseFeedbackContext(context: FeedbackRow["context"]): Partial<F
 
 /**
  * Extract the screenshots attached to a report from its stored context.
- * They were persisted as compressed JPEG data URLs under `context.screenshots`
- * by the submit flow, so no storage bucket or external reference is needed.
+ *
+ * H-010: legacy reports keep compressed JPEG data URLs under
+ * `context.screenshots`; newer reports store private-bucket storage keys
+ * (`feedback/{reportId}/{i}.jpg`) instead. Both are plain strings, so the list
+ * contract is unchanged — only the rendering differs (see
+ * `fetchFeedbackScreenshotUrls` for resolving storage keys).
  */
 export function parseFeedbackScreenshots(context: FeedbackRow["context"]): string[] {
   if (!context || typeof context !== "object" || Array.isArray(context)) return [];
   const shots = (context as Record<string, unknown>).screenshots;
   if (!Array.isArray(shots)) return [];
   return shots.filter((s): s is string => typeof s === "string" && s.length > 0);
+}
+
+/** Reporter email stored at submit time (mandatory since H-010). */
+export function parseFeedbackReporterEmail(context: FeedbackRow["context"]): string | null {
+  if (!context || typeof context !== "object" || Array.isArray(context)) return null;
+  const email = (context as Record<string, unknown>).reporterEmail;
+  return typeof email === "string" && email.length > 0 ? email : null;
+}
+
+/**
+ * Resolve the private-bucket screenshots of one report into temporary signed
+ * URLs for the admin viewer. The backend function re-checks the caller against
+ * RLS (`feedback_select_own_or_owner`) before signing anything, so a non-owner
+ * or a non-author gets an empty/denied result. Returns a map from storage key
+ * to signed URL; legacy inline `data:` entries are not signed.
+ */
+export async function fetchFeedbackScreenshotUrls(
+  reportId: string,
+): Promise<Record<string, string>> {
+  const { data, error } = await supabase.functions.invoke("feedback-screenshot-urls", {
+    body: { reportId },
+  });
+  if (error) throw error;
+  const payload = data as { urls?: { path: string; url: string }[] } | null;
+  const map: Record<string, string> = {};
+  for (const item of payload?.urls ?? []) {
+    if (!item.path || !item.url) continue;
+    // Older supabase-js versions return a relative path; make it absolute so it
+    // works as an <img src> regardless.
+    map[item.path] = item.url.startsWith("http")
+      ? item.url
+      : `${SUPABASE_URL}${item.url.startsWith("/") ? "" : "/"}${item.url}`;
+  }
+  return map;
+}
+
+export interface ScreenshotMigrationResult {
+  scanned: number;
+  migrated: number;
+  skipped: number;
+}
+
+/**
+ * Move legacy base64 screenshots of historical reports into the private
+ * bucket. Owner-only (the backend function enforces is_owner()). The original
+ * data URLs are preserved under context.screenshotsLegacy until verified.
+ */
+export async function migrateFeedbackScreenshots(): Promise<ScreenshotMigrationResult> {
+  const { data, error } = await supabase.functions.invoke("feedback-migrate-screenshots", {
+    body: {},
+  });
+  if (error) throw error;
+  const payload = (data ?? {}) as Partial<ScreenshotMigrationResult>;
+  return {
+    scanned: payload.scanned ?? 0,
+    migrated: payload.migrated ?? 0,
+    skipped: payload.skipped ?? 0,
+  };
 }
