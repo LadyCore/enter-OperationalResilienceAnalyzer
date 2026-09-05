@@ -953,5 +953,12 @@
   "license.type.company": "Company",
   "license.type.individual": "Individual",
   "license.typeHint": "Individual allows 1 user; Company allows up to 4. The client document (DNI/CUIT) does not affect the limit.",
-  "license.usersCount": "{{used}}/{{max}} users"
+  "license.usersCount": "{{used}}/{{max}} users",
+  "presentation.description": "ORA is the Organizational Resilience Analyzer. It models how people, competencies, tasks and processes relate, making visible where operational capability concentrates and what could happen in adverse or changing situations — without evaluating individual performance.",
+  "presentation.download": "Download PDF",
+  "presentation.footnote": "Official ORA Product Brief — version 1.0.",
+  "presentation.subtitle": "Learn what ORA is, what it analyzes and how it works.",
+  "presentation.title": "ORA Presentation",
+  "presentation.view": "View presentation",
+  "presentation.viewerHint": "The presentation opens below, without leaving ORA."
 }

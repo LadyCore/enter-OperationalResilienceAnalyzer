@@ -15,6 +15,9 @@ const ResetPasswordPage = lazy(() =>
 );
 const NotFound = lazy(() => import("./pages/NotFound"));
 const TermsPage = lazy(() => import("./pages/TermsPage").then((m) => ({ default: m.TermsPage })));
+const PresentationPage = lazy(() =>
+  import("./pages/PresentationPage").then((m) => ({ default: m.PresentationPage }))
+);
 
 // Route-level code splitting: each page is loaded on demand, keeping the
 // initial module graph (and first paint) small.
@@ -61,6 +64,7 @@ export const routers = [
       { path: "/forgot-password", name: "forgot-password", element: <ForgotPasswordPage /> },
       { path: "/reset-password", name: "reset-password", element: <ResetPasswordPage /> },
       { path: "/terms", name: "terms", element: <TermsPage /> },
+      { path: "/presentation", name: "presentation", element: <PresentationPage /> },
       {
         path: "/",
         element: <AppGuard />,

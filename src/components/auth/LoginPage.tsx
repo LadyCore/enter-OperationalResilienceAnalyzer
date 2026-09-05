@@ -253,7 +253,11 @@ export function LoginPage() {
           </CardContent>
         </Card>
 
-        <p className="mt-6 text-center text-xs text-muted-foreground">
+        <p className="mt-6 flex items-center justify-center gap-3 text-center text-xs text-muted-foreground">
+          <Link to="/presentation" className="underline-offset-2 transition-colors hover:text-foreground hover:underline">
+            {t("presentation.title")}
+          </Link>
+          <span aria-hidden="true">·</span>
           <Link to="/terms" className="underline-offset-2 transition-colors hover:text-foreground hover:underline">
             {t("terms.title")}
           </Link>

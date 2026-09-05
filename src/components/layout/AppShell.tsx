@@ -216,6 +216,12 @@ export function AppShell() {
             {t("shell.sidebarFootnote")}
           </p>
           <Link
+            to="/presentation"
+            className="block text-[11px] text-sidebar-foreground/60 underline-offset-2 transition-colors hover:text-sidebar-foreground hover:underline"
+          >
+            {t("presentation.title")}
+          </Link>
+          <Link
             to="/terms"
             className="block text-[11px] text-sidebar-foreground/60 underline-offset-2 transition-colors hover:text-sidebar-foreground hover:underline"
           >
