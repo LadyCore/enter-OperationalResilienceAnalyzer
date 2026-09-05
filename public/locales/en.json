@@ -20,6 +20,7 @@
   "auth.createAccountDescription": "Sign up to start analyzing your organization. Activate your free DEMO on first access.",
   "auth.currentPassword": "Current password",
   "auth.email": "Email",
+  "auth.emailInvalidFormat": "The email format you entered is not valid or is not supported.",
   "auth.emailVerified": "Your email has been verified.",
   "auth.emailVerifiedNote": "Your email address has been confirmed. You can now continue to ORA and sign in.",
   "auth.enterCurrentPassword": "Enter your current password.",

@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { Field } from "@/components/entities/field";
+import { isEmailFormatError } from "@/lib/emailVerification";
 
 type Status = "checking" | "verified" | "expired";
 
@@ -23,6 +24,7 @@ export function VerifyEmailPage() {
   const [resent, setResent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,6 +64,7 @@ export function VerifyEmailPage() {
     }
     setBusy(true);
     setError(null);
+    setEmailError(null);
     setResent(false);
     try {
       const { error: resendError } = await supabase.auth.resend({
@@ -72,7 +75,15 @@ export function VerifyEmailPage() {
       if (resendError) throw resendError;
       setResent(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("auth.couldNotResendVerification"));
+      const message = err instanceof Error ? err.message : t("auth.couldNotResendVerification");
+      if (isEmailFormatError(message)) {
+        // Reuse the provider's rejection result: clear message tied to the
+        // Email field instead of a generic form error.
+        setEmailError(t("auth.emailInvalidFormat"));
+        setError(null);
+      } else {
+        setError(message);
+      }
     } finally {
       setBusy(false);
     }
@@ -131,9 +142,14 @@ export function VerifyEmailPage() {
                     type="email"
                     autoComplete="email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (emailError) setEmailError(null);
+                    }}
                     placeholder={t("common.emailPlaceholder")}
+                    aria-invalid={Boolean(emailError)}
                   />
+                  {emailError && <p className="text-xs text-destructive">{emailError}</p>}
                 </Field>
                 {error && (
                   <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">

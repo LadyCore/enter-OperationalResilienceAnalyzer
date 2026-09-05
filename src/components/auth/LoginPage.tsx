@@ -10,6 +10,7 @@ import { Field } from "@/components/entities/field";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { useOra } from "@/store/OraContext";
 import { validatePassword } from "@/lib/passwordPolicy";
+import { isEmailFormatError } from "@/lib/emailVerification";
 
 type Mode = "login" | "signup";
 
@@ -27,6 +28,7 @@ export function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // After signup (or unverified login) we show the verification prompt.
   const [verifyPrompt, setVerifyPrompt] = useState<{ email: string } | null>(null);
@@ -35,6 +37,7 @@ export function LoginPage() {
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
+    setEmailError(null);
     setResent(false);
 
     if (!email.trim() || !password) {
@@ -79,6 +82,11 @@ export function LoginPage() {
       // Unverified account: the provider denies access until the email is confirmed.
       if (/not confirmed|confirm your email|email not verified/i.test(message)) {
         setVerifyPrompt({ email: email.trim() });
+      } else if (isEmailFormatError(message)) {
+        // Reuse the provider's rejection result: show a clear message tied to
+        // the Email field instead of a generic form error.
+        setEmailError(t("auth.emailInvalidFormat"));
+        setError(null);
       } else {
         setError(message);
       }
@@ -184,9 +192,14 @@ export function LoginPage() {
                     type="email"
                     autoComplete="email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (emailError) setEmailError(null);
+                    }}
                     placeholder={t("common.emailPlaceholder")}
+                    aria-invalid={Boolean(emailError)}
                   />
+                  {emailError && <p className="text-xs text-destructive">{emailError}</p>}
                 </Field>
                 <Field
                   label={t("auth.password")}

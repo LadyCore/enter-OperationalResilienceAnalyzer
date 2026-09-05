@@ -20,6 +20,7 @@
   "auth.createAccountDescription": "Regístrate para empezar a analizar tu organización. Activa tu DEMO gratuita en el primer acceso.",
   "auth.currentPassword": "Contraseña actual",
   "auth.email": "Correo electrónico",
+  "auth.emailInvalidFormat": "El formato del email ingresado no es válido o no está soportado.",
   "auth.emailVerified": "Tu correo electrónico ha sido verificado.",
   "auth.emailVerifiedNote": "Tu dirección de correo ha sido confirmada. Ya puedes continuar a ORA e iniciar sesión.",
   "auth.enterCurrentPassword": "Introduce tu contraseña actual.",
