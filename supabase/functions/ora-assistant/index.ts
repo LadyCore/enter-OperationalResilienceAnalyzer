@@ -1,3 +1,5 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.4";
+
 /**
  * ORA knowledge pack for the contextual assistant.
  *
@@ -420,13 +422,24 @@ Deno.serve(async (req) => {
   try {
     const AI_API_TOKEN = Deno.env.get("AI_API_TOKEN_8e29993771ea");
     if (!AI_API_TOKEN) {
+      console.error("ora-assistant: AI_API_TOKEN secret is not configured");
       return sse(
         { error: { code: 500, message: "AI service is not configured.", status: "INTERNAL" } },
         500,
       );
     }
 
-    const authHeader = req.headers.get("Authorization");
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+    if (!supabaseUrl || !anonKey) {
+      console.error("ora-assistant: missing SUPABASE_URL / SUPABASE_ANON_KEY env");
+      return sse(
+        { error: { code: 500, message: "Server configuration error.", status: "INTERNAL" } },
+        500,
+      );
+    }
+
+    const authHeader = req.headers.get("authorization");
     if (!authHeader) {
       return sse(
         { error: { code: 401, message: "Authentication required.", status: "UNAUTHENTICATED" } },
@@ -434,11 +447,10 @@ Deno.serve(async (req) => {
       );
     }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-      { global: { headers: { Authorization: authHeader } } },
-    );
+    const supabase = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authHeader } },
+      auth: { persistSession: false },
+    });
 
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
     if (!body) {
@@ -554,9 +566,17 @@ Deno.serve(async (req) => {
       },
     });
   } catch (error) {
-    console.error("ora-assistant: unhandled error", error);
+    const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+    console.error("ora-assistant: unhandled error", detail, error);
     return sse(
-      { error: { code: 500, message: "Internal assistant error.", status: "INTERNAL" } },
+      {
+        error: {
+          code: 500,
+          message: "Internal assistant error.",
+          status: "INTERNAL",
+          detail,
+        },
+      },
       500,
     );
   }
