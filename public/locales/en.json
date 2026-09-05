@@ -924,5 +924,19 @@
   "terms.s14.body": "These terms correspond to version 1.0 of the document. The effective date is pending definition.\n\nORA may update these terms when appropriate. Changes will be published in this section.",
   "terms.s14.title": "14. Term and modifications",
   "terms.title": "Terms and Conditions",
-  "terms.version": "Version"
+  "terms.version": "Version",
+  "relational.anyCompetency": "Any competency",
+  "relational.anyCriticality": "Any criticality",
+  "relational.anyPerson": "Any person",
+  "relational.anyProcess": "Any process",
+  "relational.anyTask": "Any task",
+  "relational.clearFilters": "Clear filters",
+  "relational.competenciesCount": "{{count}} competencies",
+  "relational.noPeople": "No related people for the current filters.",
+  "relational.noResults": "No results match the current filters.",
+  "relational.processesLabel": "Processes",
+  "relational.relatedPeople": "Related people",
+  "relational.results": "{{count}} results",
+  "relational.search": "Search",
+  "relational.tasksCount": "{{count}} tasks"
 }

@@ -15,12 +15,18 @@ import { useOra } from "@/store/OraContext";
 import { buildTaskAnalysis, deriveTaskCriticality } from "@/lib/analysis";
 import { CriticalityBadge } from "@/components/common/CriticalityBadge";
 import { DependencyBadge } from "@/components/common/DependencyBadge";
+import type { Task } from "@/types";
 
-export function TaskDependencyTable() {
+interface TaskDependencyTableProps {
+  /** When provided, only tasks passing this predicate are rendered. */
+  filter?: (task: Task) => boolean;
+}
+
+export function TaskDependencyTable({ filter }: TaskDependencyTableProps) {
   const { t } = useTranslation();
   const { db } = useOra();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const rows = buildTaskAnalysis(db);
+  const rows = buildTaskAnalysis(db).filter((row) => !filter || filter(row.task));
 
   const toggle = (id: string) => {
     setExpanded((prev) => {
@@ -50,6 +56,13 @@ export function TaskDependencyTable() {
             </TableRow>
           </TableHeader>
           <TableBody>
+            {rows.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={8} className="py-8 text-center text-sm text-muted-foreground">
+                  {t("relational.noResults")}
+                </TableCell>
+              </TableRow>
+            )}
             {rows.map(({ task, dependency, capablePeople, roles }) => {
               const fn = db.functions.find((f) => f.id === task.functionId);
               const proc = fn ? db.processes.find((p) => p.id === fn.processId) : undefined;

@@ -924,5 +924,19 @@
   "terms.s14.body": "Estos términos corresponden a la versión 1.0 del documento. La fecha de entrada en vigencia se encuentra pendiente de definición.\n\nORA podrá actualizar estos términos cuando corresponda. Los cambios se publicarán en esta sección.",
   "terms.s14.title": "14. Vigencia y modificaciones",
   "terms.title": "Términos y condiciones",
-  "terms.version": "Versión"
+  "terms.version": "Versión",
+  "relational.anyCompetency": "Cualquier competencia",
+  "relational.anyCriticality": "Cualquier criticidad",
+  "relational.anyPerson": "Cualquier persona",
+  "relational.anyProcess": "Cualquier proceso",
+  "relational.anyTask": "Cualquier tarea",
+  "relational.clearFilters": "Limpiar filtros",
+  "relational.competenciesCount": "{{count}} competencias",
+  "relational.noPeople": "No hay personas relacionadas con los filtros actuales.",
+  "relational.noResults": "Ningún resultado coincide con los filtros actuales.",
+  "relational.processesLabel": "Procesos",
+  "relational.relatedPeople": "Personas relacionadas",
+  "relational.results": "{{count}} resultados",
+  "relational.search": "Buscar",
+  "relational.tasksCount": "{{count}} tareas"
 }

@@ -23,7 +23,12 @@ interface DeleteTarget {
   cascadeNote?: string;
 }
 
-export function ProcessTree() {
+interface ProcessTreeProps {
+  /** When provided, only these process ids are rendered (relational filters). */
+  visibleProcessIds?: Set<string> | null;
+}
+
+export function ProcessTree({ visibleProcessIds }: ProcessTreeProps) {
   const { t } = useTranslation();
   const { db, remove, upsert } = useOra();
   const [procDialog, setProcDialog] = useState<{ open: boolean; process?: Process }>({ open: false });
@@ -77,9 +82,21 @@ export function ProcessTree() {
     );
   }
 
+  const processes = visibleProcessIds
+    ? db.processes.filter((p) => visibleProcessIds.has(p.id))
+    : db.processes;
+
+  if (processes.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+        {t("relational.noResults")}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
-      {db.processes.map((process) => {
+      {processes.map((process) => {
         const functions = db.functions.filter((f) => f.processId === process.id);
         return (
           <Card key={process.id} className="overflow-hidden">
