@@ -31,6 +31,18 @@ export function useRpcError() {
           return t("access.error.forbidden");
         case "unauthorized":
           return t("access.error.unauthorized");
+        case "seat_exceeded":
+          return t("access.error.seatExceeded");
+        case "license_not_found":
+          return t("access.error.licenseNotFound");
+        case "license_not_active":
+          return t("access.error.licenseNotActive");
+        case "not_perpetual":
+          return t("access.error.notPerpetual");
+        case "already_added":
+          return t("access.error.alreadyAdded");
+        case "invalid_license_type":
+          return t("access.error.invalidLicenseType");
         default:
           return t("access.error.generic");
       }

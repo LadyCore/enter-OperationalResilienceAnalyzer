@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
-import type { MyAccess, Modality, RpcResult, TaxType } from "./types";
+import type { LicenseType, MyAccess, Modality, RpcResult, TaxType } from "./types";
 
 /** Current user's authoritative access resolution. */
 export async function getMyAccess(): Promise<MyAccess> {
@@ -39,6 +39,8 @@ export interface GrantLicenseInput {
   clientName?: string;
   taxType?: TaxType | null;
   taxId?: string | null;
+  /** "individual" → 1 user, "company" → up to 4 users. Defaults server-side to individual. */
+  licenseType?: LicenseType | null;
 }
 
 /** Owner action: manually grant a perpetual license (no payment involved). */
@@ -50,6 +52,21 @@ export async function grantLicense(input: GrantLicenseInput): Promise<RpcResult>
     p_client_name: input.clientName?.trim() || undefined,
     p_tax_type: input.taxType ?? undefined,
     p_tax_id: input.taxId?.trim() || undefined,
+    p_license_type: input.licenseType ?? "individual",
+  });
+  if (error) throw error;
+  return data as RpcResult;
+}
+
+/**
+ * Owner action: associate another ORA account to an existing perpetual license.
+ * The seat cap (individual=1, company=4) is enforced server-side and by a DB
+ * trigger on license_users.
+ */
+export async function addLicenseUser(licenseId: string, userEmail: string): Promise<RpcResult> {
+  const { data, error } = await supabase.rpc("license_add_user", {
+    p_license_id: licenseId,
+    p_user_email: userEmail.trim(),
   });
   if (error) throw error;
   return data as RpcResult;
@@ -122,6 +139,8 @@ export interface AdminOverview {
   licenses: LicenseRow[];
   clients: ClientRow[];
   usageHistory: UsageRow[];
+  /** license_id → number of associated users (owner admin view). */
+  licenseUserCounts: Record<string, number>;
 }
 
 /** Owner-only aggregated view used by the Access & licensing admin page. */
@@ -163,11 +182,17 @@ export async function getAdminOverview(): Promise<AdminOverview> {
     activeLicense: activeByUser.get(profile.id) ?? null,
   }));
 
+  const licenseUserCounts: Record<string, number> = {};
+  for (const lu of licenseUserRows) {
+    licenseUserCounts[lu.license_id] = (licenseUserCounts[lu.license_id] ?? 0) + 1;
+  }
+
   return {
     users,
     licenses: licenseRows,
     clients: (clients.data ?? []) as ClientRow[],
     usageHistory: (usageHistory.data ?? []) as UsageRow[],
+    licenseUserCounts,
   };
 }
 

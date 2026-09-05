@@ -18,6 +18,12 @@ export type AccessStatus =
 
 export type Modality = "perpetual" | "subscription";
 export type TaxType = "dni" | "cuit";
+/**
+ * License kind that determines the seat cap:
+ * "individual" → 1 user, "company" → 4 users. The client document (DNI/CUIT)
+ * does NOT determine the kind.
+ */
+export type LicenseType = "individual" | "company";
 
 export interface MyAccess {
   status: AccessStatus;

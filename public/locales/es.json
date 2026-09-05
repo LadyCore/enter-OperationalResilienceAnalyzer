@@ -938,5 +938,20 @@
   "relational.relatedPeople": "Personas relacionadas",
   "relational.results": "{{count}} resultados",
   "relational.search": "Buscar",
-  "relational.tasksCount": "{{count}} tareas"
+  "relational.tasksCount": "{{count}} tareas",
+  "access.error.alreadyAdded": "Ese usuario ya está asignado a esta licencia.",
+  "access.error.invalidLicenseType": "Tipo de licencia inválido.",
+  "access.error.licenseNotActive": "La licencia no está activa.",
+  "access.error.licenseNotFound": "Licencia no encontrada.",
+  "access.error.notPerpetual": "Solo las licencias perpetuas aceptan usuarios adicionales.",
+  "access.error.seatExceeded": "La licencia alcanzó su límite de usuarios (1 para Individual, 4 para Empresa).",
+  "accessAdmin.th.users": "Usuarios",
+  "license.addUser": "Agregar usuario",
+  "license.addUserDescription": "Asocia una cuenta de ORA existente a esta licencia. El cupo (1 para Individual, 4 para Empresa) se aplica en el servidor.",
+  "license.addUserTitle": "Agregar usuario a la licencia",
+  "license.type": "Tipo de licencia",
+  "license.type.company": "Empresa",
+  "license.type.individual": "Individual",
+  "license.typeHint": "Individual permite 1 usuario; Empresa permite hasta 4. El documento del cliente (DNI/CUIT) no afecta el cupo.",
+  "license.usersCount": "{{used}}/{{max}} usuarios"
 }

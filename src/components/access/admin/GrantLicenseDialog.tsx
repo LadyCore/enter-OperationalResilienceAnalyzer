@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { grantLicense } from "@/lib/access/api";
-import { CURRENT_VERSION, type TaxType } from "@/lib/access/types";
+import { CURRENT_VERSION, type LicenseType, type TaxType } from "@/lib/access/types";
 import { useRpcError } from "@/hooks/useRpcError";
 import { Field } from "@/components/entities/field";
 
@@ -40,6 +40,7 @@ export function GrantLicenseDialog({ open, onOpenChange, presetEmail, onDone }: 
   const [clientName, setClientName] = useState("");
   const [taxType, setTaxType] = useState<TaxType | "">("");
   const [taxId, setTaxId] = useState("");
+  const [licenseType, setLicenseType] = useState<LicenseType>("individual");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -56,6 +57,7 @@ export function GrantLicenseDialog({ open, onOpenChange, presetEmail, onDone }: 
         clientName: clientName || undefined,
         taxType: (taxType || null) as TaxType | null,
         taxId: taxId.trim() || null,
+        licenseType,
       });
       if (result.ok) {
         toast.success(t("license.grantedToast"));
@@ -84,6 +86,17 @@ export function GrantLicenseDialog({ open, onOpenChange, presetEmail, onDone }: 
           </Field>
           <Field label={t("license.version")}>
             <Input value={version} onChange={(e) => setVersion(e.target.value)} />
+          </Field>
+          <Field label={t("license.type")} hint={t("license.typeHint")}>
+            <Select value={licenseType} onValueChange={(v) => setLicenseType(v as LicenseType)}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="individual">{t("license.type.individual")}</SelectItem>
+                <SelectItem value="company">{t("license.type.company")}</SelectItem>
+              </SelectContent>
+            </Select>
           </Field>
           <Field label={t("license.clientName")} hint={t("license.clientNameHint")}>
             <Input value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder={t("license.clientNamePlaceholder")} />

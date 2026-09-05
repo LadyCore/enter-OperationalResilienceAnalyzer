@@ -1,0 +1,2 @@
+delete from public.clients where tax_id = 'seat-test-cuit-001';
+drop table if exists public.ora_seat_test;

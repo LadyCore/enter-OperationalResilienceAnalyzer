@@ -1,0 +1,192 @@
+-- =====================================================================
+-- Licencias perpetuas: tipo Individual (1 usuario) / Empresa (4 usuarios).
+--
+-- La protección del cupo queda EN LA BASE DE DATOS (trigger sobre
+-- license_users), de modo que no puede saltarse mediante llamadas directas
+-- al backend/RPC/SQL. Se agrega una operación owner-only para asociar
+-- usuarios a una licencia existente (license_add_user).
+-- No se modifica DEMO, suscripción, pagos ni las reglas DNI/CUIT.
+-- =====================================================================
+
+-- 1) Tipo de licencia (individual por defecto = compatibilidad con datos previos)
+alter table public.licenses add column if not exists license_type text not null default 'individual';
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'licenses_license_type_check'
+  ) then
+    alter table public.licenses
+      add constraint licenses_license_type_check check (license_type in ('individual','company'));
+  end if;
+end $$;
+
+-- 2) Trigger: el cupo se aplica en cualquier INSERT/UPDATE sobre license_users
+create or replace function public.enforce_license_seat_limit()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_cap integer;
+  v_used integer;
+begin
+  select case when l.license_type = 'company' then 4 else 1 end
+    into v_cap
+  from public.licenses l
+  where l.id = NEW.license_id;
+  if v_cap is null then
+    raise exception 'The license does not exist.';
+  end if;
+
+  select count(*) into v_used
+  from public.license_users
+  where license_id = NEW.license_id;
+
+  -- Un UPDATE que conserva la misma licencia no duplica al usuario.
+  if TG_OP = 'UPDATE' and OLD.license_id = NEW.license_id then
+    v_used := v_used - 1;
+  end if;
+
+  if v_used >= v_cap then
+    raise exception 'License seat limit reached: % user(s).', v_cap;
+  end if;
+
+  return NEW;
+end;
+$$;
+
+drop trigger if exists license_users_seat_limit on public.license_users;
+create trigger license_users_seat_limit
+  before insert or update of license_id on public.license_users
+  for each row execute function public.enforce_license_seat_limit();
+
+-- 3) grant_license: acepta el tipo de licencia (individual/company)
+create or replace function public.grant_license(
+  p_user_email text,
+  p_modality text,
+  p_version text default 'current',
+  p_client_name text default null,
+  p_tax_type text default null,
+  p_tax_id text default null,
+  p_license_type text default 'individual'
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid;
+  v_client_id uuid;
+  v_license_id uuid;
+begin
+  if not public.is_owner() then
+    return jsonb_build_object('ok', false, 'reason', 'forbidden');
+  end if;
+
+  if lower(p_modality) <> 'perpetual' then
+    return jsonb_build_object('ok', false, 'reason', 'subscription_disabled');
+  end if;
+
+  if p_license_type not in ('individual', 'company') then
+    return jsonb_build_object('ok', false, 'reason', 'invalid_license_type');
+  end if;
+
+  select id into v_user_id from public.profiles where lower(email) = lower(p_user_email);
+  if v_user_id is null then
+    return jsonb_build_object('ok', false, 'reason', 'user_not_found');
+  end if;
+
+  if p_tax_type is not null and p_tax_id is not null then
+    select id into v_client_id
+    from public.clients
+    where tax_id = p_tax_id and tax_type = p_tax_type
+    limit 1;
+  end if;
+
+  if v_client_id is null then
+    insert into public.clients (name, tax_type, tax_id, email)
+    values (
+      coalesce(nullif(p_client_name, ''), p_user_email),
+      p_tax_type,
+      p_tax_id,
+      p_user_email
+    )
+    returning id into v_client_id;
+  end if;
+
+  insert into public.licenses (client_id, modality, status, version, license_type, start_date)
+  values (v_client_id, 'perpetual', 'active', coalesce(nullif(p_version, ''), 'current'), p_license_type, now())
+  returning id into v_license_id;
+
+  insert into public.license_users (license_id, user_id)
+  values (v_license_id, v_user_id);
+
+  return jsonb_build_object('ok', true, 'license_id', v_license_id);
+end;
+$$;
+grant execute on function public.grant_license(text, text, text, text, text, text, text) to authenticated;
+
+-- 4) license_add_user: owner-only, asocia un usuario a una licencia existente
+--    respetando el cupo (individual=1, empresa=4).
+create or replace function public.license_add_user(p_license_id uuid, p_user_email text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid;
+  v_license record;
+  v_used integer;
+  v_cap integer;
+begin
+  if not public.is_owner() then
+    return jsonb_build_object('ok', false, 'reason', 'forbidden');
+  end if;
+
+  select id, modality, status, license_type
+    into v_license
+  from public.licenses
+  where id = p_license_id;
+  if v_license.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'license_not_found');
+  end if;
+  if v_license.modality <> 'perpetual' then
+    return jsonb_build_object('ok', false, 'reason', 'not_perpetual');
+  end if;
+  if v_license.status <> 'active' then
+    return jsonb_build_object('ok', false, 'reason', 'license_not_active');
+  end if;
+
+  select id into v_user_id from public.profiles where lower(email) = lower(p_user_email);
+  if v_user_id is null then
+    return jsonb_build_object('ok', false, 'reason', 'user_not_found');
+  end if;
+
+  if exists (
+    select 1 from public.license_users where license_id = p_license_id and user_id = v_user_id
+  ) then
+    return jsonb_build_object('ok', false, 'reason', 'already_added');
+  end if;
+
+  v_cap := case when v_license.license_type = 'company' then 4 else 1 end;
+  select count(*) into v_used from public.license_users where license_id = p_license_id;
+  if v_used >= v_cap then
+    return jsonb_build_object('ok', false, 'reason', 'seat_exceeded');
+  end if;
+
+  begin
+    insert into public.license_users (license_id, user_id)
+    values (p_license_id, v_user_id);
+  exception
+    when unique_violation then
+      return jsonb_build_object('ok', false, 'reason', 'already_added');
+  end;
+
+  return jsonb_build_object('ok', true, 'license_id', p_license_id, 'user_id', v_user_id);
+end;
+$$;
+grant execute on function public.license_add_user(uuid, text) to authenticated;

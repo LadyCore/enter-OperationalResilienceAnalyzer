@@ -10,6 +10,7 @@ import {
   KeyRound,
   Loader2,
   RefreshCw,
+  UserPlus,
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -33,6 +34,7 @@ import {
 } from "@/lib/access/api";
 import { GrantLicenseDialog } from "@/components/access/admin/GrantLicenseDialog";
 import { ReissueDemoDialog } from "@/components/access/admin/ReissueDemoDialog";
+import { AddLicenseUserDialog } from "@/components/access/admin/AddLicenseUserDialog";
 
 type ActionTarget = { email: string; id: string } | null;
 
@@ -56,6 +58,11 @@ const licenseStatusKey: Record<string, string> = {
   active: "accessAdmin.licenseStatus.active",
   revoked: "accessAdmin.licenseStatus.revoked",
 };
+const licenseTypeKey: Record<string, string> = {
+  individual: "license.type.individual",
+  company: "license.type.company",
+};
+const LICENSE_SEAT_CAP: Record<string, number> = { individual: 1, company: 4 };
 
 /** Access admin page — only the ORA owner can reach it (route guard). */
 export function AccessAdminPage() {
@@ -65,6 +72,7 @@ export function AccessAdminPage() {
   const [loading, setLoading] = useState(true);
   const [grantTarget, setGrantTarget] = useState<ActionTarget>(null);
   const [demoTarget, setDemoTarget] = useState<ActionTarget>(null);
+  const [licenseUserTarget, setLicenseUserTarget] = useState<{ licenseId: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -309,7 +317,9 @@ export function AccessAdminPage() {
                     <TableRow>
                       <TableHead>{t("accessAdmin.th.client")}</TableHead>
                       <TableHead>{t("accessAdmin.th.modality")}</TableHead>
+                      <TableHead>{t("license.type")}</TableHead>
                       <TableHead>{t("accessAdmin.th.status")}</TableHead>
+                      <TableHead>{t("accessAdmin.th.users")}</TableHead>
                       <TableHead>{t("accessAdmin.th.version")}</TableHead>
                       <TableHead>{t("accessAdmin.th.issued")}</TableHead>
                     </TableRow>
@@ -319,15 +329,41 @@ export function AccessAdminPage() {
                       const client = overview?.clients.find((c) => c.id === l.client_id);
                       const modalityKey = licenseModalityKey[l.modality];
                       const statusKey = licenseStatusKey[l.status];
+                      const typeKey = licenseTypeKey[l.license_type];
+                      const cap = LICENSE_SEAT_CAP[l.license_type] ?? 1;
+                      const used = (overview?.licenseUserCounts ?? {})[l.id] ?? 0;
+                      const full = used >= cap;
                       return (
                         <TableRow key={l.id}>
                           <TableCell className="font-medium">{client?.name ?? t("accessAdmin.unknownClient")}</TableCell>
                           <TableCell>{modalityKey ? t(modalityKey) : l.modality}</TableCell>
                           <TableCell>
+                            <Badge variant="outline" className="font-normal">
+                              {typeKey ? t(typeKey) : l.license_type}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
                             <StatusBadge
                               label={statusKey ? t(statusKey) : l.status}
                               tone={l.status === "active" ? "ok" : "bad"}
                             />
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <span className={full ? "text-xs font-medium text-risk-critical" : "text-xs text-muted-foreground"}>
+                                {t("license.usersCount", { used, max: cap })}
+                              </span>
+                              {l.modality === "perpetual" && l.status === "active" && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={full}
+                                  onClick={() => setLicenseUserTarget({ licenseId: l.id })}
+                                >
+                                  <UserPlus className="h-3.5 w-3.5" /> {t("license.addUser")}
+                                </Button>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground">{l.version}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">
@@ -409,6 +445,15 @@ export function AccessAdminPage() {
           setDemoTarget(null);
           void load();
           void refreshAccess();
+        }}
+      />
+      <AddLicenseUserDialog
+        open={Boolean(licenseUserTarget)}
+        onOpenChange={(open) => !open && setLicenseUserTarget(null)}
+        licenseId={licenseUserTarget?.licenseId ?? ""}
+        onDone={() => {
+          setLicenseUserTarget(null);
+          void load();
         }}
       />
     </div>

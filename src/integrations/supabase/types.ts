@@ -3691,6 +3691,7 @@ export type Database = {
           client_id: string
           id: string
           issued_at: string
+          license_type: string
           modality: string
           notes: string | null
           renewal_date: string | null
@@ -3702,6 +3703,7 @@ export type Database = {
           client_id: string
           id?: string
           issued_at?: string
+          license_type?: string
           modality: string
           notes?: string | null
           renewal_date?: string | null
@@ -3713,6 +3715,7 @@ export type Database = {
           client_id?: string
           id?: string
           issued_at?: string
+          license_type?: string
           modality?: string
           notes?: string | null
           renewal_date?: string | null
@@ -4168,19 +4171,33 @@ export type Database = {
         Returns: Json
       }
       grant_license: {
-        Args: {
-          p_client_name?: string
-          p_modality: string
-          p_tax_id?: string
-          p_tax_type?: string
-          p_user_email: string
-          p_version?: string
-        }
+        Args:
+          | {
+              p_client_name?: string
+              p_license_type?: string
+              p_modality: string
+              p_tax_id?: string
+              p_tax_type?: string
+              p_user_email: string
+              p_version?: string
+            }
+          | {
+              p_client_name?: string
+              p_modality: string
+              p_tax_id?: string
+              p_tax_type?: string
+              p_user_email: string
+              p_version?: string
+            }
         Returns: Json
       }
       is_owner: {
         Args: Record<PropertyKey, never>
         Returns: boolean
+      }
+      license_add_user: {
+        Args: { p_license_id: string; p_user_email: string }
+        Returns: Json
       }
       request_demo: {
         Args: { p_client_name?: string; p_tax_id: string; p_tax_type: string }

@@ -938,5 +938,20 @@
   "relational.relatedPeople": "Related people",
   "relational.results": "{{count}} results",
   "relational.search": "Search",
-  "relational.tasksCount": "{{count}} tasks"
+  "relational.tasksCount": "{{count}} tasks",
+  "access.error.alreadyAdded": "That user is already assigned to this license.",
+  "access.error.invalidLicenseType": "Invalid license type.",
+  "access.error.licenseNotActive": "The license is not active.",
+  "access.error.licenseNotFound": "License not found.",
+  "access.error.notPerpetual": "Only perpetual licenses accept additional users.",
+  "access.error.seatExceeded": "The license has reached its user limit (1 for Individual, 4 for Company).",
+  "accessAdmin.th.users": "Users",
+  "license.addUser": "Add user",
+  "license.addUserDescription": "Associate an existing ORA account to this license. The seat limit (1 for Individual, 4 for Company) is enforced server-side.",
+  "license.addUserTitle": "Add user to license",
+  "license.type": "License type",
+  "license.type.company": "Company",
+  "license.type.individual": "Individual",
+  "license.typeHint": "Individual allows 1 user; Company allows up to 4. The client document (DNI/CUIT) does not affect the limit.",
+  "license.usersCount": "{{used}}/{{max}} users"
 }

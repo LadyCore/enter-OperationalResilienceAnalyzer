@@ -1,0 +1,65 @@
+create table if not exists public.ora_seat_test (
+  id serial primary key,
+  label text not null,
+  ok boolean not null,
+  detail text
+);
+
+do $$
+declare
+  v_users uuid[];
+  v_client uuid;
+  v_li uuid;
+  v_lc uuid;
+  v_ok boolean;
+  v_msg text;
+begin
+  select array_agg(id order by created_at) into v_users from (
+    select p.id, p.created_at from public.profiles p order by p.created_at limit 5
+  ) t;
+
+  insert into public.clients (name, tax_type, tax_id, email)
+  values ('SEAT TEST CLIENT', 'cuit', 'seat-test-cuit-001', 'seat-test@ora.local')
+  returning id into v_client;
+
+  -- Individual: 1 usuario permitido, segundo rechazado
+  insert into public.licenses (client_id, modality, status, version, license_type, start_date)
+  values (v_client, 'perpetual', 'active', 'current', 'individual', now()) returning id into v_li;
+
+  begin
+    insert into public.license_users (license_id, user_id) values (v_li, v_users[1]);
+    insert into public.ora_seat_test (label, ok, detail) values ('individual_1_user', true, 'user 1 added');
+  exception when others then
+    insert into public.ora_seat_test (label, ok, detail) values ('individual_1_user', false, SQLERRM);
+  end;
+
+  v_ok := false; v_msg := '';
+  begin
+    insert into public.license_users (license_id, user_id) values (v_li, v_users[2]);
+  exception when others then
+    v_ok := true; v_msg := SQLERRM;
+  end;
+  insert into public.ora_seat_test (label, ok, detail) values ('individual_2_user_rejected', v_ok, v_msg);
+
+  -- Empresa: hasta 4 usuarios permitidos, quinto rechazado
+  insert into public.licenses (client_id, modality, status, version, license_type, start_date)
+  values (v_client, 'perpetual', 'active', 'current', 'company', now()) returning id into v_lc;
+
+  for i in 1..4 loop
+    v_ok := true; v_msg := '';
+    begin
+      insert into public.license_users (license_id, user_id) values (v_lc, v_users[i]);
+    exception when others then
+      v_ok := false; v_msg := SQLERRM;
+    end;
+    insert into public.ora_seat_test (label, ok, detail) values ('company_' || i || '_user', v_ok, v_msg);
+  end loop;
+
+  v_ok := false; v_msg := '';
+  begin
+    insert into public.license_users (license_id, user_id) values (v_lc, v_users[5]);
+  exception when others then
+    v_ok := true; v_msg := SQLERRM;
+  end;
+  insert into public.ora_seat_test (label, ok, detail) values ('company_5_user_rejected', v_ok, v_msg);
+end $$;
