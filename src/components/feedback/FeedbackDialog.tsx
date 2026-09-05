@@ -144,7 +144,7 @@ export function FeedbackDialog({ open, onOpenChange, context, technical, initial
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
         {status === "sent" ? (
           <div className="space-y-4 py-4 text-center">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600">
