@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import {
   BadgeCheck,
@@ -46,8 +47,19 @@ function StatusBadge({ label, tone }: { label: string; tone: "owner" | "ok" | "w
   return <Badge variant="outline" className={toneClass}>{label}</Badge>;
 }
 
+/** Static i18n keys for raw license values — translate at render time with t(). */
+const licenseModalityKey: Record<string, string> = {
+  perpetual: "license.perpetual",
+  subscription: "license.subscription",
+};
+const licenseStatusKey: Record<string, string> = {
+  active: "accessAdmin.licenseStatus.active",
+  revoked: "accessAdmin.licenseStatus.revoked",
+};
+
 /** Access admin page — only the ORA owner can reach it (route guard). */
 export function AccessAdminPage() {
+  const { t } = useTranslation();
   const { isOwner, refreshAccess } = useOra();
   const [overview, setOverview] = useState<AdminOverview | null>(null);
   const [loading, setLoading] = useState(true);
@@ -60,11 +72,11 @@ export function AccessAdminPage() {
       setOverview(await getAdminOverview());
     } catch (err) {
       console.error(err);
-      toast.error("Could not load access overview.");
+      toast.error(t("accessAdmin.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void load();
@@ -88,38 +100,43 @@ export function AccessAdminPage() {
   const userStatus = (id: string) => {
     const view = overview?.users.find((u) => u.profile.id === id);
     if (!view) return null;
-    if (view.profile.is_owner) return { label: "Owner", tone: "owner" as const };
+    if (view.profile.is_owner) return { label: t("accessAdmin.status.owner"), tone: "owner" as const };
     if (view.activeLicense) {
       return {
-        label: view.activeLicense.modality === "subscription" ? "Subscription active" : "Perpetual license",
+        label:
+          view.activeLicense.modality === "subscription"
+            ? t("accessAdmin.status.subscriptionActive")
+            : t("accessAdmin.status.perpetual"),
         tone: "ok" as const,
       };
     }
     if (view.latestDemo) {
       const remaining = daysLeft(view.latestDemo.expires_at);
-      if (remaining === 0) return { label: "DEMO expired", tone: "bad" as const };
-      if (isExpiring(remaining)) return { label: `DEMO ${remaining}d left`, tone: "warn" as const };
-      return { label: `DEMO ${remaining}d left`, tone: "neutral" as const };
+      if (remaining === 0) return { label: t("accessAdmin.status.demoExpired"), tone: "bad" as const };
+      if (isExpiring(remaining)) {
+        return { label: t("accessAdmin.status.demoLeft", { count: remaining }), tone: "warn" as const };
+      }
+      return { label: t("accessAdmin.status.demoLeft", { count: remaining }), tone: "neutral" as const };
     }
-    return { label: "No access", tone: "neutral" as const };
+    return { label: t("accessAdmin.status.noAccess"), tone: "neutral" as const };
   };
 
   const handleRevoke = async (licenseId: string) => {
     const result = await revokeLicense(licenseId);
     if (result.ok) {
-      toast.success("License revoked.");
+      toast.success(t("accessAdmin.revokedToast"));
       await Promise.all([load(), refreshAccess()]);
     } else {
-      toast.error("Could not revoke the license.");
+      toast.error(t("accessAdmin.revokeFailed"));
     }
   };
 
   if (!isOwner) {
     return (
       <div className="space-y-4">
-        <p className="text-sm text-muted-foreground">You do not have permission to manage access.</p>
+        <p className="text-sm text-muted-foreground">{t("accessAdmin.forbidden")}</p>
         <Button asChild variant="outline" size="sm">
-          <Link to="/">Back to dashboard</Link>
+          <Link to="/">{t("accessAdmin.backToDashboard")}</Link>
         </Button>
       </div>
     );
@@ -130,14 +147,14 @@ export function AccessAdminPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
-            <FileKey className="h-6 w-6 text-primary" /> Access &amp; licensing
+            <FileKey className="h-6 w-6 text-primary" /> {t("nav.accessLicensing")}
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Users, DEMOs and licenses. Subscription is prepared but not enabled yet.
+            {t("accessAdmin.subtitle")}
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
-          <RefreshCw className="h-4 w-4" /> Refresh
+          <RefreshCw className="h-4 w-4" /> {t("accessAdmin.refresh")}
         </Button>
       </div>
 
@@ -148,7 +165,7 @@ export function AccessAdminPage() {
             <Users className="h-5 w-5 text-muted-foreground" />
             <div>
               <p className="font-mono text-2xl font-semibold tabular-nums">{stats.users}</p>
-              <p className="text-xs text-muted-foreground">Users</p>
+              <p className="text-xs text-muted-foreground">{t("accessAdmin.stat.users")}</p>
             </div>
           </CardContent>
         </Card>
@@ -157,7 +174,7 @@ export function AccessAdminPage() {
             <KeyRound className="h-5 w-5 text-primary" />
             <div>
               <p className="font-mono text-2xl font-semibold tabular-nums">{stats.activeLicenses}</p>
-              <p className="text-xs text-muted-foreground">Active licenses</p>
+              <p className="text-xs text-muted-foreground">{t("accessAdmin.stat.activeLicenses")}</p>
             </div>
           </CardContent>
         </Card>
@@ -166,7 +183,7 @@ export function AccessAdminPage() {
             <BadgeCheck className="h-5 w-5 text-emerald-600" />
             <div>
               <p className="font-mono text-2xl font-semibold tabular-nums">{stats.activeDemos}</p>
-              <p className="text-xs text-muted-foreground">Active DEMOs</p>
+              <p className="text-xs text-muted-foreground">{t("accessAdmin.stat.activeDemos")}</p>
             </div>
           </CardContent>
         </Card>
@@ -175,7 +192,7 @@ export function AccessAdminPage() {
             <CalendarX2 className="h-5 w-5 text-destructive" />
             <div>
               <p className="font-mono text-2xl font-semibold tabular-nums">{stats.expiredDemos}</p>
-              <p className="text-xs text-muted-foreground">Expired DEMOs</p>
+              <p className="text-xs text-muted-foreground">{t("accessAdmin.stat.expiredDemos")}</p>
             </div>
           </CardContent>
         </Card>
@@ -184,24 +201,24 @@ export function AccessAdminPage() {
       {loading && !overview ? (
         <div className="flex h-40 items-center justify-center text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin" />
-          <span className="ml-2 text-sm">Loading access overview…</span>
+          <span className="ml-2 text-sm">{t("accessAdmin.loadingOverview")}</span>
         </div>
       ) : (
         <>
           {/* Users */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm">Users</CardTitle>
-              <CardDescription>Access state per account. Users without access stay listed for review.</CardDescription>
+              <CardTitle className="text-sm">{t("accessAdmin.usersTitle")}</CardTitle>
+              <CardDescription>{t("accessAdmin.usersHint")}</CardDescription>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>User</TableHead>
-                    <TableHead>Access</TableHead>
-                    <TableHead>DEMO / expiry</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead>{t("accessAdmin.th.user")}</TableHead>
+                    <TableHead>{t("accessAdmin.th.access")}</TableHead>
+                    <TableHead>{t("accessAdmin.th.demoExpiry")}</TableHead>
+                    <TableHead className="text-right">{t("accessAdmin.th.actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -223,10 +240,15 @@ export function AccessAdminPage() {
                         <TableCell className="text-sm text-muted-foreground">
                           {demo ? (
                             <>
-                              Started {formatDateDDMMYYYY(demo.started_at)} ·{" "}
                               {daysLeft(demo.expires_at) === 0
-                                ? `expired ${formatDateDDMMYYYY(demo.expires_at)}`
-                                : `expires ${formatDateDDMMYYYY(demo.expires_at)}`}
+                                ? t("accessAdmin.demoExpiredLine", {
+                                    started: formatDateDDMMYYYY(demo.started_at),
+                                    expires: formatDateDDMMYYYY(demo.expires_at),
+                                  })
+                                : t("accessAdmin.demoActiveLine", {
+                                    started: formatDateDDMMYYYY(demo.started_at),
+                                    expires: formatDateDDMMYYYY(demo.expires_at),
+                                  })}
                             </>
                           ) : (
                             "—"
@@ -241,14 +263,14 @@ export function AccessAdminPage() {
                                   size="sm"
                                   onClick={() => setGrantTarget({ email: view.profile.email ?? "", id: view.profile.id })}
                                 >
-                                  <KeyRound className="h-3.5 w-3.5" /> License
+                                  <KeyRound className="h-3.5 w-3.5" /> {t("accessAdmin.action.license")}
                                 </Button>
                                 <Button
                                   variant="outline"
                                   size="sm"
                                   onClick={() => setDemoTarget({ email: view.profile.email ?? "", id: view.profile.id })}
                                 >
-                                  DEMO
+                                  {t("common.demo")}
                                 </Button>
                               </>
                             )}
@@ -259,7 +281,7 @@ export function AccessAdminPage() {
                                 className="text-destructive hover:text-destructive"
                                 onClick={() => void handleRevoke(license.id)}
                               >
-                                <Ban className="h-3.5 w-3.5" /> Revoke
+                                <Ban className="h-3.5 w-3.5" /> {t("accessAdmin.action.revoke")}
                               </Button>
                             )}
                           </div>
@@ -275,33 +297,35 @@ export function AccessAdminPage() {
           {/* Licenses */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm">Licenses</CardTitle>
-              <CardDescription>Licenses belong to a client and can cover multiple users.</CardDescription>
+              <CardTitle className="text-sm">{t("accessAdmin.licensesTitle")}</CardTitle>
+              <CardDescription>{t("accessAdmin.licensesHint")}</CardDescription>
             </CardHeader>
             <CardContent>
               {(overview?.licenses ?? []).length === 0 ? (
-                <p className="text-sm text-muted-foreground">No licenses registered yet.</p>
+                <p className="text-sm text-muted-foreground">{t("accessAdmin.noLicenses")}</p>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Client</TableHead>
-                      <TableHead>Modality</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Version</TableHead>
-                      <TableHead>Issued</TableHead>
+                      <TableHead>{t("accessAdmin.th.client")}</TableHead>
+                      <TableHead>{t("accessAdmin.th.modality")}</TableHead>
+                      <TableHead>{t("accessAdmin.th.status")}</TableHead>
+                      <TableHead>{t("accessAdmin.th.version")}</TableHead>
+                      <TableHead>{t("accessAdmin.th.issued")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {(overview?.licenses ?? []).map((l) => {
                       const client = overview?.clients.find((c) => c.id === l.client_id);
+                      const modalityKey = licenseModalityKey[l.modality];
+                      const statusKey = licenseStatusKey[l.status];
                       return (
                         <TableRow key={l.id}>
-                          <TableCell className="font-medium">{client?.name ?? "Unknown client"}</TableCell>
-                          <TableCell className="capitalize">{l.modality}</TableCell>
+                          <TableCell className="font-medium">{client?.name ?? t("accessAdmin.unknownClient")}</TableCell>
+                          <TableCell>{modalityKey ? t(modalityKey) : l.modality}</TableCell>
                           <TableCell>
                             <StatusBadge
-                              label={l.status}
+                              label={statusKey ? t(statusKey) : l.status}
                               tone={l.status === "active" ? "ok" : "bad"}
                             />
                           </TableCell>
@@ -321,23 +345,23 @@ export function AccessAdminPage() {
           {/* DEMO usage history — 12-month eligibility ledger */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm">DEMO usage history</CardTitle>
+              <CardTitle className="text-sm">{t("accessAdmin.usageTitle")}</CardTitle>
               <CardDescription>
-                DNI/CUIT usage drives the 12-month reuse rule, independent of user accounts.
+                {t("accessAdmin.usageHint")}
               </CardDescription>
             </CardHeader>
             <CardContent>
               {(overview?.usageHistory ?? []).length === 0 ? (
-                <p className="text-sm text-muted-foreground">No DEMO usage recorded yet.</p>
+                <p className="text-sm text-muted-foreground">{t("accessAdmin.noUsage")}</p>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Tax ID</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Client</TableHead>
-                      <TableHead>Used</TableHead>
-                      <TableHead>Eligible again</TableHead>
+                      <TableHead>{t("accessAdmin.th.taxId")}</TableHead>
+                      <TableHead>{t("accessAdmin.th.type")}</TableHead>
+                      <TableHead>{t("accessAdmin.th.client")}</TableHead>
+                      <TableHead>{t("accessAdmin.th.used")}</TableHead>
+                      <TableHead>{t("accessAdmin.th.eligibleAgain")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { FileText, FolderOpen, GitBranch, ListChecks, Pencil, Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +24,7 @@ interface DeleteTarget {
 }
 
 export function ProcessTree() {
+  const { t } = useTranslation();
   const { db, remove, upsert } = useOra();
   const [procDialog, setProcDialog] = useState<{ open: boolean; process?: Process }>({ open: false });
   const [fnDialog, setFnDialog] = useState<{
@@ -42,20 +44,20 @@ export function ProcessTree() {
     const { collection, id } = deleteTarget;
     if (collection === "processes") {
       const fnIds = db.functions.filter((f) => f.processId === id).map((f) => f.id);
-      const taskIds = db.tasks.filter((t) => fnIds.includes(t.functionId)).map((t) => t.id);
+      const taskIds = db.tasks.filter((task) => fnIds.includes(task.functionId)).map((task) => task.id);
       taskIds.forEach((tid) => remove("tasks", tid));
       fnIds.forEach((fid) => remove("functions", fid));
       remove("processes", id);
-      toast.success("Process and its functions/tasks deleted");
+      toast.success(t("processTree.deletedProcess"));
     } else if (collection === "functions") {
       db.tasks
-        .filter((t) => t.functionId === id)
-        .forEach((t) => remove("tasks", t.id));
+        .filter((task) => task.functionId === id)
+        .forEach((task) => remove("tasks", task.id));
       remove("functions", id);
-      toast.success("Function and its tasks deleted");
+      toast.success(t("processTree.deletedFunction"));
     } else {
       remove("tasks", id);
-      toast.success("Task deleted");
+      toast.success(t("processTree.deletedTask"));
     }
     setDeleteTarget(null);
   };
@@ -64,11 +66,11 @@ export function ProcessTree() {
     return (
       <EmptyState
         icon={GitBranch}
-        title="No processes yet"
-        description="Create a process to start modeling your organization's structure."
+        title={t("processTree.empty.title")}
+        description={t("processTree.empty.description")}
         action={
           <Button onClick={() => setProcDialog({ open: true })}>
-            <Plus className="h-4 w-4" /> New process
+            <Plus className="h-4 w-4" /> {t("processTree.newProcess")}
           </Button>
         }
       />
@@ -101,7 +103,7 @@ export function ProcessTree() {
                   size="sm"
                   onClick={() => setFnDialog({ open: true, presetProcessId: process.id })}
                 >
-                  <Plus className="h-3.5 w-3.5" /> Function
+                  <Plus className="h-3.5 w-3.5" /> {t("entity.function")}
                 </Button>
                 <Button
                   variant="ghost"
@@ -119,7 +121,7 @@ export function ProcessTree() {
                       collection: "processes",
                       id: process.id,
                       label: process.name,
-                      cascadeNote: "This also deletes its functions and tasks.",
+                      cascadeNote: t("processTree.cascadeProcess"),
                     })
                   }
                 >
@@ -132,11 +134,11 @@ export function ProcessTree() {
             <div className="divide-y">
               {functions.length === 0 && (
                 <p className="px-4 py-4 text-sm text-muted-foreground">
-                  No functions yet in this process.
+                  {t("processTree.noFunctions")}
                 </p>
               )}
               {functions.map((fn) => {
-                const tasks = db.tasks.filter((t) => t.functionId === fn.id);
+                const tasks = db.tasks.filter((task) => task.functionId === fn.id);
                 return (
                   <div key={fn.id}>
                     <div className="flex flex-wrap items-center gap-3 px-4 py-2.5 pl-8">
@@ -156,7 +158,7 @@ export function ProcessTree() {
                           size="sm"
                           onClick={() => setTaskDialog({ open: true, presetFunctionId: fn.id })}
                         >
-                          <Plus className="h-3.5 w-3.5" /> Task
+                          <Plus className="h-3.5 w-3.5" /> {t("entity.task")}
                         </Button>
                         <Button variant="ghost" size="icon" onClick={() => setFnDialog({ open: true, fn })}>
                           <Pencil className="h-4 w-4" />
@@ -170,7 +172,7 @@ export function ProcessTree() {
                               collection: "functions",
                               id: fn.id,
                               label: fn.name,
-                              cascadeNote: "This also deletes its tasks.",
+                              cascadeNote: t("processTree.cascadeFunction"),
                             })
                           }
                         >
@@ -191,12 +193,12 @@ export function ProcessTree() {
                               <CriticalityBadge criticality={task.criticality} />
                               {!task.isDocumented && (
                                 <Badge variant="outline" className="border-risk-medium/40 text-risk-medium">
-                                  Not documented
+                                  {t("processTree.notDocumented")}
                                 </Badge>
                               )}
                             </div>
                             <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                              <span>{dep.capableCount} capable</span>
+                              <span>{t("processTree.capableCount", { count: dep.capableCount })}</span>
                               {task.systemName && <span>{task.systemName}</span>}
                             </div>
                           </div>
@@ -230,7 +232,7 @@ export function ProcessTree() {
       {/* Bottom action */}
       <div className="flex justify-center pt-1">
         <Button variant="outline" onClick={() => setProcDialog({ open: true })}>
-          <Plus className="h-4 w-4" /> Add process
+          <Plus className="h-4 w-4" /> {t("processTree.addProcess")}
         </Button>
       </div>
 
@@ -255,11 +257,9 @@ export function ProcessTree() {
       <ConfirmDeleteDialog
         open={Boolean(deleteTarget)}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title={`Delete "${deleteTarget?.label}"?`}
+        title={t("processTree.deleteTitle", { label: deleteTarget?.label ?? "" })}
         description={
-          deleteTarget?.cascadeNote
-            ? deleteTarget.cascadeNote
-            : "This action cannot be undone."
+          deleteTarget?.cascadeNote ?? t("processTree.deleteDescription")
         }
         onConfirm={confirmDelete}
       />

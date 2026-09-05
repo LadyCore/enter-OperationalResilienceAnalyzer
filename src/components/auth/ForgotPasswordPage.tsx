@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { KeyRound, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Field } from "@/components/entities/field";
 
 export function ForgotPasswordPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -19,7 +21,7 @@ export function ForgotPasswordPage() {
     setError(null);
 
     if (!email.trim()) {
-      setError("Enter your email address.");
+      setError(t("auth.enterEmailAddress"));
       return;
     }
 
@@ -31,7 +33,7 @@ export function ForgotPasswordPage() {
       if (resetError) throw resetError;
       setSent(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not send the reset link.");
+      setError(err instanceof Error ? err.message : t("auth.couldNotSendResetLink"));
     } finally {
       setBusy(false);
     }
@@ -45,38 +47,33 @@ export function ForgotPasswordPage() {
             <ShieldCheck className="h-6 w-6" />
           </div>
           <h1 className="mt-3 font-display text-2xl font-bold tracking-tight">ORA</h1>
-          <p className="text-sm text-muted-foreground">Organizational Resilience Analyzer</p>
+          <p className="text-sm text-muted-foreground">{t("brand.subtitle")}</p>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>Reset password</CardTitle>
+            <CardTitle>{t("auth.resetPassword")}</CardTitle>
             <CardDescription>
-              {sent
-                ? "Check your inbox"
-                : "Enter your email address and we'll send you a link to reset your password."}
+              {sent ? t("auth.checkYourInbox") : t("auth.resetPasswordDescription")}
             </CardDescription>
           </CardHeader>
           <CardContent>
             {sent ? (
               <div className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  If an account exists for that email address, a secure password reset link has been sent.
-                  The link expires after a short time.
-                </p>
+                <p className="text-sm text-muted-foreground">{t("auth.resetLinkSentNote")}</p>
                 <Button className="w-full" onClick={() => navigate("/")}>
-                  Back to sign in
+                  {t("auth.backToSignIn")}
                 </Button>
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
-                <Field label="Email">
+                <Field label={t("auth.email")}>
                   <Input
                     type="email"
                     autoComplete="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@company.com"
+                    placeholder={t("common.emailPlaceholder")}
                   />
                 </Field>
 
@@ -88,10 +85,10 @@ export function ForgotPasswordPage() {
 
                 <Button type="submit" className="w-full" disabled={busy}>
                   <KeyRound className="h-4 w-4" />
-                  {busy ? "Sending…" : "Send reset link"}
+                  {busy ? t("auth.sending") : t("auth.sendResetLink")}
                 </Button>
                 <Button variant="ghost" className="w-full" onClick={() => navigate("/")}>
-                  Back to sign in
+                  {t("auth.backToSignIn")}
                 </Button>
               </form>
             )}

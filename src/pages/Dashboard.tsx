@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import {
   AlertTriangle,
@@ -28,6 +29,7 @@ import { ImportHelpCard } from "@/components/import/ImportHelpCard";
 import { DemoBanner } from "@/components/access/DemoBanner";
 
 export function Dashboard() {
+  const { t } = useTranslation();
   const { db, resetToSeed } = useOra();
   const [orgOpen, setOrgOpen] = useState(false);
   const metrics = computeDashboardMetrics(db);
@@ -48,21 +50,21 @@ export function Dashboard() {
       <DemoBanner />
 
       <PageHeader
-        title="Operational resilience dashboard"
-        description="An overview of how operational capability is distributed across the organization."
+        title={t("dash.title")}
+        description={t("dash.subtitle")}
       >
         {isDemo && (
           <Button variant="outline" onClick={handleReset}>
-            <RotateCcw className="h-4 w-4" /> Reset demo data
+            <RotateCcw className="h-4 w-4" /> {t("dash.resetDemo")}
           </Button>
         )}
         <Button asChild>
           <Link to="/import">
-            <FileSpreadsheet className="h-4 w-4" /> Import organization
+            <FileSpreadsheet className="h-4 w-4" /> {t("common.importOrganization")}
           </Link>
         </Button>
         <Button onClick={() => setOrgOpen(true)}>
-          Edit organization
+          {t("organization.edit")}
         </Button>
       </PageHeader>
 
@@ -83,29 +85,85 @@ export function Dashboard() {
             </p>
           </div>
           <Button variant="outline" size="sm" onClick={() => setOrgOpen(true)}>
-            Edit
+            {t("dash.edit")}
           </Button>
         </CardContent>
       </Card>
 
       {/* Metrics */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Processes" value={metrics.processCount} hint={`${metrics.criticalProcesses} critical`} icon={GitBranch} tone={metrics.criticalProcesses > 0 ? "primary" : "default"} delay={0} />
-        <StatCard label="Tasks" value={metrics.taskCount} hint={`${metrics.criticalTasks} critical`} icon={ListChecks} tone="default" delay={50} />
-        <StatCard label="Single-person critical tasks" value={metrics.singlePersonTasks} hint="Critical tasks with exactly one capable person" icon={UserX} tone={metrics.singlePersonTasks > 0 ? "high" : "low"} delay={100} />
-        <StatCard label="No coverage" value={metrics.noCoverageTasks} hint="Tasks no active person can perform" icon={AlertTriangle} tone={metrics.noCoverageTasks > 0 ? "critical" : "low"} delay={150} />
-        <StatCard label="Documentation gaps" value={metrics.docGapTasks} hint="Critical tasks that are undocumented" icon={FileWarning} tone={metrics.docGapTasks > 0 ? "medium" : "low"} delay={200} />
-        <StatCard label="Concentrated competencies" value={metrics.concentratedCompetencies} hint="Critical competency held by one person" icon={Award} tone={metrics.concentratedCompetencies > 0 ? "critical" : "low"} delay={250} />
-        <StatCard label="Bus-factor people" value={metrics.busFactorPeople} hint="People capable of 3+ critical tasks" icon={Users} tone={metrics.busFactorPeople > 0 ? "high" : "low"} delay={300} />
-        <StatCard label="Role-concentrated tasks" value={metrics.roleConcentratedTasks} hint="Critical tasks covered by a single role" icon={ShieldAlert} tone={metrics.roleConcentratedTasks > 0 ? "high" : "low"} delay={350} />
+        <StatCard
+          label={t("nav.processes")}
+          value={metrics.processCount}
+          hint={t("dash.hint.criticalProcesses", { count: metrics.criticalProcesses })}
+          icon={GitBranch}
+          tone={metrics.criticalProcesses > 0 ? "primary" : "default"}
+          delay={0}
+        />
+        <StatCard
+          label={t("nav.tasks")}
+          value={metrics.taskCount}
+          hint={t("dash.hint.criticalTasks", { count: metrics.criticalTasks })}
+          icon={ListChecks}
+          tone="default"
+          delay={50}
+        />
+        <StatCard
+          label={t("dash.card.singlePerson")}
+          value={metrics.singlePersonTasks}
+          hint={t("dash.card.singlePersonHint")}
+          icon={UserX}
+          tone={metrics.singlePersonTasks > 0 ? "high" : "low"}
+          delay={100}
+        />
+        <StatCard
+          label={t("dash.card.noCoverage")}
+          value={metrics.noCoverageTasks}
+          hint={t("dash.card.noCoverageHint")}
+          icon={AlertTriangle}
+          tone={metrics.noCoverageTasks > 0 ? "critical" : "low"}
+          delay={150}
+        />
+        <StatCard
+          label={t("dash.card.docGaps")}
+          value={metrics.docGapTasks}
+          hint={t("dash.card.docGapsHint")}
+          icon={FileWarning}
+          tone={metrics.docGapTasks > 0 ? "medium" : "low"}
+          delay={200}
+        />
+        <StatCard
+          label={t("dash.card.concComp")}
+          value={metrics.concentratedCompetencies}
+          hint={t("dash.card.concCompHint")}
+          icon={Award}
+          tone={metrics.concentratedCompetencies > 0 ? "critical" : "low"}
+          delay={250}
+        />
+        <StatCard
+          label={t("dash.card.busFactor")}
+          value={metrics.busFactorPeople}
+          hint={t("dash.card.busFactorHint")}
+          icon={Users}
+          tone={metrics.busFactorPeople > 0 ? "high" : "low"}
+          delay={300}
+        />
+        <StatCard
+          label={t("dash.card.roleConc")}
+          value={metrics.roleConcentratedTasks}
+          hint={t("dash.card.roleConcHint")}
+          icon={ShieldAlert}
+          tone={metrics.roleConcentratedTasks > 0 ? "high" : "low"}
+          delay={350}
+        />
       </div>
 
       {/* Coverage ratios */}
       <div className="grid gap-3 sm:grid-cols-2">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Overall task coverage</CardTitle>
-            <CardDescription>Tasks with at least 2 capable people</CardDescription>
+            <CardTitle className="text-sm">{t("dash.overallCoverageTitle")}</CardTitle>
+            <CardDescription>{t("dash.overallCoverageHint")}</CardDescription>
           </CardHeader>
           <CardContent>
             <p className="font-mono text-3xl font-semibold tabular-nums">
@@ -116,11 +174,11 @@ export function Dashboard() {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Critical task coverage</CardTitle>
+            <CardTitle className="text-sm">{t("dash.criticalCoverageTitle")}</CardTitle>
             <CardDescription>
               {metrics.criticalTasks > 0
-                ? "Critical tasks with at least 2 capable people"
-                : "No critical tasks detected"}
+                ? t("dash.criticalCoverageHint")
+                : t("dash.noCriticalTasksHint")}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -130,9 +188,7 @@ export function Dashboard() {
             <Progress value={metrics.criticalCoverageRatio * 100} className="mt-3" />
             {metrics.criticalTasks === 0 && (
               <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-                No critical tasks were detected, so this is 0% by definition — not an
-                organization with critical tasks and zero coverage. Criticality is derived
-                from the process and function each task belongs to.
+                {t("dash.noCriticalTasksNote")}
               </p>
             )}
           </CardContent>
@@ -145,49 +201,55 @@ export function Dashboard() {
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-sm">
               <PhoneCall className="h-4 w-4 text-primary" />
-              Passive on-call (guardia pasiva)
+              {t("dash.onCall.title")}
             </CardTitle>
             <CardDescription>
-              Permanent availability outside ordinary hours — an independent capability dimension,
-              never part of the base dependency analysis.
+              {t("dash.onCall.description")}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <StatCard
-                label="People on call"
+                label={t("dash.onCall.people")}
                 value={onCall.peopleCount}
-                hint={onCall.assignments === 1 ? "1 assignment" : `${onCall.assignments} assignments`}
+                hint={
+                  onCall.assignments === 1
+                    ? t("dash.onCall.assignOne")
+                    : t("dash.onCall.assignMany", { count: onCall.assignments })
+                }
                 icon={Users}
                 tone="primary"
               />
               <StatCard
-                label="Capabilities covered on call"
+                label={t("dash.onCall.capabilities")}
                 value={onCall.taskCount}
-                hint={`${onCall.criticalTaskCount} critical`}
+                hint={t("dash.hint.criticalTasks", { count: onCall.criticalTaskCount })}
                 icon={ListChecks}
                 tone={onCall.criticalTaskCount > 0 ? "medium" : "default"}
               />
               <StatCard
-                label="H24 assignments"
+                label={t("dash.onCall.h24")}
                 value={onCall.h24Count}
-                hint="Around-the-clock availability declared"
+                hint={t("dash.onCall.h24Hint")}
                 icon={ShieldCheck}
                 tone={onCall.h24Count > 0 ? "low" : "default"}
               />
               <StatCard
-                label="Shift / custom assignments"
+                label={t("dash.onCall.custom")}
                 value={onCall.customCount}
-                hint="Shifts or the organization's own scheme"
+                hint={t("dash.onCall.customHint")}
                 icon={AlertTriangle}
                 tone={onCall.customCount > 0 ? "medium" : "default"}
               />
             </div>
             {onCall.singlePersonTasks.length > 0 && (
               <p className="mt-3 rounded-md border border-risk-medium/20 bg-risk-medium/5 px-3 py-2 text-xs leading-relaxed text-risk-medium">
-                On-call concentration: {onCall.singlePersonTasks.length}{" "}
-                {onCall.singlePersonTasks.length === 1 ? "capability is" : "capabilities are"} covered
-                by a single on-call person ({onCall.singlePersonTasks.join(", ")}).
+                {onCall.singlePersonTasks.length === 1
+                  ? t("dash.onCall.concOne", { names: onCall.singlePersonTasks.join(", ") })
+                  : t("dash.onCall.concMany", {
+                      count: onCall.singlePersonTasks.length,
+                      names: onCall.singlePersonTasks.join(", "),
+                    })}
               </p>
             )}
           </CardContent>
@@ -198,18 +260,18 @@ export function Dashboard() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle className="text-sm">Resilience highlights</CardTitle>
-            <CardDescription>The most significant operational dependencies detected</CardDescription>
+            <CardTitle className="text-sm">{t("dash.highlights.title")}</CardTitle>
+            <CardDescription>{t("dash.highlights.description")}</CardDescription>
           </div>
           <Button asChild variant="ghost" size="sm">
             <Link to="/analysis">
-              View all <ArrowRight className="h-4 w-4" />
+              {t("dash.viewAll")} <ArrowRight className="h-4 w-4" />
             </Link>
           </Button>
         </CardHeader>
         <CardContent>
           {topFlags.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No risk flags detected.</p>
+            <p className="text-sm text-muted-foreground">{t("dash.noFlags")}</p>
           ) : (
             <ul className="divide-y">
               {topFlags.map((flag) => (

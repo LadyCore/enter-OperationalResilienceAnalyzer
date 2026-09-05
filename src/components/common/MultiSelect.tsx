@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Check, ChevronsUpDown, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,12 +36,16 @@ export function MultiSelect({
   options,
   values,
   onChange,
-  placeholder = "Select items…",
-  emptyText = "No matching options",
+  placeholder,
+  emptyText,
   className,
 }: MultiSelectProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+
+  const placeholderText = placeholder ?? t("multiSelect.placeholder");
+  const emptyTextLabel = emptyText ?? t("multiSelect.empty");
 
   const toggle = (value: string) => {
     onChange(values.includes(value) ? values.filter((v) => v !== value) : [...values, value]);
@@ -67,7 +72,7 @@ export function MultiSelect({
           >
             <span className="flex flex-wrap items-center gap-1.5">
               {selected.length === 0 && (
-                <span className="text-sm text-muted-foreground">{placeholder}</span>
+                <span className="text-sm text-muted-foreground">{placeholderText}</span>
               )}
               {visible.map((o) => (
                 <Badge key={o.value} variant="secondary" className="gap-1 pr-1 font-normal">
@@ -80,21 +85,23 @@ export function MultiSelect({
                       remove(o.value);
                     }}
                     className="rounded-sm p-0.5 hover:bg-muted-foreground/20"
-                    aria-label={`Remove ${o.label}`}
+                    aria-label={t("multiSelect.remove", { label: o.label })}
                   >
                     <X className="h-3 w-3" />
                   </button>
                 </Badge>
               ))}
-              {extraCount > 0 && <Badge variant="secondary">+{extraCount} more</Badge>}
+              {extraCount > 0 && (
+                <Badge variant="secondary">{t("multiSelect.extraCount", { count: extraCount })}</Badge>
+              )}
             </span>
             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
           <Command>
-            <CommandInput placeholder="Search…" value={query} onValueChange={setQuery} />
-            <CommandEmpty>{emptyText}</CommandEmpty>
+            <CommandInput placeholder={t("common.search")} value={query} onValueChange={setQuery} />
+            <CommandEmpty>{emptyTextLabel}</CommandEmpty>
             <CommandGroup className="max-h-60 overflow-y-auto">
               {filtered.map((o) => {
                 const isSelected = values.includes(o.value);

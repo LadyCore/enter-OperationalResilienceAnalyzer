@@ -1,12 +1,14 @@
+import { useTranslation } from "react-i18next";
 import { PageHeader } from "@/components/common/PageHeader";
 import { ProcessTree } from "@/components/entities/ProcessTree";
 
 export function ProcessesPage() {
+  const { t } = useTranslation();
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Process structure"
-        description="Model the organization as processes, functions and tasks. Click any row to expand a task's dependency explanation."
+        title={t("page.processes.title")}
+        description={t("page.processes.description")}
       />
       <ProcessTree />
     </div>

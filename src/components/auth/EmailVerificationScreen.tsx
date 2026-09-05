@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { MailCheck, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +13,7 @@ import { useOra } from "@/store/OraContext";
  * the user sees until email_confirmed_at is set.
  */
 export function EmailVerificationScreen() {
+  const { t } = useTranslation();
   const { user, signOut } = useOra();
   const [busy, setBusy] = useState(false);
   const [resent, setResent] = useState(false);
@@ -31,7 +33,7 @@ export function EmailVerificationScreen() {
       if (resendError) throw resendError;
       setResent(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not resend the verification email.");
+      setError(err instanceof Error ? err.message : t("auth.couldNotResendVerification"));
     } finally {
       setBusy(false);
     }
@@ -45,26 +47,21 @@ export function EmailVerificationScreen() {
             <ShieldCheck className="h-6 w-6" />
           </div>
           <h1 className="mt-3 font-display text-2xl font-bold tracking-tight">ORA</h1>
-          <p className="text-sm text-muted-foreground">Organizational Resilience Analyzer</p>
+          <p className="text-sm text-muted-foreground">{t("brand.subtitle")}</p>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>Verify your email</CardTitle>
-            <CardDescription>
-              Your email address must be verified before you can access ORA.
-            </CardDescription>
+            <CardTitle>{t("auth.verifyEmailTitle")}</CardTitle>
+            <CardDescription>{t("auth.verifyEmailDescription")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              We sent a verification link to{" "}
-              <span className="font-medium">{user?.email ?? "your email address"}</span>. Check
-              your inbox and click the link to confirm your email. Once verified, you can sign in
-              and access ORA.
+              {t("auth.verificationSentDescription", { email: user?.email })}
             </p>
             {resent && (
               <p className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-                Verification email sent. Check your inbox.
+                {t("auth.verificationEmailSent")}
               </p>
             )}
             {error && (
@@ -74,7 +71,7 @@ export function EmailVerificationScreen() {
             )}
             <Button className="w-full" onClick={resend} disabled={busy}>
               <MailCheck className="h-4 w-4" />
-              {busy ? "Sending…" : "Resend verification email"}
+              {busy ? t("auth.sending") : t("auth.resendVerificationEmail")}
             </Button>
             <Button
               variant="ghost"
@@ -82,7 +79,7 @@ export function EmailVerificationScreen() {
               onClick={() => void signOut()}
               disabled={busy}
             >
-              Sign out
+              {t("auth.signOut")}
             </Button>
           </CardContent>
         </Card>

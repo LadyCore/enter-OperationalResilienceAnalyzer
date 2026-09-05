@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import {
   Select,
   SelectContent,
@@ -13,7 +14,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { IMPORT_FIELD_LABELS, IMPORT_FIELDS, type ColumnMapping, type ImportField } from "@/lib/importer/types";
+import { IMPORT_FIELDS, type ColumnMapping, type ImportField } from "@/lib/importer/types";
+import { importFieldLabelKeys } from "./importFieldI18n";
 
 interface ColumnMappingEditorProps {
   columns: string[];
@@ -22,6 +24,7 @@ interface ColumnMappingEditorProps {
 }
 
 export function ColumnMappingEditor({ columns, mapping, onChange }: ColumnMappingEditorProps) {
+  const { t } = useTranslation();
   const setField = (field: ImportField, value: string | null) => {
     onChange({ ...mapping, [field]: value });
   };
@@ -32,15 +35,15 @@ export function ColumnMappingEditor({ columns, mapping, onChange }: ColumnMappin
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-56">ORA field</TableHead>
-              <TableHead>Source column</TableHead>
+              <TableHead className="w-56">{t("importMapping.oraField")}</TableHead>
+              <TableHead>{t("importMapping.sourceColumn")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {IMPORT_FIELDS.map((field) => (
               <TableRow key={field}>
                 <TableCell>
-                  <span className="text-sm font-medium">{IMPORT_FIELD_LABELS[field]}</span>
+                  <span className="text-sm font-medium">{t(importFieldLabelKeys[field])}</span>
                 </TableCell>
                 <TableCell className="min-w-52">
                   <Select
@@ -48,10 +51,10 @@ export function ColumnMappingEditor({ columns, mapping, onChange }: ColumnMappin
                     onValueChange={(v) => setField(field, v === "none" ? null : v)}
                   >
                     <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Not mapped" />
+                      <SelectValue placeholder={t("importMapping.notMapped")} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">Not mapped</SelectItem>
+                      <SelectItem value="none">{t("importMapping.notMapped")}</SelectItem>
                       {columns.map((c) => (
                         <SelectItem key={c} value={c}>
                           {c}

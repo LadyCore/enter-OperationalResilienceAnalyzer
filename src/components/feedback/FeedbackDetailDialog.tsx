@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Dialog,
   DialogContent,
@@ -17,6 +18,7 @@ import {
 import { Loader2 } from "lucide-react";
 import type { Database } from "@/integrations/supabase/types";
 import { FEEDBACK_KINDS } from "@/lib/feedback/types";
+import { feedbackKindLabelKeys, feedbackStatusLabelKeys } from "./feedbackI18n";
 import { isLegacyDataUrl } from "@/lib/feedback/screenshots";
 import {
   FEEDBACK_STATUSES,
@@ -52,6 +54,7 @@ export function FeedbackDetailDialog({
   onClose,
   onStatusChange,
 }: FeedbackDetailDialogProps) {
+  const { t } = useTranslation();
   const ctx = feedback ? parseFeedbackContext(feedback.context) : {};
   const screenshots = feedback ? parseFeedbackScreenshots(feedback.context) : [];
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
@@ -86,7 +89,8 @@ export function FeedbackDetailDialog({
   }, [feedback?.id]);
 
   if (!feedback) return null;
-  const kindLabel = FEEDBACK_KINDS.find((k) => k.value === feedback.kind)?.label ?? feedback.kind;
+  const kindEntry = FEEDBACK_KINDS.find((k) => k.value === feedback.kind);
+  const kindLabel = kindEntry ? t(feedbackKindLabelKeys[kindEntry.value]) : feedback.kind;
   const reporterEmail = email ?? parseFeedbackReporterEmail(feedback.context) ?? undefined;
 
   const resolveShotSrc = (shot: string): string | null => {
@@ -99,26 +103,29 @@ export function FeedbackDetailDialog({
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
-            Feedback detail
+            {t("feedback.detailTitle")}
             <Badge variant="secondary" className="font-normal">
               {kindLabel}
             </Badge>
           </DialogTitle>
-          <DialogDescription>Full report as sent by the user.</DialogDescription>
+          <DialogDescription>{t("feedback.detailDescription")}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-5">
           {/* Main info */}
           <div className="space-y-2 rounded-lg border p-4">
             <InfoRow label="ID" value={feedback.id} />
-            <InfoRow label="Date & time" value={new Date(feedback.created_at).toLocaleString()} />
-            <InfoRow label="Type" value={kindLabel} />
-            <InfoRow label="Module" value={feedback.module ?? "—"} />
-            <InfoRow label="Screen" value={feedback.screen ?? "—"} />
-            <InfoRow label="Stage" value={feedback.stage ?? "—"} />
-            <InfoRow label="General feedback" value={feedback.is_general ? "Yes" : "No"} />
+            <InfoRow label={t("feedback.fields.dateTime")} value={new Date(feedback.created_at).toLocaleString()} />
+            <InfoRow label={t("feedback.fields.type")} value={kindLabel} />
+            <InfoRow label={t("feedback.fields.module")} value={feedback.module ?? "—"} />
+            <InfoRow label={t("feedback.fields.screen")} value={feedback.screen ?? "—"} />
+            <InfoRow label={t("feedback.fields.stage")} value={feedback.stage ?? "—"} />
+            <InfoRow
+              label={t("feedback.generalLabel")}
+              value={feedback.is_general ? t("feedback.yes") : t("feedback.no")}
+            />
             <div className="flex flex-col gap-0.5 text-sm sm:flex-row sm:gap-3">
-              <span className="w-40 shrink-0 text-muted-foreground">Status</span>
+              <span className="w-40 shrink-0 text-muted-foreground">{t("feedback.fields.status")}</span>
               <Select value={feedback.status} onValueChange={(v) => onStatusChange(v as FeedbackStatus)}>
                 <SelectTrigger className="h-8 w-44 text-xs">
                   <SelectValue />
@@ -126,7 +133,7 @@ export function FeedbackDetailDialog({
                 <SelectContent>
                   {FEEDBACK_STATUSES.map((s) => (
                     <SelectItem key={s} value={s}>
-                      {s === "new" ? "New" : s === "in_progress" ? "In progress" : "Resolved"}
+                      {t(feedbackStatusLabelKeys[s])}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -137,7 +144,7 @@ export function FeedbackDetailDialog({
           {/* Description */}
           <div className="space-y-1.5">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              Description
+              {t("feedback.description")}
             </p>
             <p className="whitespace-pre-wrap rounded-lg border bg-muted/40 p-3 text-sm leading-relaxed">
               {feedback.description}
@@ -147,20 +154,19 @@ export function FeedbackDetailDialog({
           {/* Screenshots — H-010 captures (private bucket; signed URLs for the admin) */}
           <div className="space-y-2">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              Screenshots ({screenshots.length})
+              {t("feedback.screenshotsLabel")} ({screenshots.length})
             </p>
             {screenshots.length === 0 ? (
               <p className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-                No screenshots attached to this report.
+                {t("feedback.noScreenshots")}
               </p>
             ) : loadingShots ? (
               <p className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" /> Resolving screenshots…
+                <Loader2 className="h-4 w-4 animate-spin" /> {t("feedback.resolvingScreenshots")}
               </p>
             ) : shotError ? (
               <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                The screenshots could not be resolved. They are stored securely and can be
-                reviewed again in a moment.
+                {t("feedback.screenshotResolveError")}
               </p>
             ) : (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -172,8 +178,7 @@ export function FeedbackDetailDialog({
                         key={index}
                         className="flex h-40 items-center justify-center rounded-lg border bg-muted/40 px-3 text-center text-xs text-muted-foreground"
                       >
-                        Screenshot {index + 1} is not available right now (it is stored securely and
-                        can be reviewed again in a moment).
+                        {t("feedback.screenshotUnavailable", { number: index + 1 })}
                       </div>
                     );
                   }
@@ -187,11 +192,11 @@ export function FeedbackDetailDialog({
                     >
                       <img
                         src={src}
-                        alt={`Screenshot ${index + 1}`}
+                        alt={t("feedback.screenshotAlt", { number: index + 1 })}
                         className="max-h-64 w-full object-contain"
                       />
                       <p className="border-t px-3 py-1.5 text-center text-xs text-muted-foreground">
-                        Screenshot {index + 1} — open full size
+                        {t("feedback.screenshotOpenFull", { number: index + 1 })}
                       </p>
                     </a>
                   );
@@ -203,18 +208,30 @@ export function FeedbackDetailDialog({
           {/* Reporter */}
           <div className="space-y-2 rounded-lg border p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              Reporter
+              {t("feedback.section.reporter")}
             </p>
             {feedback.user_id ? (
               <>
-                <InfoRow label="Signed in" value="Yes" />
-                <InfoRow label="User ID" value={feedback.user_id} />
-                <InfoRow label="Email" value={reporterEmail ?? "Not available in the profiles registry"} />
+                <InfoRow
+                  label={t("feedback.fields.signedIn")}
+                  value={t("feedback.yes")}
+                />
+                <InfoRow label={t("feedback.fields.userId")} value={feedback.user_id} />
+                <InfoRow
+                  label={t("feedback.fields.email")}
+                  value={reporterEmail ?? t("feedback.fields.emailUnavailable")}
+                />
               </>
             ) : (
               <>
-                <InfoRow label="Signed in" value="No" />
-                <InfoRow label="Email" value={reporterEmail ?? "Not provided"} />
+                <InfoRow
+                  label={t("feedback.fields.signedIn")}
+                  value={t("feedback.no")}
+                />
+                <InfoRow
+                  label={t("feedback.fields.email")}
+                  value={reporterEmail ?? t("feedback.fields.emailNotProvided")}
+                />
               </>
             )}
           </div>
@@ -222,22 +239,25 @@ export function FeedbackDetailDialog({
           {/* Technical context — admin-only */}
           <div className="space-y-2 rounded-lg border p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              Technical context
+              {t("feedback.section.technicalContext")}
             </p>
             {Object.keys(ctx).length === 0 ? (
-              <p className="text-sm text-muted-foreground">No technical context was captured.</p>
+              <p className="text-sm text-muted-foreground">{t("feedback.noTechnicalContext")}</p>
             ) : (
               <>
-                <InfoRow label="Captured at" value={ctx.capturedAt ?? "—"} />
-                <InfoRow label="Authenticated" value={ctx.authenticated ? "Yes" : "No"} />
-                <InfoRow label="Organization ID" value={ctx.organizationId ?? "—"} />
-                <InfoRow label="Organization" value={ctx.organizationName ?? "—"} />
-                <InfoRow label="Screen" value={ctx.screen ?? "—"} />
+                <InfoRow label={t("feedback.fields.capturedAt")} value={ctx.capturedAt ?? "—"} />
                 <InfoRow
-                  label="Viewport"
+                  label={t("feedback.fields.authenticated")}
+                  value={ctx.authenticated ? t("feedback.yes") : t("feedback.no")}
+                />
+                <InfoRow label={t("feedback.fields.organizationId")} value={ctx.organizationId ?? "—"} />
+                <InfoRow label={t("feedback.fields.organization")} value={ctx.organizationName ?? "—"} />
+                <InfoRow label={t("feedback.fields.screen")} value={ctx.screen ?? "—"} />
+                <InfoRow
+                  label={t("feedback.fields.viewport")}
                   value={ctx.viewport ? `${ctx.viewport.width} × ${ctx.viewport.height}` : "—"}
                 />
-                <InfoRow label="User agent" value={ctx.userAgent ?? "—"} />
+                <InfoRow label={t("feedback.fields.userAgent")} value={ctx.userAgent ?? "—"} />
               </>
             )}
           </div>
@@ -245,10 +265,10 @@ export function FeedbackDetailDialog({
           {/* Recent errors */}
           <div className="space-y-2">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              Recent errors ({ctx.recentErrors?.length ?? 0})
+              {t("feedback.section.recentErrors")} ({ctx.recentErrors?.length ?? 0})
             </p>
             {!ctx.recentErrors || ctx.recentErrors.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No recent JavaScript errors captured.</p>
+              <p className="text-sm text-muted-foreground">{t("feedback.noRecentErrors")}</p>
             ) : (
               <ul className="space-y-2">
                 {ctx.recentErrors.map((e, i) => (

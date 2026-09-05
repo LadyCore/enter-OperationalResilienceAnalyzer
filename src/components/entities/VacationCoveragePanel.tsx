@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Pencil, Plus, Trash2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -19,45 +20,43 @@ import { useOra } from "@/store/OraContext";
 import type { VacationCoverage } from "@/types";
 
 export function VacationCoveragePanel() {
+  const { t } = useTranslation();
   const { db, remove } = useOra();
   const [dialog, setDialog] = useState<{ open: boolean; coverage?: VacationCoverage }>({ open: false });
   const [toDelete, setToDelete] = useState<VacationCoverage | null>(null);
 
   const personName = (id: string) => db.people.find((p) => p.id === id)?.name ?? id;
   const roleName = (id?: string) => (id ? db.roles.find((r) => r.id === id)?.name ?? id : undefined);
-  const taskNames = (ids: string[]) => ids.map((id) => db.tasks.find((t) => t.id === id)?.name ?? id);
+  const taskNames = (ids: string[]) => ids.map((id) => db.tasks.find((tt) => tt.id === id)?.name ?? id);
 
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
         <div>
-          <CardTitle className="text-base">Vacation coverage</CardTitle>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            People who can temporarily cover another person's tasks during a planned vacation.
-            Applied only to planned-absence simulations categorized as Vacation.
-          </p>
+          <CardTitle className="text-base">{t("coveragePanel.title")}</CardTitle>
+          <p className="mt-0.5 text-sm text-muted-foreground">{t("coveragePanel.subtitle")}</p>
         </div>
         <Button onClick={() => setDialog({ open: true })}>
-          <Plus className="h-4 w-4" /> New coverage
+          <Plus className="h-4 w-4" /> {t("coveragePanel.add")}
         </Button>
       </CardHeader>
       <CardContent>
         {db.vacationCoverages.length === 0 ? (
           <EmptyState
             icon={Users}
-            title="No vacation coverages"
-            description="Define who can cover whom during planned vacations to test those scenarios with mitigation."
+            title={t("coveragePanel.empty.title")}
+            description={t("coveragePanel.empty.description")}
           />
         ) : (
           <div className="overflow-x-auto rounded-lg border">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Covering person</TableHead>
-                  <TableHead>Covered person (on vacation)</TableHead>
-                  <TableHead className="hidden md:table-cell">Role covered</TableHead>
-                  <TableHead className="hidden lg:table-cell">Tasks covered</TableHead>
-                  <TableHead className="w-24 text-right">Actions</TableHead>
+                  <TableHead>{t("coveragePanel.covering")}</TableHead>
+                  <TableHead>{t("coveragePanel.covered")}</TableHead>
+                  <TableHead className="hidden md:table-cell">{t("coveragePanel.roleCovered")}</TableHead>
+                  <TableHead className="hidden lg:table-cell">{t("coveragePanel.tasksCovered")}</TableHead>
+                  <TableHead className="w-24 text-right">{t("common.actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -109,12 +108,12 @@ export function VacationCoveragePanel() {
       <ConfirmDeleteDialog
         open={Boolean(toDelete)}
         onOpenChange={(open) => !open && setToDelete(null)}
-        title="Remove this vacation coverage?"
-        description="The coverage relation is deleted. The people involved keep their ordinary profiles unchanged."
+        title={t("coveragePanel.deleteTitle")}
+        description={t("coveragePanel.deleteDescription")}
         onConfirm={() => {
           if (toDelete) {
             remove("vacationCoverages", toDelete.id);
-            toast.success("Vacation coverage removed");
+            toast.success(t("coveragePanel.removed"));
           }
         }}
       />

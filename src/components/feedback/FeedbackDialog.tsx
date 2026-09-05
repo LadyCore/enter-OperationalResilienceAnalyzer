@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { AtSign, Camera, CheckCircle2, ImagePlus, Loader2, MailWarning, MessageSquareText, Send, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { submitFeedback } from "@/lib/feedback/api";
 import { FEEDBACK_KINDS, type FeedbackContext, type FeedbackKind, type FeedbackTechnicalContext } from "@/lib/feedback/types";
+import { feedbackKindLabelKeys } from "./feedbackI18n";
 import {
   fileToCompressedDataUrl,
   MAX_FEEDBACK_SCREENSHOTS,
@@ -45,6 +47,7 @@ type Status = "idle" | "sending" | "sent";
  * in the backend function, so an invalid report can never be persisted.
  */
 export function FeedbackDialog({ open, onOpenChange, context, technical, initialEmail = "" }: FeedbackDialogProps) {
+  const { t } = useTranslation();
   const [kind, setKind] = useState<FeedbackKind>("not_working");
   const [description, setDescription] = useState("");
   const [email, setEmail] = useState(initialEmail);
@@ -81,19 +84,19 @@ export function FeedbackDialog({ open, onOpenChange, context, technical, initial
     setError(null);
     // Reject any attempt to exceed the maximum of three captures.
     if (atMaxScreenshots) {
-      toast.error(`A maximum of ${MAX_FEEDBACK_SCREENSHOTS} screenshots is allowed per report.`);
+      toast.error(t("feedback.maxToast", { count: MAX_FEEDBACK_SCREENSHOTS }));
       return;
     }
     const remaining = MAX_FEEDBACK_SCREENSHOTS - screenshots.length;
     const selected = Array.from(files).slice(0, remaining);
     if (files.length > remaining) {
-      toast.error(`A maximum of ${MAX_FEEDBACK_SCREENSHOTS} screenshots is allowed per report.`);
+      toast.error(t("feedback.maxToast", { count: MAX_FEEDBACK_SCREENSHOTS }));
     }
     try {
       const converted = await Promise.all(selected.map((f) => fileToCompressedDataUrl(f)));
       setScreenshots((prev) => [...prev, ...converted].slice(0, MAX_FEEDBACK_SCREENSHOTS));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "The screenshot could not be added.");
+      setError(err instanceof Error ? err.message : t("feedback.screenshotAddFailed"));
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
@@ -108,11 +111,11 @@ export function FeedbackDialog({ open, onOpenChange, context, technical, initial
     if (!description.trim()) return;
     // H-010 block: a report without at least one capture must not be sent.
     if (screenshots.length === 0) {
-      setError("Please attach at least one screenshot before sending the report.");
+      setError(t("feedback.requireScreenshot"));
       return;
     }
     if (!email.trim()) {
-      setError("Please provide your email to receive the confirmation.");
+      setError(t("feedback.requireEmail"));
       return;
     }
     setStatus("sending");
@@ -134,12 +137,12 @@ export function FeedbackDialog({ open, onOpenChange, context, technical, initial
     } catch (err) {
       console.error("Feedback submission failed:", err);
       setStatus("idle");
-      setError(err instanceof Error ? err.message : "Could not send your feedback.");
+      setError(err instanceof Error ? err.message : t("feedback.sendFailed"));
     }
   };
 
   const contextLabel = isGeneral
-    ? "General feedback (no module associated)"
+    ? t("feedback.generalContext")
     : context.breadcrumb ?? context.screen;
 
   return (
@@ -151,24 +154,21 @@ export function FeedbackDialog({ open, onOpenChange, context, technical, initial
               <CheckCircle2 className="h-6 w-6" />
             </div>
             <DialogHeader className="items-center">
-              <DialogTitle>Thank you for your feedback</DialogTitle>
+              <DialogTitle>{t("feedback.sentTitle")}</DialogTitle>
               <DialogDescription className="text-center">
-                Your report with {screenshots.length}{" "}
-                {screenshots.length === 1 ? "screenshot" : "screenshots"} was received and will
-                help us improve ORA. You can continue working where you left off.
+                {t(screenshots.length === 1 ? "feedback.sentDescOne" : "feedback.sentDescMany", {
+                  count: screenshots.length,
+                })}
               </DialogDescription>
             </DialogHeader>
             {emailState === "failed" ? (
               <p className="mx-auto flex max-w-sm items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-left text-xs text-amber-700">
                 <MailWarning className="mt-0.5 h-4 w-4 shrink-0" />
-                <span>
-                  Your report was saved, but the confirmation email to {email.trim()} could not be
-                  delivered right now. We will still review it.
-                </span>
+                <span>{t("feedback.emailFailed", { email: email.trim() })}</span>
               </p>
             ) : (
               <p className="mx-auto max-w-sm text-xs text-muted-foreground">
-                A confirmation email was sent to <span className="font-medium">{email.trim()}</span>.
+                {t("feedback.emailSent", { email: email.trim() })}
               </p>
             )}
             <Button
@@ -178,7 +178,7 @@ export function FeedbackDialog({ open, onOpenChange, context, technical, initial
                 reset();
               }}
             >
-              Done
+              {t("feedback.done")}
             </Button>
           </div>
         ) : (
@@ -186,11 +186,10 @@ export function FeedbackDialog({ open, onOpenChange, context, technical, initial
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <MessageSquareText className="h-5 w-5 text-primary" />
-                Feedback
+                {t("nav.feedback")}
               </DialogTitle>
               <DialogDescription>
-                Report a problem, an error, slowness, a navigation issue or a suggestion
-                about ORA. This is not a question about your analysis results.
+                {t("feedback.dialogDescription")}
               </DialogDescription>
             </DialogHeader>
 
@@ -198,7 +197,7 @@ export function FeedbackDialog({ open, onOpenChange, context, technical, initial
               {/* Kind */}
               <fieldset className="space-y-2">
                 <legend className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  What do you want to report?
+                  {t("feedback.kindQuestion")}
                 </legend>
                 <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                   {FEEDBACK_KINDS.map((option) => (
@@ -213,7 +212,7 @@ export function FeedbackDialog({ open, onOpenChange, context, technical, initial
                           : "border-border bg-background text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"
                       )}
                     >
-                      {option.label}
+                      {t(feedbackKindLabelKeys[option.value])}
                     </button>
                   ))}
                 </div>
@@ -222,13 +221,13 @@ export function FeedbackDialog({ open, onOpenChange, context, technical, initial
               {/* Description */}
               <div className="space-y-1.5">
                 <label htmlFor="feedback-description" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Description
+                  {t("feedback.description")}
                 </label>
                 <Textarea
                   id="feedback-description"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Tell us what happened. If you add other contact details here, they become part of the content you choose to send."
+                  placeholder={t("feedback.descriptionPlaceholder")}
                   rows={4}
                   autoFocus
                 />
@@ -242,7 +241,7 @@ export function FeedbackDialog({ open, onOpenChange, context, technical, initial
               {/* Reporter email — H-010 mandatory */}
               <div className="space-y-1.5">
                 <label htmlFor="feedback-email" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Your email
+                  {t("feedback.yourEmail")}
                 </label>
                 <div className="relative">
                   <AtSign className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -251,13 +250,13 @@ export function FeedbackDialog({ open, onOpenChange, context, technical, initial
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@example.com"
+                    placeholder={t("feedback.emailPlaceholder")}
                     className="pl-8"
                     autoComplete="email"
                   />
                 </div>
                 <p className="text-[11px] text-muted-foreground">
-                  Used only to send you a confirmation that your report was received.
+                  {t("feedback.emailHint")}
                 </p>
               </div>
 
@@ -265,7 +264,7 @@ export function FeedbackDialog({ open, onOpenChange, context, technical, initial
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Screenshots
+                    {t("feedback.screenshotsLabel")}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {screenshots.length}/{MAX_FEEDBACK_SCREENSHOTS}
@@ -293,28 +292,28 @@ export function FeedbackDialog({ open, onOpenChange, context, technical, initial
                   {atMaxScreenshots ? (
                     <>
                       <X className="h-4 w-4" />
-                      Maximum of {MAX_FEEDBACK_SCREENSHOTS} screenshots reached
+                      {t("feedback.maxScreenshots", { count: MAX_FEEDBACK_SCREENSHOTS })}
                     </>
                   ) : (
                     <>
                       <ImagePlus className="h-4 w-4" />
-                      Add screenshot ({screenshots.length === 0 ? "required" : "optional up to 3"})
+                      {t(screenshots.length === 0 ? "feedback.addShotRequired" : "feedback.addShotOptional")}
                     </>
                   )}
                 </button>
                 <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
                   <Camera className="h-3.5 w-3.5" />
-                  Attach between 1 and 3 screenshots. A report cannot be sent without at least one.
+                  {t("feedback.screenshotsHint")}
                 </p>
                 {screenshots.length > 0 && (
                   <div className="grid grid-cols-3 gap-2">
                     {screenshots.map((shot, index) => (
                       <div key={index} className="group relative overflow-hidden rounded-md border">
-                        <img src={shot} alt={`Screenshot ${index + 1}`} className="h-20 w-full object-cover" />
+                        <img src={shot} alt={t("feedback.screenshotAlt", { number: index + 1 })} className="h-20 w-full object-cover" />
                         <button
                           type="button"
                           onClick={() => removeScreenshot(index)}
-                          aria-label={`Remove screenshot ${index + 1}`}
+                          aria-label={t("feedback.removeScreenshot", { number: index + 1 })}
                           className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white opacity-90 transition-opacity hover:opacity-100"
                         >
                           <X className="h-3 w-3" />
@@ -328,7 +327,7 @@ export function FeedbackDialog({ open, onOpenChange, context, technical, initial
               {/* Detected context */}
               <div className="space-y-1.5">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Detected context
+                  {t("feedback.detectedContext")}
                 </p>
                 <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
                   {contextLabel}
@@ -343,23 +342,24 @@ export function FeedbackDialog({ open, onOpenChange, context, technical, initial
                   className="mt-0.5"
                 />
                 <span className="text-muted-foreground">
-                  General feedback <span className="text-muted-foreground/70">(not related to this screen)</span>
+                  {t("feedback.generalLabel")}{" "}
+                  <span className="text-muted-foreground/70">{t("feedback.generalNote")}</span>
                 </span>
               </label>
             </div>
 
             <DialogFooter>
               <Button variant="outline" onClick={() => onOpenChange(false)} disabled={status === "sending"}>
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button onClick={() => void handleSubmit()} disabled={!canSubmit}>
                 {status === "sending" ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin" /> Sending…
+                    <Loader2 className="h-4 w-4 animate-spin" /> {t("auth.sending")}
                   </>
                 ) : (
                   <>
-                    <Send className="h-4 w-4" /> Send feedback
+                    <Send className="h-4 w-4" /> {t("feedback.send")}
                   </>
                 )}
               </Button>

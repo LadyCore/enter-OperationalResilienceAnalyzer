@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,6 +25,7 @@ interface OnCallFormDialogProps {
 }
 
 export function OnCallFormDialog({ open, onOpenChange, assignment }: OnCallFormDialogProps) {
+  const { t } = useTranslation();
   const { db, upsert } = useOra();
   const [personId, setPersonId] = useState("");
   const [modality, setModality] = useState("");
@@ -47,16 +49,16 @@ export function OnCallFormDialog({ open, onOpenChange, assignment }: OnCallFormD
     label: p.name,
     searchTerms: p.name.split(/\s+/).filter(Boolean),
   }));
-  const taskOptions = db.tasks.map((t) => {
-    const fn = db.functions.find((f) => f.id === t.functionId);
+  const taskOptions = db.tasks.map((t2) => {
+    const fn = db.functions.find((f) => f.id === t2.functionId);
     const proc = fn ? db.processes.find((p) => p.id === fn.processId) : undefined;
-    return { value: t.id, label: t.name, description: proc ? `${proc.name} / ${fn?.name}` : undefined };
+    return { value: t2.id, label: t2.name, description: proc ? `${proc.name} / ${fn?.name}` : undefined };
   });
   const competencyOptions = db.competencies.map((c) => ({ value: c.id, label: c.name }));
 
   const handleSave = () => {
     if (!personId || !modality.trim()) {
-      toast.error("Select a person and enter an on-call modality");
+      toast.error(t("onCall.errorRequired"));
       return;
     }
     upsert("onCallAssignments", {
@@ -67,7 +69,7 @@ export function OnCallFormDialog({ open, onOpenChange, assignment }: OnCallFormD
       taskIds,
       competencyIds,
     });
-    toast.success(assignment ? "On-call assignment updated" : "On-call assignment created");
+    toast.success(assignment ? t("onCall.updated") : t("onCall.created"));
     onOpenChange(false);
   };
 
@@ -75,53 +77,49 @@ export function OnCallFormDialog({ open, onOpenChange, assignment }: OnCallFormD
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{assignment ? "Edit on-call assignment" : "New on-call assignment"}</DialogTitle>
-          <DialogDescription>
-            Passive on-call (guardia pasiva): permanent operational availability outside ordinary
-            hours. The person keeps their usual role and dependency — this never counts as vacation
-            coverage and never changes the base analysis.
-          </DialogDescription>
+          <DialogTitle>{assignment ? t("onCall.edit") : t("onCall.new")}</DialogTitle>
+          <DialogDescription>{t("onCall.description")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
-          <Field label="Person on call">
+          <Field label={t("onCall.personLabel")}>
             <SearchableSelect
               options={personOptions}
               value={personId}
               onChange={setPersonId}
-              placeholder="Select a person…"
-              searchPlaceholder="Search name or surname…"
+              placeholder={t("entity.selectPerson")}
+              searchPlaceholder={t("entity.searchPerson")}
               className="w-full"
             />
           </Field>
-          <Field label="Modality" hint="Free text — H24, Shifts or the organization's own scheme.">
-            <Input value={modality} onChange={(e) => setModality(e.target.value)} placeholder="e.g. H24 or Shifts" />
+          <Field label={t("onCall.modalityLabel")} hint={t("onCall.modalityHint")}>
+            <Input value={modality} onChange={(e) => setModality(e.target.value)} placeholder={t("onCall.modalityPlaceholder")} />
           </Field>
-          <Field label="Shift / period" hint="Free text — no fixed structure is imposed.">
-            <Input value={period} onChange={(e) => setPeriod(e.target.value)} placeholder="e.g. Night, Weekend, Week 2…" />
+          <Field label={t("onCall.periodLabel")} hint={t("onCall.periodHint")}>
+            <Input value={period} onChange={(e) => setPeriod(e.target.value)} placeholder={t("onCall.periodPlaceholder")} />
           </Field>
-          <Field label="Capabilities covered on call" hint="Concrete tasks this availability responds to.">
+          <Field label={t("onCall.tasksLabel")} hint={t("onCall.tasksHint")}>
             <MultiSelect
               options={taskOptions}
               values={taskIds}
               onChange={setTaskIds}
-              placeholder="Select tasks…"
+              placeholder={t("entity.selectTasks")}
             />
           </Field>
-          <Field label="Enabling competencies">
+          <Field label={t("onCall.competenciesLabel")}>
             <MultiSelect
               options={competencyOptions}
               values={competencyIds}
               onChange={setCompetencyIds}
-              placeholder="Select competencies…"
+              placeholder={t("entity.selectCompetencies")}
             />
           </Field>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button onClick={handleSave} disabled={!personId || !modality.trim()}>
-            Save
+            {t("common.save")}
           </Button>
         </DialogFooter>
       </DialogContent>

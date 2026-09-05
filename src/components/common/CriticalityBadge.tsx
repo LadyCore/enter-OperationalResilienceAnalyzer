@@ -1,5 +1,6 @@
+import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
-import { CRITICALITY_LABELS, type Criticality } from "@/types";
+import type { Criticality } from "@/types";
 
 const styles: Record<Criticality, string> = {
   critical: "border-transparent bg-risk-critical/10 text-risk-critical",
@@ -7,6 +8,13 @@ const styles: Record<Criticality, string> = {
   standard: "border-transparent bg-muted text-muted-foreground",
 };
 
+const labelKeys: Record<Criticality, string> = {
+  critical: "criticality.critical",
+  important: "criticality.important",
+  standard: "criticality.standard",
+};
+
 export function CriticalityBadge({ criticality }: { criticality: Criticality }) {
-  return <Badge className={styles[criticality]}>{CRITICALITY_LABELS[criticality]}</Badge>;
+  const { t } = useTranslation();
+  return <Badge className={styles[criticality]}>{t(labelKeys[criticality])}</Badge>;
 }

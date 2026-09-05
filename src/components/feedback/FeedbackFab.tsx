@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useLocation } from "react-router-dom";
 import { MessageSquareText } from "lucide-react";
 import { useOra } from "@/store/OraContext";
@@ -26,6 +27,7 @@ import type { FeedbackContext, FeedbackTechnicalContext } from "@/lib/feedback/t
  * dialog stays open.
  */
 export function FeedbackFab() {
+  const { t } = useTranslation();
   const { user, organizations, activeOrganizationId } = useOra();
   const location = useLocation();
   const [open, setOpen] = useState(false);
@@ -67,10 +69,10 @@ export function FeedbackFab() {
           type="button"
           onClick={openFeedback}
           className="pointer-events-auto flex items-center gap-1.5 rounded-full border bg-sidebar px-3.5 py-2 text-xs font-semibold text-sidebar-foreground shadow-sm transition-colors hover:bg-sidebar-accent"
-          aria-label="Open feedback"
+          aria-label={t("feedback.openFeedback")}
         >
           <MessageSquareText className="h-3.5 w-3.5" />
-          Feedback
+          {t("nav.feedback")}
         </button>
       </div>
 

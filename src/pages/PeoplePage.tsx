@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Pencil, Plus, Trash2, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +27,7 @@ import { setFeedbackStage } from "@/lib/feedback/context";
 import type { Person, Role } from "@/types";
 
 export function PeoplePage() {
+  const { t } = useTranslation();
   const { db, remove } = useOra();
   const [tab, setTab] = useState("people");
   const [personDialog, setPersonDialog] = useState<{ open: boolean; person?: Person }>({ open: false });
@@ -34,7 +36,8 @@ export function PeoplePage() {
   const [deleteRole, setDeleteRole] = useState<Role | null>(null);
 
   // Report the active tab to the feedback context so reports from this screen
-  // carry the section the user was in ("People" vs "Roles").
+  // carry the section the user was in ("People" vs "Roles"). The labels are
+  // stored context values, intentionally kept in the source language.
   useEffect(() => {
     setFeedbackStage(
       tab === "roles" ? "Roles" : tab === "coverage" ? "Coverage & on-call" : "People",
@@ -51,40 +54,40 @@ export function PeoplePage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="People & roles"
-        description="People hold competencies and can perform tasks. Coverage is calculated from active people only."
+        title={t("peoplePage.title")}
+        description={t("peoplePage.description")}
       />
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
-          <TabsTrigger value="people">People</TabsTrigger>
-          <TabsTrigger value="roles">Roles</TabsTrigger>
-          <TabsTrigger value="coverage">Coverage & on-call</TabsTrigger>
+          <TabsTrigger value="people">{t("nav.people")}</TabsTrigger>
+          <TabsTrigger value="roles">{t("peoplePage.tab.roles")}</TabsTrigger>
+          <TabsTrigger value="coverage">{t("peoplePage.tab.coverage")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="people" className="space-y-4">
           <div className="flex justify-end">
             <Button onClick={() => setPersonDialog({ open: true })}>
-              <Plus className="h-4 w-4" /> New person
+              <Plus className="h-4 w-4" /> {t("person.new")}
             </Button>
           </div>
           {db.people.length === 0 ? (
-            <EmptyState icon={Users} title="No people yet" description="Add people to model operational coverage." />
+            <EmptyState icon={Users} title={t("peoplePage.peopleEmptyTitle")} description={t("peoplePage.peopleEmptyDescription")} />
           ) : (
             <div className="overflow-hidden rounded-lg border bg-card">
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Role</TableHead>
-                      <TableHead className="hidden md:table-cell">Area</TableHead>
-                      <TableHead className="hidden lg:table-cell">Reports to</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="hidden md:table-cell">Competencies</TableHead>
-                      <TableHead className="hidden sm:table-cell">Capable tasks</TableHead>
-                      <TableHead>Critical tasks</TableHead>
-                      <TableHead className="w-24 text-right">Actions</TableHead>
+                      <TableHead>{t("entity.name")}</TableHead>
+                      <TableHead>{t("peoplePage.th.role")}</TableHead>
+                      <TableHead className="hidden md:table-cell">{t("peoplePage.th.area")}</TableHead>
+                      <TableHead className="hidden lg:table-cell">{t("peoplePage.th.reportsTo")}</TableHead>
+                      <TableHead>{t("peoplePage.th.status")}</TableHead>
+                      <TableHead className="hidden md:table-cell">{t("peoplePage.th.competencies")}</TableHead>
+                      <TableHead className="hidden sm:table-cell">{t("peoplePage.th.capableTasks")}</TableHead>
+                      <TableHead>{t("peoplePage.th.criticalTasks")}</TableHead>
+                      <TableHead className="w-24 text-right">{t("peoplePage.th.actions")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -109,9 +112,9 @@ export function PeoplePage() {
                           </TableCell>
                           <TableCell>
                             {p.isActive ? (
-                              <Badge className="border-transparent bg-risk-low/10 text-risk-low">Active</Badge>
+                              <Badge className="border-transparent bg-risk-low/10 text-risk-low">{t("peoplePage.status.active")}</Badge>
                             ) : (
-                              <Badge variant="secondary">Inactive</Badge>
+                              <Badge variant="secondary">{t("peoplePage.status.inactive")}</Badge>
                             )}
                           </TableCell>
                           <TableCell className="hidden md:table-cell">
@@ -125,14 +128,14 @@ export function PeoplePage() {
                               <span className="font-mono text-sm tabular-nums">{personCriticalTasks.length}</span>
                               {busFactor && (
                                 <Badge className="border-transparent bg-risk-high/10 text-risk-high">
-                                  Bus factor
+                                  {t("peoplePage.busFactor")}
                                 </Badge>
                               )}
                             </div>
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-1">
-                              <Button variant="ghost" size="icon" onClick={() => setPersonDialog({ open: true, person: p })}>
+                              <Button variant="ghost" size="icon" onClick={() => setPersonDialog({ open: true, person: p })} aria-label={t("peoplePage.editPerson", { name: p.name })}>
                                 <Pencil className="h-4 w-4" />
                               </Button>
                               <Button
@@ -140,6 +143,7 @@ export function PeoplePage() {
                                 size="icon"
                                 className="text-destructive hover:text-destructive"
                                 onClick={() => setDeletePerson(p)}
+                                aria-label={t("peoplePage.removePerson", { name: p.name })}
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
@@ -158,11 +162,11 @@ export function PeoplePage() {
         <TabsContent value="roles" className="space-y-4">
           <div className="flex justify-end">
             <Button onClick={() => setRoleDialog({ open: true })}>
-              <Plus className="h-4 w-4" /> New role
+              <Plus className="h-4 w-4" /> {t("role.new")}
             </Button>
           </div>
           {db.roles.length === 0 ? (
-            <EmptyState icon={Users} title="No roles yet" description="Add roles to group competencies." />
+            <EmptyState icon={Users} title={t("peoplePage.rolesEmptyTitle")} description={t("peoplePage.rolesEmptyDescription")} />
           ) : (
             <div className="grid gap-3 md:grid-cols-2">
               {db.roles.map((r) => {
@@ -175,7 +179,9 @@ export function PeoplePage() {
                         <div className="min-w-0">
                           <p className="text-sm font-semibold">{r.name}</p>
                           <p className="mt-0.5 text-xs text-muted-foreground">
-                            {peopleCount} {peopleCount === 1 ? "person" : "people"} · {comps.length} competencies
+                            {peopleCount === 1
+                              ? t("peoplePage.roleSummaryOne", { competencies: comps.length })
+                              : t("peoplePage.roleSummaryMany", { people: peopleCount, competencies: comps.length })}
                           </p>
                           {r.description && (
                             <p className="mt-1 text-xs text-muted-foreground">{r.description}</p>
@@ -189,7 +195,7 @@ export function PeoplePage() {
                           </div>
                         </div>
                         <div className="flex shrink-0 gap-1">
-                          <Button variant="ghost" size="icon" onClick={() => setRoleDialog({ open: true, role: r })}>
+                          <Button variant="ghost" size="icon" onClick={() => setRoleDialog({ open: true, role: r })} aria-label={t("peoplePage.editRole", { name: r.name })}>
                             <Pencil className="h-4 w-4" />
                           </Button>
                           <Button
@@ -197,6 +203,7 @@ export function PeoplePage() {
                             size="icon"
                             className="text-destructive hover:text-destructive"
                             onClick={() => setDeleteRole(r)}
+                            aria-label={t("peoplePage.deleteRole", { name: r.name })}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -229,24 +236,24 @@ export function PeoplePage() {
       <ConfirmDeleteDialog
         open={Boolean(deletePerson)}
         onOpenChange={(open) => !open && setDeletePerson(null)}
-        title={`Remove "${deletePerson?.name}"?`}
-        description="The person will no longer count toward coverage for any task or competency."
+        title={t("peoplePage.removePersonTitle", { name: deletePerson?.name ?? "" })}
+        description={t("peoplePage.removePersonDescription")}
         onConfirm={() => {
           if (deletePerson) {
             remove("people", deletePerson.id);
-            toast.success("Person removed");
+            toast.success(t("peoplePage.personRemoved"));
           }
         }}
       />
       <ConfirmDeleteDialog
         open={Boolean(deleteRole)}
         onOpenChange={(open) => !open && setDeleteRole(null)}
-        title={`Delete role "${deleteRole?.name}"?`}
-        description="People assigned to this role will keep their tasks and competencies but lose the role reference."
+        title={t("peoplePage.deleteRoleTitle", { name: deleteRole?.name ?? "" })}
+        description={t("peoplePage.deleteRoleDescription")}
         onConfirm={() => {
           if (deleteRole) {
             remove("roles", deleteRole.id);
-            toast.success("Role deleted");
+            toast.success(t("peoplePage.roleDeleted"));
           }
         }}
       />

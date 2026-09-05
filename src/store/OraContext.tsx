@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { getMyAccess } from "@/lib/access/api";
@@ -97,6 +98,7 @@ interface OraApi {
 const OraContext = createContext<OraApi | null>(null);
 
 export function OraProvider({ children }: { children: ReactNode }) {
+  const { t } = useTranslation();
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -119,9 +121,9 @@ export function OraProvider({ children }: { children: ReactNode }) {
   const enqueue = useCallback((task: () => Promise<void>) => {
     queueRef.current = queueRef.current.then(task).catch((err) => {
       console.error("ORA persistence failed:", err);
-      toast.error("Could not save changes. Please retry.");
+      toast.error(t("store.saveFailed"));
     });
-  }, []);
+  }, [t]);
 
   const refreshAccess = useCallback(async () => {
     setAccessFailed(false);
@@ -174,9 +176,9 @@ export function OraProvider({ children }: { children: ReactNode }) {
       console.error("Failed to load workspace:", err);
       workspaceStartedRef.current = false;
       setWorkspaceFailed(true);
-      toast.error("Could not load your organizations.");
+      toast.error(t("store.loadFailed"));
     }
-  }, []);
+  }, [t]);
 
   const retryWorkspace = useCallback(() => {
     if (!user) return;
@@ -366,15 +368,15 @@ export function OraProvider({ children }: { children: ReactNode }) {
   const resetToSeed = useCallback(() => {
     const orgId = activeOrgIdRef.current;
     if (!orgId || !db?.organization.isDemo) {
-      toast.error("Reset demo data is only available for the demo organization.");
+      toast.error(t("store.resetDemoOnlyDemo"));
       return;
     }
     enqueue(async () => {
       const fresh = await resetDemoOrganization(orgId);
       setDb(fresh);
-      toast.success("Demo data restored");
+      toast.success(t("store.demoDataRestored"));
     });
-  }, [db, enqueue]);
+  }, [db, enqueue, t]);
 
   /* ------------------------------------------------ */
   /* New actions                                       */

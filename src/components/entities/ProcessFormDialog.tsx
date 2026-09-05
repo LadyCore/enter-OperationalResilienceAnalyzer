@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,6 +25,7 @@ interface ProcessFormDialogProps {
 }
 
 export function ProcessFormDialog({ open, onOpenChange, process }: ProcessFormDialogProps) {
+  const { t } = useTranslation();
   const { db, upsert } = useOra();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -46,7 +48,7 @@ export function ProcessFormDialog({ open, onOpenChange, process }: ProcessFormDi
       criticality,
       organizationId: db.organization.id,
     });
-    toast.success(process ? "Process updated" : "Process created");
+    toast.success(process ? t("process.updated") : t("process.created"));
     onOpenChange(false);
   };
 
@@ -54,28 +56,26 @@ export function ProcessFormDialog({ open, onOpenChange, process }: ProcessFormDi
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{process ? "Edit process" : "New process"}</DialogTitle>
-          <DialogDescription>
-            A process groups related functions and tasks under the organization.
-          </DialogDescription>
+          <DialogTitle>{process ? t("process.edit") : t("process.new")}</DialogTitle>
+          <DialogDescription>{t("process.description")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
-          <Field label="Name">
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Customer Order Management" />
+          <Field label={t("entity.name")}>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("process.namePlaceholder")} />
           </Field>
-          <Field label="Description">
-            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} placeholder="What does this process cover?" />
+          <Field label={t("entity.description")}>
+            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} placeholder={t("process.descriptionPlaceholder")} />
           </Field>
-          <Field label="Criticality">
+          <Field label={t("entity.criticality")}>
             <CriticalitySelect value={criticality} onChange={setCriticality} />
           </Field>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button onClick={handleSave} disabled={!name.trim()}>
-            Save
+            {t("common.save")}
           </Button>
         </DialogFooter>
       </DialogContent>

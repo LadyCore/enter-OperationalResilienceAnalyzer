@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,6 +33,7 @@ interface FunctionFormDialogProps {
 }
 
 export function FunctionFormDialog({ open, onOpenChange, fn, presetProcessId }: FunctionFormDialogProps) {
+  const { t } = useTranslation();
   const { db, upsert } = useOra();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -56,7 +58,7 @@ export function FunctionFormDialog({ open, onOpenChange, fn, presetProcessId }: 
       processId,
       criticality,
     });
-    toast.success(fn ? "Function updated" : "Function created");
+    toast.success(fn ? t("function.updated") : t("function.created"));
     onOpenChange(false);
   };
 
@@ -64,19 +66,17 @@ export function FunctionFormDialog({ open, onOpenChange, fn, presetProcessId }: 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{fn ? "Edit function" : "New function"}</DialogTitle>
-          <DialogDescription>
-            A function is a group of tasks within a process.
-          </DialogDescription>
+          <DialogTitle>{fn ? t("function.edit") : t("function.new")}</DialogTitle>
+          <DialogDescription>{t("function.description")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
-          <Field label="Name">
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Order Intake" />
+          <Field label={t("entity.name")}>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("function.namePlaceholder")} />
           </Field>
-          <Field label="Description">
+          <Field label={t("entity.description")}>
             <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
           </Field>
-          <Field label="Process">
+          <Field label={t("entity.process")}>
             <Select value={processId} onValueChange={setProcessId}>
               <SelectTrigger className="w-full">
                 <SelectValue />
@@ -90,16 +90,16 @@ export function FunctionFormDialog({ open, onOpenChange, fn, presetProcessId }: 
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Criticality">
+          <Field label={t("entity.criticality")}>
             <CriticalitySelect value={criticality} onChange={setCriticality} />
           </Field>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button onClick={handleSave} disabled={!name.trim() || !processId}>
-            Save
+            {t("common.save")}
           </Button>
         </DialogFooter>
       </DialogContent>

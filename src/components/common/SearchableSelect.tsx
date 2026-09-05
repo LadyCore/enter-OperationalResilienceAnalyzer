@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Check, ChevronsUpDown, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -49,13 +50,18 @@ export function SearchableSelect({
   options,
   value,
   onChange,
-  placeholder = "Select…",
-  searchPlaceholder = "Search…",
-  emptyText = "No matches",
+  placeholder,
+  searchPlaceholder,
+  emptyText,
   className,
 }: SearchableSelectProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+
+  const placeholderText = placeholder ?? t("searchableSelect.placeholder");
+  const searchPlaceholderText = searchPlaceholder ?? t("common.search");
+  const emptyTextLabel = emptyText ?? t("searchableSelect.empty");
 
   const selected = options.find((o) => o.value === value);
   const queryKey = normalize(query.trim());
@@ -79,20 +85,20 @@ export function SearchableSelect({
             className
           )}
         >
-          <span className="truncate">{selected ? selected.label : placeholder}</span>
+          <span className="truncate">{selected ? selected.label : placeholderText}</span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
         <Command shouldFilter={false}>
           <CommandInput
-            placeholder={searchPlaceholder}
+            placeholder={searchPlaceholderText}
             value={query}
             onValueChange={setQuery}
             autoFocus
           />
           {filtered.length === 0 ? (
-            <CommandEmpty>{emptyText}</CommandEmpty>
+            <CommandEmpty>{emptyTextLabel}</CommandEmpty>
           ) : (
             <CommandGroup className="max-h-60 overflow-y-auto">
               {filtered.map((o) => (

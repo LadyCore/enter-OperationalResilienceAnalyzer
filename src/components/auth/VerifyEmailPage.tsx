@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { CheckCircle2, Loader2, MailCheck, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ type Status = "checking" | "verified" | "expired";
  * verified (email confirmed) or expired/invalid, with a resend option.
  */
 export function VerifyEmailPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [status, setStatus] = useState<Status>("checking");
   const [email, setEmail] = useState("");
@@ -55,7 +57,7 @@ export function VerifyEmailPage() {
 
   const resend = async () => {
     if (!email.trim()) {
-      setError("Enter the email address you registered with.");
+      setError(t("auth.enterRegisteredEmail"));
       return;
     }
     setBusy(true);
@@ -70,7 +72,7 @@ export function VerifyEmailPage() {
       if (resendError) throw resendError;
       setResent(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not resend the verification email.");
+      setError(err instanceof Error ? err.message : t("auth.couldNotResendVerification"));
     } finally {
       setBusy(false);
     }
@@ -84,25 +86,25 @@ export function VerifyEmailPage() {
             <ShieldCheck className="h-6 w-6" />
           </div>
           <h1 className="mt-3 font-display text-2xl font-bold tracking-tight">ORA</h1>
-          <p className="text-sm text-muted-foreground">Organizational Resilience Analyzer</p>
+          <p className="text-sm text-muted-foreground">{t("brand.subtitle")}</p>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>Verify your email</CardTitle>
+            <CardTitle>{t("auth.verifyEmailTitle")}</CardTitle>
             <CardDescription>
               {status === "checking"
-                ? "Confirming your email address…"
+                ? t("auth.confirmingEmail")
                 : status === "verified"
-                  ? "Your email has been verified."
-                  : "This verification link is invalid or has expired."}
+                  ? t("auth.emailVerified")
+                  : t("auth.verificationLinkInvalid")}
             </CardDescription>
           </CardHeader>
           <CardContent>
             {status === "checking" && (
               <div className="flex items-center justify-center py-6 text-muted-foreground">
                 <Loader2 className="h-5 w-5 animate-spin" />
-                <span className="ml-2 text-sm">Checking…</span>
+                <span className="ml-2 text-sm">{t("auth.checking")}</span>
               </div>
             )}
 
@@ -111,31 +113,26 @@ export function VerifyEmailPage() {
                 <div className="flex items-start gap-3 rounded-md border border-risk-low/30 bg-risk-low/10 p-3 text-sm">
                   <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-risk-low" />
                   <div>
-                    <p className="font-medium text-foreground">Email verified</p>
-                    <p className="mt-0.5 text-muted-foreground">
-                      Your email address has been confirmed. You can now continue to ORA and sign in.
-                    </p>
+                    <p className="font-medium text-foreground">{t("auth.emailVerified")}</p>
+                    <p className="mt-0.5 text-muted-foreground">{t("auth.emailVerifiedNote")}</p>
                   </div>
                 </div>
                 <Button className="w-full" onClick={() => navigate("/")}>
-                  Continue to ORA
+                  {t("auth.continueToOra")}
                 </Button>
               </div>
             )}
 
             {status === "expired" && (
               <div className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  The verification link you used is invalid or has expired. Enter your email address to
-                  receive a new verification link.
-                </p>
-                <Field label="Email">
+                <p className="text-sm text-muted-foreground">{t("auth.verificationLinkInvalidNote")}</p>
+                <Field label={t("auth.email")}>
                   <Input
                     type="email"
                     autoComplete="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@company.com"
+                    placeholder={t("common.emailPlaceholder")}
                   />
                 </Field>
                 {error && (
@@ -145,15 +142,15 @@ export function VerifyEmailPage() {
                 )}
                 {resent && (
                   <p className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-                    Verification email sent. Check your inbox.
+                    {t("auth.verificationEmailSent")}
                   </p>
                 )}
                 <Button className="w-full" onClick={resend} disabled={busy}>
                   <MailCheck className="h-4 w-4" />
-                  {busy ? "Sending…" : "Resend verification email"}
+                  {busy ? t("auth.sending") : t("auth.resendVerificationEmail")}
                 </Button>
                 <Button variant="ghost" className="w-full" onClick={() => navigate("/")}>
-                  Back to sign in
+                  {t("auth.backToSignIn")}
                 </Button>
               </div>
             )}

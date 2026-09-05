@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { PhoneCall, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -19,44 +20,42 @@ import { useOra } from "@/store/OraContext";
 import type { OnCallAssignment } from "@/types";
 
 export function OnCallPanel() {
+  const { t } = useTranslation();
   const { db, remove } = useOra();
   const [dialog, setDialog] = useState<{ open: boolean; assignment?: OnCallAssignment }>({ open: false });
   const [toDelete, setToDelete] = useState<OnCallAssignment | null>(null);
 
   const personName = (id: string) => db.people.find((p) => p.id === id)?.name ?? id;
-  const taskNames = (ids: string[]) => ids.map((id) => db.tasks.find((t) => t.id === id)?.name ?? id);
+  const taskNames = (ids: string[]) => ids.map((id) => db.tasks.find((tt) => tt.id === id)?.name ?? id);
 
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
         <div>
-          <CardTitle className="text-base">On-call (guardia pasiva)</CardTitle>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            Permanent operational availability outside ordinary hours. Independent from the base
-            analysis and never used as vacation coverage.
-          </p>
+          <CardTitle className="text-base">{t("onCallPanel.title")}</CardTitle>
+          <p className="mt-0.5 text-sm text-muted-foreground">{t("onCallPanel.subtitle")}</p>
         </div>
         <Button onClick={() => setDialog({ open: true })}>
-          <Plus className="h-4 w-4" /> New on-call assignment
+          <Plus className="h-4 w-4" /> {t("onCallPanel.add")}
         </Button>
       </CardHeader>
       <CardContent>
         {db.onCallAssignments.length === 0 ? (
           <EmptyState
             icon={PhoneCall}
-            title="No on-call assignments"
-            description="Add passive on-call availability for areas such as IT, infrastructure, security or communications."
+            title={t("onCallPanel.empty.title")}
+            description={t("onCallPanel.empty.description")}
           />
         ) : (
           <div className="overflow-x-auto rounded-lg border">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Person</TableHead>
-                  <TableHead>Modality</TableHead>
-                  <TableHead>Shift / period</TableHead>
-                  <TableHead className="hidden lg:table-cell">Capabilities covered</TableHead>
-                  <TableHead className="w-24 text-right">Actions</TableHead>
+                  <TableHead>{t("entity.person")}</TableHead>
+                  <TableHead>{t("entity.modality")}</TableHead>
+                  <TableHead>{t("entity.shiftPeriod")}</TableHead>
+                  <TableHead className="hidden lg:table-cell">{t("entity.capabilitiesCovered")}</TableHead>
+                  <TableHead className="w-24 text-right">{t("common.actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -108,12 +107,12 @@ export function OnCallPanel() {
       <ConfirmDeleteDialog
         open={Boolean(toDelete)}
         onOpenChange={(open) => !open && setToDelete(null)}
-        title="Remove this on-call assignment?"
-        description="The availability assignment is removed. The person's ordinary profile is unchanged."
+        title={t("onCallPanel.deleteTitle")}
+        description={t("onCallPanel.deleteDescription")}
         onConfirm={() => {
           if (toDelete) {
             remove("onCallAssignments", toDelete.id);
-            toast.success("On-call assignment removed");
+            toast.success(t("onCallPanel.removed"));
           }
         }}
       />

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,6 +21,7 @@ interface OrganizationFormDialogProps {
 }
 
 export function OrganizationFormDialog({ open, onOpenChange }: OrganizationFormDialogProps) {
+  const { t } = useTranslation();
   const { db, setOrganization } = useOra();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -34,7 +36,7 @@ export function OrganizationFormDialog({ open, onOpenChange }: OrganizationFormD
   const handleSave = () => {
     if (!name.trim()) return;
     setOrganization({ ...db.organization, name: name.trim(), description: description.trim() });
-    toast.success("Organization updated");
+    toast.success(t("organization.updated"));
     onOpenChange(false);
   };
 
@@ -42,30 +44,28 @@ export function OrganizationFormDialog({ open, onOpenChange }: OrganizationFormD
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Edit organization</DialogTitle>
-          <DialogDescription>
-            The organization is the root of the model. All processes belong to it.
-          </DialogDescription>
+          <DialogTitle>{t("organization.edit")}</DialogTitle>
+          <DialogDescription>{t("organization.description")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
-          <Field label="Name">
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Organization name" />
+          <Field label={t("entity.name")}>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("organization.namePlaceholder")} />
           </Field>
-          <Field label="Description">
+          <Field label={t("entity.description")}>
             <Textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="What does this organization do?"
+              placeholder={t("organization.descriptionPlaceholder")}
               rows={4}
             />
           </Field>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button onClick={handleSave} disabled={!name.trim()}>
-            Save
+            {t("common.save")}
           </Button>
         </DialogFooter>
       </DialogContent>

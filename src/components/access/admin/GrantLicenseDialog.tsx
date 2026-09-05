@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -18,8 +19,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { grantLicense, describeRpcError } from "@/lib/access/api";
+import { grantLicense } from "@/lib/access/api";
 import { CURRENT_VERSION, type TaxType } from "@/lib/access/types";
+import { useRpcError } from "@/hooks/useRpcError";
 import { Field } from "@/components/entities/field";
 
 interface GrantLicenseDialogProps {
@@ -31,6 +33,8 @@ interface GrantLicenseDialogProps {
 
 /** Owner action: record a perpetual license for a user (no payment involved). */
 export function GrantLicenseDialog({ open, onOpenChange, presetEmail, onDone }: GrantLicenseDialogProps) {
+  const { t } = useTranslation();
+  const rpcError = useRpcError();
   const [email, setEmail] = useState(presetEmail ?? "");
   const [version, setVersion] = useState(CURRENT_VERSION);
   const [clientName, setClientName] = useState("");
@@ -54,14 +58,14 @@ export function GrantLicenseDialog({ open, onOpenChange, presetEmail, onDone }: 
         taxId: taxId.trim() || null,
       });
       if (result.ok) {
-        toast.success("Perpetual license granted.");
+        toast.success(t("license.grantedToast"));
         onOpenChange(false);
         onDone();
       } else {
-        toast.error(describeRpcError(result));
+        toast.error(rpcError(result));
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not grant the license.");
+      toast.error(err instanceof Error ? err.message : t("license.couldNotGrant"));
     } finally {
       setBusy(false);
     }
@@ -71,27 +75,24 @@ export function GrantLicenseDialog({ open, onOpenChange, presetEmail, onDone }: 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Grant perpetual license</DialogTitle>
-          <DialogDescription>
-            Registers a perpetual license (one-time payment, permanent access to this version) for
-            a user. The license belongs to the client.
-          </DialogDescription>
+          <DialogTitle>{t("license.grantTitle")}</DialogTitle>
+          <DialogDescription>{t("license.grantDescription")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
-          <Field label="User email">
+          <Field label={t("auth.email")}>
             <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@company.com" autoFocus />
           </Field>
-          <Field label="Version">
+          <Field label={t("license.version")}>
             <Input value={version} onChange={(e) => setVersion(e.target.value)} />
           </Field>
-          <Field label="Client name" hint="Leave empty to use the user's email.">
-            <Input value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Client / organization name" />
+          <Field label={t("license.clientName")} hint={t("license.clientNameHint")}>
+            <Input value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder={t("license.clientNamePlaceholder")} />
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Tax type" hint="Optional">
+            <Field label={t("license.taxType")} hint={t("common.optional")}>
               <Select value={taxType || undefined} onValueChange={(v) => setTaxType(v as TaxType)}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select" />
+                  <SelectValue placeholder={t("common.select")} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="dni">DNI</SelectItem>
@@ -99,11 +100,11 @@ export function GrantLicenseDialog({ open, onOpenChange, presetEmail, onDone }: 
                 </SelectContent>
               </Select>
             </Field>
-            <Field label="Tax ID" hint="Optional">
+            <Field label={t("license.taxId")} hint={t("common.optional")}>
               <Input
                 value={taxId}
                 onChange={(e) => setTaxId(e.target.value.replace(/\D/g, "").slice(0, 11))}
-                placeholder="Digits only"
+                placeholder={t("license.digitsOnly")}
                 inputMode="numeric"
               />
             </Field>
@@ -111,11 +112,11 @@ export function GrantLicenseDialog({ open, onOpenChange, presetEmail, onDone }: 
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button onClick={() => void handleSubmit()} disabled={busy || !email.trim()}>
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            Grant license
+            {t("license.grantAction")}
           </Button>
         </DialogFooter>
       </DialogContent>

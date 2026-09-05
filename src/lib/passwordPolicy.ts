@@ -17,13 +17,26 @@ export const PASSWORD_PLACEHOLDER = "Exactly 8 characters";
 
 export const PASSWORD_EXAMPLE = "e.g. Ora8#x2k";
 
-/** Returns an error message when the password violates the policy, else null. */
+export const PASSWORD_ERROR_KEYS = {
+  empty: "passwordPolicy.empty",
+  length: "passwordPolicy.length",
+  spaces: "passwordPolicy.spaces",
+  letter: "passwordPolicy.letter",
+  number: "passwordPolicy.number",
+  special: "passwordPolicy.special",
+} as const;
+
+/**
+ * Returns the i18n key of the first violated rule, or null for a valid
+ * password. Callers translate the key at display time (t(key)) so messages
+ * follow the app language.
+ */
 export function validatePassword(password: string): string | null {
-  if (password.length === 0) return "Enter a password.";
-  if (password.length !== 8) return "Password must be exactly 8 characters.";
-  if (/\s/.test(password)) return "Password must not contain spaces.";
-  if (!/[A-Za-z]/.test(password)) return "Password must contain at least one letter.";
-  if (!/[0-9]/.test(password)) return "Password must contain at least one number.";
-  if (!/[^A-Za-z0-9]/.test(password)) return "Password must contain at least one special character.";
+  if (password.length === 0) return PASSWORD_ERROR_KEYS.empty;
+  if (password.length !== 8) return PASSWORD_ERROR_KEYS.length;
+  if (/\s/.test(password)) return PASSWORD_ERROR_KEYS.spaces;
+  if (!/[A-Za-z]/.test(password)) return PASSWORD_ERROR_KEYS.letter;
+  if (!/[0-9]/.test(password)) return PASSWORD_ERROR_KEYS.number;
+  if (!/[^A-Za-z0-9]/.test(password)) return PASSWORD_ERROR_KEYS.special;
   return null;
 }

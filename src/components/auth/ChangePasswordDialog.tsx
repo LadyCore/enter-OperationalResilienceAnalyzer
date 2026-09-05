@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { KeyRound } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -12,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
-import { PASSWORD_PLACEHOLDER, validatePassword } from "@/lib/passwordPolicy";
+import { validatePassword } from "@/lib/passwordPolicy";
 import { Field } from "@/components/entities/field";
 
 interface ChangePasswordDialogProps {
@@ -21,6 +22,7 @@ interface ChangePasswordDialogProps {
 }
 
 export function ChangePasswordDialog({ open, onOpenChange }: ChangePasswordDialogProps) {
+  const { t } = useTranslation();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -39,16 +41,16 @@ export function ChangePasswordDialog({ open, onOpenChange }: ChangePasswordDialo
     setError(null);
 
     if (!current) {
-      setError("Enter your current password.");
+      setError(t("auth.enterCurrentPassword"));
       return;
     }
     const policyError = validatePassword(next);
     if (policyError) {
-      setError(policyError);
+      setError(t(policyError));
       return;
     }
     if (next !== confirm) {
-      setError("New passwords do not match.");
+      setError(t("auth.newPasswordsDoNotMatch"));
       return;
     }
 
@@ -57,11 +59,11 @@ export function ChangePasswordDialog({ open, onOpenChange }: ChangePasswordDialo
       // verify current password against the auth provider
       const { error: verifyError } = await supabase.auth.updateUser({ password: next });
       if (verifyError) throw verifyError;
-      toast.success("Password updated.");
+      toast.success(t("auth.passwordUpdatedToast"));
       reset();
       onOpenChange(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not change your password.");
+      setError(err instanceof Error ? err.message : t("auth.couldNotChangePassword"));
     } finally {
       setBusy(false);
     }
@@ -77,35 +79,35 @@ export function ChangePasswordDialog({ open, onOpenChange }: ChangePasswordDialo
     >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Change password</DialogTitle>
-          <DialogDescription>Update the password for your account.</DialogDescription>
+          <DialogTitle>{t("auth.changePassword")}</DialogTitle>
+          <DialogDescription>{t("auth.changePasswordDescription")}</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <Field label="Current password">
+          <Field label={t("auth.currentPassword")}>
             <Input
               type="password"
               autoComplete="current-password"
               value={current}
               onChange={(e) => setCurrent(e.target.value)}
-              placeholder="Current password"
+              placeholder={t("auth.currentPassword")}
             />
           </Field>
-          <Field label="New password" hint="Exactly 8 characters, with a letter, a number and a special character. No spaces.">
+          <Field label={t("auth.newPassword")} hint={t("auth.passwordPolicyHint")}>
             <Input
               type="password"
               autoComplete="new-password"
               value={next}
               onChange={(e) => setNext(e.target.value)}
-              placeholder={PASSWORD_PLACEHOLDER}
+              placeholder={t("auth.passwordPlaceholder")}
             />
           </Field>
-          <Field label="Confirm new password">
+          <Field label={t("auth.confirmNewPassword")}>
             <Input
               type="password"
               autoComplete="new-password"
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
-              placeholder="Repeat the new password"
+              placeholder={t("auth.repeatNewPassword")}
             />
           </Field>
 
@@ -117,11 +119,11 @@ export function ChangePasswordDialog({ open, onOpenChange }: ChangePasswordDialo
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button type="submit" disabled={busy}>
               <KeyRound className="h-4 w-4" />
-              {busy ? "Updating…" : "Update password"}
+              {busy ? t("auth.updating") : t("auth.updatePassword")}
             </Button>
           </DialogFooter>
         </form>

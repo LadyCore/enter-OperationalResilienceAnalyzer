@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { setFeedbackStage } from "@/lib/feedback/context";
@@ -26,9 +27,17 @@ import { validateImport } from "@/lib/importer/validate";
 import { buildOrganization } from "@/lib/importer/buildOrganization";
 import type { ColumnMapping, NormalizedImport, ParsedFile } from "@/lib/importer/types";
 
-const STEPS = ["Organization & file", "Column mapping", "Validation", "Confirmation"];
+/** English step names recorded verbatim in the stored feedback context. */
+const FEEDBACK_STEP_LABELS = ["Organization & file", "Column mapping", "Validation", "Confirmation"];
+const STEP_KEYS = [
+  "importPage.step.organization",
+  "importPage.step.mapping",
+  "importPage.step.validation",
+  "importPage.step.confirmation",
+] as const;
 
 export function ImportOrganizationPage() {
+  const { t } = useTranslation();
   const { addOrganization } = useOra();
   const navigate = useNavigate();
 
@@ -46,9 +55,9 @@ export function ImportOrganizationPage() {
   const canContinueFromStep1 = name.trim().length > 0 && file !== null;
 
   // Report the active wizard step to the feedback context (read-only: it does
-  // not alter the import flow).
+  // not alter the import flow). The recorded label is derived, stored content.
   useEffect(() => {
-    const label = STEPS[step - 1];
+    const label = FEEDBACK_STEP_LABELS[step - 1];
     setFeedbackStage(label ? `Step ${step} · ${label}` : null);
     return () => setFeedbackStage(null);
   }, [step]);
@@ -63,7 +72,7 @@ export function ImportOrganizationPage() {
       setMapping(suggestMapping(parsedFile.columns));
       setStep(2);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not read the file.");
+      setError(err instanceof Error ? err.message : t("importPage.readFileFailed"));
     } finally {
       setBusy(false);
     }
@@ -88,10 +97,10 @@ export function ImportOrganizationPage() {
     try {
       const newDb = buildOrganization(name, description, normalized);
       await addOrganization(newDb);
-      toast.success(`Organization "${newDb.organization.name}" created and activated.`);
+      toast.success(t("importPage.createdToast", { name: newDb.organization.name }));
       navigate("/", { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not create the organization.");
+      setError(err instanceof Error ? err.message : t("importPage.createFailed"));
       setBusy(false);
     }
   };
@@ -104,18 +113,18 @@ export function ImportOrganizationPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Import organization"
-        description="Create a real organization from an Excel/CSV file: load, map, validate and activate it for analysis."
+        title={t("common.importOrganization")}
+        description={t("importPage.subtitle")}
       />
 
       {/* Stepper */}
       <ol className="flex flex-wrap items-center gap-2 text-sm">
-        {STEPS.map((label, i) => {
+        {STEP_KEYS.map((stepKey, i) => {
           const n = i + 1;
           const active = n === step;
           const done = n < step;
           return (
-            <li key={label} className="flex items-center gap-2">
+            <li key={stepKey} className="flex items-center gap-2">
               <span
                 className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${
                   done
@@ -127,8 +136,8 @@ export function ImportOrganizationPage() {
               >
                 {done ? <Check className="h-3.5 w-3.5" /> : n}
               </span>
-              <span className={active ? "font-medium" : "text-muted-foreground"}>{label}</span>
-              {n < STEPS.length && <span className="text-muted-foreground">→</span>}
+              <span className={active ? "font-medium" : "text-muted-foreground"}>{t(stepKey)}</span>
+              {n < STEP_KEYS.length && <span className="text-muted-foreground">→</span>}
             </li>
           );
         })}
@@ -144,29 +153,28 @@ export function ImportOrganizationPage() {
       {step === 1 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Organization and file</CardTitle>
+            <CardTitle className="text-base">{t("importPage.step1Title")}</CardTitle>
             <CardDescription>
-              One row per person. Multiple values in a cell are separated by ";"
-              (e.g. Tasks = "Liquidación;Legajos;Atención").
+              {t("importPage.step1Description")}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Field label="Organization name">
+            <Field label={t("importPage.label.orgName")}>
               <Input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Acme Corporation"
+                placeholder={t("importPage.orgNamePlaceholder")}
               />
             </Field>
-            <Field label="Description">
+            <Field label={t("entity.description")}>
               <Textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 rows={3}
-                placeholder="What does this organization do?"
+                placeholder={t("importPage.descriptionPlaceholder")}
               />
             </Field>
-            <Field label="File (Excel or CSV)">
+            <Field label={t("importPage.label.file")}>
               <label
                 className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed p-8 text-center transition-colors hover:bg-muted/50"
                 htmlFor="import-file"
@@ -176,17 +184,17 @@ export function ImportOrganizationPage() {
                   <div>
                     <p className="text-sm font-medium">{file.name}</p>
                     <p className="text-xs text-muted-foreground">
-                      {(file.size / 1024).toFixed(1)} KB — click to replace
+                      {t("importPage.replaceHint", { size: (file.size / 1024).toFixed(1) })}
                     </p>
                   </div>
                 ) : (
                   <div>
-                    <p className="text-sm font-medium">Choose a file or drag it here</p>
-                    <p className="text-xs text-muted-foreground">.xlsx, .xls or .csv</p>
+                    <p className="text-sm font-medium">{t("importPage.chooseFile")}</p>
+                    <p className="text-xs text-muted-foreground">{t("importPage.fileTypes")}</p>
                   </div>
                 )}
                 <Button variant="outline" size="sm" type="button">
-                  <Upload className="h-4 w-4" /> Browse
+                  <Upload className="h-4 w-4" /> {t("importPage.browse")}
                 </Button>
               </label>
               <input
@@ -201,7 +209,7 @@ export function ImportOrganizationPage() {
           <div className="flex justify-end p-6 pt-0">
             <Button onClick={handleNextFromStep1} disabled={!canContinueFromStep1 || busy}>
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-              Load file
+              {t("importPage.loadFile")}
             </Button>
           </div>
         </Card>
@@ -211,20 +219,19 @@ export function ImportOrganizationPage() {
       {step === 2 && parsed && mapping && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Map columns to ORA fields</CardTitle>
+            <CardTitle className="text-base">{t("importPage.step2Title")}</CardTitle>
             <CardDescription>
-              ORA never assumes column names. The suggestions are automatic — adjust any of them before
-              validating.
+              {t("importPage.step2Description")}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <ColumnMappingEditor columns={parsed.columns} mapping={mapping} onChange={setMapping} />
             <div className="flex items-center justify-between">
               <Button variant="outline" onClick={() => setStep(1)}>
-                <ArrowLeft className="h-4 w-4" /> Back
+                <ArrowLeft className="h-4 w-4" /> {t("importPage.back")}
               </Button>
               <Button onClick={handleValidate} disabled={!mapping.persona}>
-                Validate <ArrowRight className="h-4 w-4" />
+                {t("importPage.validate")} <ArrowRight className="h-4 w-4" />
               </Button>
             </div>
           </CardContent>
@@ -235,9 +242,9 @@ export function ImportOrganizationPage() {
       {step === 3 && normalized && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Validation summary</CardTitle>
+            <CardTitle className="text-base">{t("importPage.step3Title")}</CardTitle>
             <CardDescription>
-              Review the detected entities and resolve any ambiguous references before importing.
+              {t("importPage.step3Description")}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -248,10 +255,10 @@ export function ImportOrganizationPage() {
             />
             <div className="flex items-center justify-between">
               <Button variant="outline" onClick={() => setStep(2)}>
-                <ArrowLeft className="h-4 w-4" /> Back to mapping
+                <ArrowLeft className="h-4 w-4" /> {t("importPage.backToMapping")}
               </Button>
               <Button onClick={() => setStep(4)} disabled={normalized.summary.blocking}>
-                Continue to confirmation <ArrowRight className="h-4 w-4" />
+                {t("importPage.continueToConfirmation")} <ArrowRight className="h-4 w-4" />
               </Button>
             </div>
           </CardContent>
@@ -262,8 +269,8 @@ export function ImportOrganizationPage() {
       {step === 4 && nextDbPreview && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Confirm import</CardTitle>
-            <CardDescription>This creates a new organization with its own data and activates it.</CardDescription>
+            <CardTitle className="text-base">{t("importPage.step4Title")}</CardTitle>
+            <CardDescription>{t("importPage.step4Description")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-lg border p-4">
@@ -277,26 +284,26 @@ export function ImportOrganizationPage() {
                 </p>
               )}
               <div className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-                <div><p className="font-mono text-xl font-semibold tabular-nums">{nextDbPreview.people.length}</p><p className="text-xs text-muted-foreground">People</p></div>
-                <div><p className="font-mono text-xl font-semibold tabular-nums">{nextDbPreview.areas.length}</p><p className="text-xs text-muted-foreground">Areas</p></div>
-                <div><p className="font-mono text-xl font-semibold tabular-nums">{nextDbPreview.roles.length}</p><p className="text-xs text-muted-foreground">Roles</p></div>
-                <div><p className="font-mono text-xl font-semibold tabular-nums">{nextDbPreview.tasks.length}</p><p className="text-xs text-muted-foreground">Tasks</p></div>
-                <div><p className="font-mono text-xl font-semibold tabular-nums">{nextDbPreview.processes.length}</p><p className="text-xs text-muted-foreground">Processes</p></div>
-                <div><p className="font-mono text-xl font-semibold tabular-nums">{nextDbPreview.functions.length}</p><p className="text-xs text-muted-foreground">Functions</p></div>
-                <div><p className="font-mono text-xl font-semibold tabular-nums">{nextDbPreview.competencies.length}</p><p className="text-xs text-muted-foreground">Competencies</p></div>
-                <div><p className="font-mono text-xl font-semibold tabular-nums">{nextDbPreview.people.filter((p) => p.managerId).length}</p><p className="text-xs text-muted-foreground">Hierarchy links</p></div>
-                <div><p className="font-mono text-xl font-semibold tabular-nums">{nextDbPreview.onCallAssignments.length}</p><p className="text-xs text-muted-foreground">On-call (guardia)</p></div>
-                <div><p className="font-mono text-xl font-semibold tabular-nums">{nextDbPreview.vacationCoverages.length}</p><p className="text-xs text-muted-foreground">Vacation coverages</p></div>
+                <div><p className="font-mono text-xl font-semibold tabular-nums">{nextDbPreview.people.length}</p><p className="text-xs text-muted-foreground">{t("nav.people")}</p></div>
+                <div><p className="font-mono text-xl font-semibold tabular-nums">{nextDbPreview.areas.length}</p><p className="text-xs text-muted-foreground">{t("orgPage.structure.areas")}</p></div>
+                <div><p className="font-mono text-xl font-semibold tabular-nums">{nextDbPreview.roles.length}</p><p className="text-xs text-muted-foreground">{t("orgPage.structure.roles")}</p></div>
+                <div><p className="font-mono text-xl font-semibold tabular-nums">{nextDbPreview.tasks.length}</p><p className="text-xs text-muted-foreground">{t("nav.tasks")}</p></div>
+                <div><p className="font-mono text-xl font-semibold tabular-nums">{nextDbPreview.processes.length}</p><p className="text-xs text-muted-foreground">{t("nav.processes")}</p></div>
+                <div><p className="font-mono text-xl font-semibold tabular-nums">{nextDbPreview.functions.length}</p><p className="text-xs text-muted-foreground">{t("orgPage.structure.functions")}</p></div>
+                <div><p className="font-mono text-xl font-semibold tabular-nums">{nextDbPreview.competencies.length}</p><p className="text-xs text-muted-foreground">{t("nav.competencies")}</p></div>
+                <div><p className="font-mono text-xl font-semibold tabular-nums">{nextDbPreview.people.filter((p) => p.managerId).length}</p><p className="text-xs text-muted-foreground">{t("importPage.count.hierarchy")}</p></div>
+                <div><p className="font-mono text-xl font-semibold tabular-nums">{nextDbPreview.onCallAssignments.length}</p><p className="text-xs text-muted-foreground">{t("validation.stat.onCall")}</p></div>
+                <div><p className="font-mono text-xl font-semibold tabular-nums">{nextDbPreview.vacationCoverages.length}</p><p className="text-xs text-muted-foreground">{t("validation.stat.vacationCoverages")}</p></div>
               </div>
             </div>
 
             <div className="flex items-center justify-between">
               <Button variant="outline" onClick={() => setStep(3)} disabled={busy}>
-                <ArrowLeft className="h-4 w-4" /> Back
+                <ArrowLeft className="h-4 w-4" /> {t("importPage.back")}
               </Button>
               <Button onClick={handleConfirm} disabled={busy}>
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                Create organization
+                {t("importPage.createOrganization")}
               </Button>
             </div>
           </CardContent>

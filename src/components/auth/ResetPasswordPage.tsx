@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { CheckCircle2, KeyRound, Loader2, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -6,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { useOra } from "@/store/OraContext";
-import { PASSWORD_PLACEHOLDER, validatePassword } from "@/lib/passwordPolicy";
+import { validatePassword } from "@/lib/passwordPolicy";
 import { Field } from "@/components/entities/field";
 
 type Status = "checking" | "ready" | "invalid";
@@ -22,6 +23,7 @@ type Status = "checking" | "ready" | "invalid";
  * back in with their new password.
  */
 export function ResetPasswordPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { clearPendingRecovery, signOut } = useOra();
   const [status, setStatus] = useState<Status>("checking");
@@ -63,11 +65,11 @@ export function ResetPasswordPage() {
 
     const policyError = validatePassword(password);
     if (policyError) {
-      setError(policyError);
+      setError(t(policyError));
       return;
     }
     if (password !== confirm) {
-      setError("Passwords do not match.");
+      setError(t("auth.passwordsDoNotMatch"));
       return;
     }
 
@@ -81,7 +83,7 @@ export function ResetPasswordPage() {
       await signOut();
       setDone(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not reset your password.");
+      setError(err instanceof Error ? err.message : t("auth.couldNotResetPassword"));
     } finally {
       setBusy(false);
     }
@@ -95,40 +97,38 @@ export function ResetPasswordPage() {
             <ShieldCheck className="h-6 w-6" />
           </div>
           <h1 className="mt-3 font-display text-2xl font-bold tracking-tight">ORA</h1>
-          <p className="text-sm text-muted-foreground">Organizational Resilience Analyzer</p>
+          <p className="text-sm text-muted-foreground">{t("brand.subtitle")}</p>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>Reset password</CardTitle>
+            <CardTitle>{t("auth.resetPassword")}</CardTitle>
             <CardDescription>
               {status === "checking"
-                ? "Checking your reset link…"
+                ? t("auth.checkingResetLink")
                 : status === "ready"
-                  ? "Choose a new password for your account."
-                  : done
-                    ? "Password updated"
-                    : "This reset link is invalid or has expired."}
+                  ? done
+                    ? t("auth.passwordUpdated")
+                    : t("auth.chooseNewPassword")
+                  : t("auth.resetLinkInvalid")}
             </CardDescription>
           </CardHeader>
           <CardContent>
             {status === "checking" && (
               <div className="flex items-center justify-center py-6 text-muted-foreground">
                 <Loader2 className="h-5 w-5 animate-spin" />
-                <span className="ml-2 text-sm">Checking…</span>
+                <span className="ml-2 text-sm">{t("auth.checking")}</span>
               </div>
             )}
 
             {status === "invalid" && (
               <div className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  This password reset link is invalid or has expired. Request a new link to continue.
-                </p>
+                <p className="text-sm text-muted-foreground">{t("auth.resetLinkInvalidNote")}</p>
                 <Button className="w-full" onClick={() => navigate("/forgot-password")}>
-                  Request a new link
+                  {t("auth.requestNewLink")}
                 </Button>
                 <Button variant="ghost" className="w-full" onClick={() => navigate("/")}>
-                  Back to sign in
+                  {t("auth.backToSignIn")}
                 </Button>
               </div>
             )}
@@ -138,36 +138,34 @@ export function ResetPasswordPage() {
                 <div className="flex items-start gap-3 rounded-md border border-risk-low/30 bg-risk-low/10 p-3 text-sm">
                   <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-risk-low" />
                   <div>
-                    <p className="font-medium text-foreground">Password updated</p>
-                    <p className="mt-0.5 text-muted-foreground">
-                      Your password has been changed. You can now sign in with your new password.
-                    </p>
+                    <p className="font-medium text-foreground">{t("auth.passwordUpdated")}</p>
+                    <p className="mt-0.5 text-muted-foreground">{t("auth.passwordUpdatedNote")}</p>
                   </div>
                 </div>
                 <Button className="w-full" onClick={() => navigate("/")}>
-                  Sign in
+                  {t("auth.signIn")}
                 </Button>
               </div>
             )}
 
             {status === "ready" && !done && (
               <form onSubmit={handleSubmit} className="space-y-4">
-                <Field label="New password" hint="Exactly 8 characters, with a letter, a number and a special character. No spaces.">
+                <Field label={t("auth.newPassword")} hint={t("auth.passwordPolicyHint")}>
                   <Input
                     type="password"
                     autoComplete="new-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder={PASSWORD_PLACEHOLDER}
+                    placeholder={t("auth.passwordPlaceholder")}
                   />
                 </Field>
-                <Field label="Confirm new password">
+                <Field label={t("auth.confirmNewPassword")}>
                   <Input
                     type="password"
                     autoComplete="new-password"
                     value={confirm}
                     onChange={(e) => setConfirm(e.target.value)}
-                    placeholder="Repeat the new password"
+                    placeholder={t("auth.repeatNewPassword")}
                   />
                 </Field>
 
@@ -179,7 +177,7 @@ export function ResetPasswordPage() {
 
                 <Button type="submit" className="w-full" disabled={busy}>
                   <KeyRound className="h-4 w-4" />
-                  {busy ? "Updating…" : "Reset password"}
+                  {busy ? t("auth.updating") : t("auth.resetPassword")}
                 </Button>
               </form>
             )}

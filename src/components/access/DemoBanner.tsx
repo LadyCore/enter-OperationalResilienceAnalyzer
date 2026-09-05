@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { AlertTriangle, Info, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useOra } from "@/store/OraContext";
@@ -12,6 +13,7 @@ import { LicenseInfoDialog } from "./LicenseInfoDialog";
  * license). A mandatory, distinct warning appears from 3 days before expiry.
  */
 export function DemoBanner() {
+  const { t } = useTranslation();
   const { access } = useOra();
   const [licenseOpen, setLicenseOpen] = useState(false);
 
@@ -43,37 +45,40 @@ export function DemoBanner() {
         </div>
         <div className="space-y-1">
           <p className="text-sm font-semibold">
-            You are using ORA in DEMO version.
+            {t("demo.banner.titleLine")}
             {daysLeft > 0 && (
               <span className="ml-1 font-normal text-muted-foreground">
-                {daysLeft === 1 ? "1 day" : `${daysLeft} days`} of access left.
+                {daysLeft === 1
+                  ? t("demo.banner.dayLeft")
+                  : t("demo.banner.daysLeft", { count: daysLeft })}
               </span>
             )}
           </p>
           {expiring ? (
             <p className="text-sm text-muted-foreground">
-              Your DEMO expires in{" "}
-              <span className="font-semibold text-destructive">
-                {daysLeft === 3 ? "3 days" : daysLeft > 0 ? `${daysLeft} days` : "less than 3 days"}
-              </span>{" "}
-              — on <span className="font-semibold">{expiryText}</span>. After that date your
-              DEMO access ends.
+              {t("demo.banner.expiring", {
+                when:
+                  daysLeft === 3
+                    ? t("demo.banner.in3Days")
+                    : daysLeft > 0
+                      ? t("demo.banner.inCountDays", { count: daysLeft })
+                      : t("demo.banner.inLessThan3Days"),
+                date: expiryText,
+              })}
             </p>
           ) : (
             <p className="text-sm text-muted-foreground">
-              Your DEMO expires on <span className="font-semibold text-foreground">{expiryText}</span>.
+              {t("demo.banner.expiresOn", { date: expiryText })}
             </p>
           )}
           <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Sparkles className="h-3.5 w-3.5" />
-            To keep using ORA after it expires you can acquire a{" "}
-            <span className="font-medium text-foreground">Perpetual license</span> of the
-            current version.
+            {t("demo.banner.perpetualHint")}
           </p>
         </div>
       </div>
       <Button variant={expiring ? "destructive" : "default"} size="sm" className="shrink-0" onClick={() => setLicenseOpen(true)}>
-        See licensing options
+        {t("accessBlocked.seeLicensingOptions")}
       </Button>
       <LicenseInfoDialog open={licenseOpen} onOpenChange={setLicenseOpen} />
     </section>

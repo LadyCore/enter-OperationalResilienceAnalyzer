@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { CalendarX2, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useOra } from "@/store/OraContext";
@@ -13,6 +14,7 @@ import { DemoActivationScreen } from "./DemoActivationScreen";
  * 12-month DNI/CUIT reuse rule allows it (validated by the backend).
  */
 export function AccessBlockedScreen() {
+  const { t } = useTranslation();
   const { access, signOut } = useOra();
   const [licenseOpen, setLicenseOpen] = useState(false);
   const [requestingDemo, setRequestingDemo] = useState(false);
@@ -29,7 +31,7 @@ export function AccessBlockedScreen() {
             <ShieldCheck className="h-6 w-6" />
           </div>
           <h1 className="mt-3 font-display text-2xl font-bold tracking-tight">ORA</h1>
-          <p className="text-sm text-muted-foreground">Organizational Resilience Analyzer</p>
+          <p className="text-sm text-muted-foreground">{t("brand.subtitle")}</p>
         </div>
 
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-6 text-center">
@@ -37,36 +39,32 @@ export function AccessBlockedScreen() {
             <CalendarX2 className="h-6 w-6" />
           </div>
           <h2 className="mt-4 font-display text-lg font-semibold">
-            {isSubscription ? "Your subscription has ended" : "Your DEMO has ended"}
+            {isSubscription ? t("accessBlocked.subscriptionEnded") : t("accessBlocked.demoEnded")}
           </h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            {isSubscription ? (
-              "The subscription access period is over."
-            ) : (
-              <>
-                The {expiredAt ? `DEMO that ended on ${formatDateDDMMYYYY(expiredAt)}` : "DEMO"} has
-                expired. Your account and its data are preserved.
-              </>
-            )}{" "}
-            To keep working in ORA, acquire a perpetual license of the current version.
+            {isSubscription
+              ? t("accessBlocked.subscriptionAccessEnded")
+              : expiredAt
+                ? t("accessBlocked.demoEndedWithDate", { date: formatDateDDMMYYYY(expiredAt) })
+                : t("accessBlocked.demoExpired")}{" "}
+            {t("accessBlocked.keepWorking")}
           </p>
 
           <div className="mt-5 flex flex-col gap-2">
-            <Button onClick={() => setLicenseOpen(true)}>See licensing options</Button>
+            <Button onClick={() => setLicenseOpen(true)}>{t("accessBlocked.seeLicensingOptions")}</Button>
             {!isSubscription && (
               <Button variant="outline" onClick={() => setRequestingDemo(true)}>
-                Request a new DEMO
+                {t("accessBlocked.requestNewDemo")}
               </Button>
             )}
             <Button variant="ghost" onClick={() => void signOut()}>
-              Sign out
+              {t("auth.signOut")}
             </Button>
           </div>
         </div>
 
         <p className="mt-4 text-center text-xs text-muted-foreground">
-          Your organizations and analysis remain safe — access is restored as soon as a license
-          is associated with your account.
+          {t("accessBlocked.safetyNote")}
         </p>
       </div>
 

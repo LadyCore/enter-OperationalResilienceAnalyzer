@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Award, Plus, Trash2, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +21,7 @@ import { holdersOf, criticalTasks } from "@/lib/analysis";
 import type { Competency } from "@/types";
 
 export function CompetenciesPage() {
+  const { t } = useTranslation();
   const { db, remove } = useOra();
   const [dialog, setDialog] = useState<{ open: boolean; competency?: Competency }>({ open: false });
   const [deleteTarget, setDeleteTarget] = useState<Competency | null>(null);
@@ -30,15 +32,15 @@ export function CompetenciesPage() {
   if (db.competencies.length === 0) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Competencies" description="Capabilities that tasks require and people hold.">
+        <PageHeader title={t("nav.competencies")} description={t("compPage.headerHintEmpty")}>
           <Button onClick={() => setDialog({ open: true })}>
-            <Plus className="h-4 w-4" /> New competency
+            <Plus className="h-4 w-4" /> {t("competency.new")}
           </Button>
         </PageHeader>
         <EmptyState
           icon={Award}
-          title="No competencies yet"
-          description="Create competencies so tasks can require them and people can hold them."
+          title={t("compPage.emptyTitle")}
+          description={t("compPage.emptyDescription")}
         />
         <CompetencyFormDialog open={dialog.open} onOpenChange={(open) => setDialog((s) => ({ ...s, open }))} competency={dialog.competency} />
       </div>
@@ -48,11 +50,11 @@ export function CompetenciesPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Competencies"
-        description="Competencies are the capabilities behind tasks. A competency concentrated in one person is a resilience risk when critical tasks require it."
+        title={t("nav.competencies")}
+        description={t("compPage.headerHint")}
       >
         <Button onClick={() => setDialog({ open: true })}>
-          <Plus className="h-4 w-4" /> New competency
+          <Plus className="h-4 w-4" /> {t("competency.new")}
         </Button>
       </PageHeader>
 
@@ -61,12 +63,12 @@ export function CompetenciesPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Competency</TableHead>
-                <TableHead className="hidden md:table-cell">Description</TableHead>
-                <TableHead>Holders</TableHead>
-                <TableHead className="hidden lg:table-cell">Required by critical tasks</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="w-24 text-right">Actions</TableHead>
+                <TableHead>{t("compPage.table.competency")}</TableHead>
+                <TableHead className="hidden md:table-cell">{t("entity.description")}</TableHead>
+                <TableHead>{t("compPage.table.holders")}</TableHead>
+                <TableHead className="hidden lg:table-cell">{t("compPage.table.requiredByCritical")}</TableHead>
+                <TableHead>{t("compPage.table.status")}</TableHead>
+                <TableHead className="w-24 text-right">{t("compPage.table.actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -88,7 +90,7 @@ export function CompetenciesPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex max-w-[220px] flex-wrap gap-1">
-                        {holders.length === 0 && <span className="text-xs text-muted-foreground">No one</span>}
+                        {holders.length === 0 && <span className="text-xs text-muted-foreground">{t("taskTable.noOne")}</span>}
                         {holders.map((h) => (
                           <Badge key={h.id} variant="outline" className="font-normal">
                             {h.name}
@@ -111,23 +113,23 @@ export function CompetenciesPage() {
                     <TableCell>
                       {singleHolder ? (
                         <Badge className="border-transparent bg-risk-critical/10 text-risk-critical">
-                          Concentrated (1 holder)
+                          {t("compPage.status.concentrated")}
                         </Badge>
                       ) : limitedCoverage ? (
                         <Badge className="border-transparent bg-risk-high/10 text-risk-high">
-                          Limited (2 holders)
+                          {t("compPage.status.limited")}
                         </Badge>
                       ) : criticalTasks.length > 0 ? (
                         <Badge className="border-transparent bg-risk-low/10 text-risk-low">
-                          Covered
+                          {t("compPage.status.covered")}
                         </Badge>
                       ) : (
-                        <span className="text-xs text-muted-foreground">Not used by critical tasks</span>
+                        <span className="text-xs text-muted-foreground">{t("compPage.status.notUsed")}</span>
                       )}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="icon" onClick={() => setDialog({ open: true, competency: c })}>
+                        <Button variant="ghost" size="icon" onClick={() => setDialog({ open: true, competency: c })} aria-label={t("compPage.editCompetency", { name: c.name })}>
                           <Pencil className="h-4 w-4" />
                         </Button>
                         <Button
@@ -135,6 +137,7 @@ export function CompetenciesPage() {
                           size="icon"
                           className="text-destructive hover:text-destructive"
                           onClick={() => setDeleteTarget(c)}
+                          aria-label={t("compPage.deleteCompetency", { name: c.name })}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -156,12 +159,12 @@ export function CompetenciesPage() {
       <ConfirmDeleteDialog
         open={Boolean(deleteTarget)}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title={`Delete competency "${deleteTarget?.name}"?`}
-        description="Tasks and people that referenced it will no longer match this competency."
+        title={t("compPage.deleteTitle", { name: deleteTarget?.name ?? "" })}
+        description={t("compPage.deleteDescription")}
         onConfirm={() => {
           if (deleteTarget) {
             remove("competencies", deleteTarget.id);
-            toast.success("Competency deleted");
+            toast.success(t("compPage.deletedToast"));
           }
         }}
       />

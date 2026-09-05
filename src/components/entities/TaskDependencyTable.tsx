@@ -1,4 +1,5 @@
 import { Fragment, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ChevronDown, FileText, FileWarning } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -16,6 +17,7 @@ import { CriticalityBadge } from "@/components/common/CriticalityBadge";
 import { DependencyBadge } from "@/components/common/DependencyBadge";
 
 export function TaskDependencyTable() {
+  const { t } = useTranslation();
   const { db } = useOra();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const rows = buildTaskAnalysis(db);
@@ -38,13 +40,13 @@ export function TaskDependencyTable() {
           <TableHeader>
             <TableRow>
               <TableHead className="w-8" />
-              <TableHead>Task</TableHead>
-              <TableHead>Criticality</TableHead>
-              <TableHead className="hidden md:table-cell">Required competencies</TableHead>
-              <TableHead className="hidden sm:table-cell">Capable people</TableHead>
-              <TableHead className="hidden lg:table-cell">Roles</TableHead>
-              <TableHead className="hidden md:table-cell">Documented</TableHead>
-              <TableHead>Dependency</TableHead>
+              <TableHead>{t("entity.task")}</TableHead>
+              <TableHead>{t("entity.criticality")}</TableHead>
+              <TableHead className="hidden md:table-cell">{t("taskTable.requiredCompetencies")}</TableHead>
+              <TableHead className="hidden sm:table-cell">{t("taskTable.capablePeople")}</TableHead>
+              <TableHead className="hidden lg:table-cell">{t("taskTable.roles")}</TableHead>
+              <TableHead className="hidden md:table-cell">{t("taskTable.documented")}</TableHead>
+              <TableHead>{t("taskTable.dependency")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -92,7 +94,7 @@ export function TaskDependencyTable() {
                     <TableCell className="hidden sm:table-cell">
                       <div className="flex max-w-[180px] flex-wrap gap-1">
                         {capablePeople.length === 0 && (
-                          <span className="text-xs text-risk-critical">No one</span>
+                          <span className="text-xs text-risk-critical">{t("taskTable.noOne")}</span>
                         )}
                         {capablePeople.map((p) => (
                           <Badge key={p.id} variant="outline" className="font-normal">
@@ -111,11 +113,11 @@ export function TaskDependencyTable() {
                     <TableCell className="hidden md:table-cell">
                       {task.isDocumented ? (
                         <span className="inline-flex items-center gap-1 text-xs text-risk-low">
-                          <FileText className="h-3.5 w-3.5" /> Documented
+                          <FileText className="h-3.5 w-3.5" /> {t("taskTable.documentedYes")}
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-xs text-risk-high">
-                          <FileWarning className="h-3.5 w-3.5" /> Gap
+                          <FileWarning className="h-3.5 w-3.5" /> {t("taskTable.documentedGap")}
                         </span>
                       )}
                     </TableCell>
@@ -130,7 +132,7 @@ export function TaskDependencyTable() {
                         <div className="space-y-3 py-1 pr-6">
                           <div>
                             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                              Why this criticality?
+                              {t("taskTable.whyCriticality")}
                             </p>
                             <ul className="mt-1 space-y-1">
                               {derived.reasons.map((r, i) => (
@@ -143,7 +145,7 @@ export function TaskDependencyTable() {
                           </div>
                           <div>
                             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                              Why this dependency level?
+                              {t("taskTable.whyDependency")}
                             </p>
                             <ul className="mt-1 space-y-1">
                               {dependency.reasons.map((r, i) => (

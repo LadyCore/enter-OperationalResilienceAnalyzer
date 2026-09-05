@@ -8,27 +8,27 @@ describe("validatePassword (ORA password policy)", () => {
   });
 
   it("rejects empty passwords", () => {
-    expect(validatePassword("")).toBe("Enter a password.");
+    expect(validatePassword("")).toBe("passwordPolicy.empty");
   });
 
   it("rejects lengths other than exactly 8", () => {
-    expect(validatePassword("Ora8#x2")).toContain("exactly 8");
-    expect(validatePassword("Ora8#x2kq")).toContain("exactly 8");
+    expect(validatePassword("Ora8#x2")).toBe("passwordPolicy.length");
+    expect(validatePassword("Ora8#x2kq")).toBe("passwordPolicy.length");
   });
 
   it("rejects spaces", () => {
-    expect(validatePassword("Ora 8#xk")).toContain("spaces");
+    expect(validatePassword("Ora 8#xk")).toBe("passwordPolicy.spaces");
   });
 
   it("rejects passwords without a letter", () => {
-    expect(validatePassword("1234#567")).toContain("letter");
+    expect(validatePassword("1234#567")).toBe("passwordPolicy.letter");
   });
 
   it("rejects passwords without a number", () => {
-    expect(validatePassword("abcd#efg")).toContain("number");
+    expect(validatePassword("abcd#efg")).toBe("passwordPolicy.number");
   });
 
   it("rejects passwords without a special character", () => {
-    expect(validatePassword("abcd1234")).toContain("special");
+    expect(validatePassword("abcd1234")).toBe("passwordPolicy.special");
   });
 });

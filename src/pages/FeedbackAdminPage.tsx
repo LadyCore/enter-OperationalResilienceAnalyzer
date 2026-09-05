@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import {
   AlertCircle,
@@ -42,16 +43,15 @@ import {
   type FeedbackStatus,
 } from "@/lib/feedback/admin";
 import { FeedbackDetailDialog } from "@/components/feedback/FeedbackDetailDialog";
+import {
+  feedbackKindLabelKeys,
+  feedbackStatusLabelKeys,
+} from "@/components/feedback/feedbackI18n";
 
 const PAGE_SIZE = 20;
 
-const STATUS_LABELS: Record<string, string> = {
-  new: "New",
-  in_progress: "In progress",
-  resolved: "Resolved",
-};
-
 function StatusBadge({ status }: { status: string }) {
+  const { t } = useTranslation();
   const toneClass =
     status === "new"
       ? "border-transparent bg-risk-critical/10 text-risk-critical"
@@ -60,12 +60,15 @@ function StatusBadge({ status }: { status: string }) {
         : "border-transparent bg-risk-low/10 text-risk-low";
   return (
     <Badge className={toneClass}>
-      {STATUS_LABELS[status] ?? status}
+      {status === "new" || status === "in_progress" || status === "resolved"
+        ? t(feedbackStatusLabelKeys[status])
+        : status}
     </Badge>
   );
 }
 
 export function FeedbackAdminPage() {
+  const { t } = useTranslation();
   const { isOwner } = useOra();
 
   const [status, setStatus] = useState<FeedbackStatus | "all">("all");
@@ -106,12 +109,12 @@ export function FeedbackAdminPage() {
       return result;
     } catch (err) {
       console.error("Failed to load feedback:", err);
-      setError("Could not load the feedback reports.");
+      setError(t("feedbackAdmin.loadFailed"));
       return null;
     } finally {
       setLoading(false);
     }
-  }, [status, kind, module, search, from, to, page]);
+  }, [status, kind, module, search, from, to, page, t]);
 
   useEffect(() => {
     if (!isOwner) return;
@@ -129,7 +132,7 @@ export function FeedbackAdminPage() {
   const handleStatusChange = async (id: string, next: FeedbackStatus) => {
     try {
       await updateFeedbackStatus(id, next);
-      toast.success("Feedback status updated");
+      toast.success(t("feedbackAdmin.statusUpdated"));
       // Refresh the list after a successful UPDATE so rows that no longer match
       // the active filters disappear immediately, while keeping the current
       // page when it remains valid (stepping back only if it became empty).
@@ -140,7 +143,7 @@ export function FeedbackAdminPage() {
       }
     } catch (err) {
       console.error(err);
-      toast.error("Could not update the feedback status.");
+      toast.error(t("feedbackAdmin.statusUpdateFailed"));
     }
   };
 
@@ -150,65 +153,72 @@ export function FeedbackAdminPage() {
       const result = await migrateFeedbackScreenshots();
       toast.success(
         result.migrated > 0
-          ? `Moved ${result.migrated} report(s) to secure storage.`
-          : "No legacy screenshots left to migrate.",
+          ? t("feedbackAdmin.migratedToast", { count: result.migrated })
+          : t("feedbackAdmin.nothingToMigrate"),
       );
       await load();
     } catch (err) {
       console.error(err);
-      toast.error("Could not migrate the historical screenshots.");
+      toast.error(t("feedbackAdmin.migrateFailed"));
     } finally {
       setMigrating(false);
     }
   };
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const pageLabel = total === 0 ? "0 reports" : `Showing ${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, total)} of ${total}`;
+  const pageLabel =
+    total === 0
+      ? t("feedbackAdmin.reportsZero")
+      : t("feedbackAdmin.showingRange", {
+          from: page * PAGE_SIZE + 1,
+          to: Math.min((page + 1) * PAGE_SIZE, total),
+          total,
+        });
 
   const filtersActive = status !== "all" || kind !== "all" || module !== "all" || Boolean(search.trim()) || Boolean(from) || Boolean(to);
 
   const filterPanel = (
     <div className="grid gap-3 rounded-lg border bg-muted/40 p-4 sm:grid-cols-2 lg:grid-cols-6">
       <div className="space-y-1">
-        <label className="text-xs font-medium text-muted-foreground">Status</label>
+        <label className="text-xs font-medium text-muted-foreground">{t("feedback.fields.status")}</label>
         <Select value={status} onValueChange={(v) => applyFilter(setStatus, v as FeedbackStatus | "all")}>
           <SelectTrigger className="w-full">
-            <SelectValue placeholder="Any status" />
+            <SelectValue placeholder={t("feedbackAdmin.filter.anyStatus")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Any status</SelectItem>
+            <SelectItem value="all">{t("feedbackAdmin.filter.anyStatus")}</SelectItem>
             {FEEDBACK_STATUSES.map((s) => (
               <SelectItem key={s} value={s}>
-                {STATUS_LABELS[s]}
+                {t(feedbackStatusLabelKeys[s])}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
       <div className="space-y-1">
-        <label className="text-xs font-medium text-muted-foreground">Type</label>
+        <label className="text-xs font-medium text-muted-foreground">{t("feedbackAdmin.filter.type")}</label>
         <Select value={kind} onValueChange={(v) => applyFilter(setKind, v)}>
           <SelectTrigger className="w-full">
-            <SelectValue placeholder="Any type" />
+            <SelectValue placeholder={t("feedbackAdmin.filter.anyType")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Any type</SelectItem>
+            <SelectItem value="all">{t("feedbackAdmin.filter.anyType")}</SelectItem>
             {FEEDBACK_KINDS.map((k) => (
               <SelectItem key={k.value} value={k.value}>
-                {k.label}
+                {t(feedbackKindLabelKeys[k.value])}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
       <div className="space-y-1">
-        <label className="text-xs font-medium text-muted-foreground">Module</label>
+        <label className="text-xs font-medium text-muted-foreground">{t("feedback.fields.module")}</label>
         <Select value={module} onValueChange={(v) => applyFilter(setModule, v)}>
           <SelectTrigger className="w-full">
-            <SelectValue placeholder="Any module" />
+            <SelectValue placeholder={t("feedbackAdmin.filter.anyModule")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Any module</SelectItem>
+            <SelectItem value="all">{t("feedbackAdmin.filter.anyModule")}</SelectItem>
             {FEEDBACK_MODULES.map((m) => (
               <SelectItem key={m} value={m}>
                 {m}
@@ -218,21 +228,21 @@ export function FeedbackAdminPage() {
         </Select>
       </div>
       <div className="space-y-1">
-        <label className="text-xs font-medium text-muted-foreground">From date</label>
+        <label className="text-xs font-medium text-muted-foreground">{t("feedbackAdmin.filter.from")}</label>
         <Input type="date" value={from} onChange={(e) => applyFilter(setFrom, e.target.value)} />
       </div>
       <div className="space-y-1">
-        <label className="text-xs font-medium text-muted-foreground">To date</label>
+        <label className="text-xs font-medium text-muted-foreground">{t("feedbackAdmin.filter.to")}</label>
         <Input type="date" value={to} onChange={(e) => applyFilter(setTo, e.target.value)} />
       </div>
       <div className="space-y-1">
-        <label className="text-xs font-medium text-muted-foreground">Search description</label>
+        <label className="text-xs font-medium text-muted-foreground">{t("feedbackAdmin.filter.searchDescription")}</label>
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             value={search}
             onChange={(e) => applyFilter(setSearch, e.target.value)}
-            placeholder="Search…"
+            placeholder={t("common.search")}
             className="pl-8"
           />
         </div>
@@ -244,11 +254,9 @@ export function FeedbackAdminPage() {
   if (!isOwner) {
     return (
       <div className="space-y-4">
-        <p className="text-sm text-muted-foreground">
-          You do not have permission to manage feedback.
-        </p>
+        <p className="text-sm text-muted-foreground">{t("feedbackAdmin.forbidden")}</p>
         <Button asChild variant="outline" size="sm">
-          <Link to="/">Back to dashboard</Link>
+          <Link to="/">{t("accessAdmin.backToDashboard")}</Link>
         </Button>
       </div>
     );
@@ -259,11 +267,10 @@ export function FeedbackAdminPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
-            <MessageSquareText className="h-6 w-6 text-primary" /> Feedback
+            <MessageSquareText className="h-6 w-6 text-primary" /> {t("nav.feedback")}
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Reports sent through the in-app Feedback button, newest first. Only the ORA owner can
-            view or manage them.
+            {t("feedbackAdmin.subtitle")}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -273,10 +280,10 @@ export function FeedbackAdminPage() {
             ) : (
               <Archive className="h-4 w-4" />
             )}
-            Move historical screenshots to storage
+            {t("feedbackAdmin.moveScreenshots")}
           </Button>
           <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
-            <RefreshCw className="h-4 w-4" /> Refresh
+            <RefreshCw className="h-4 w-4" /> {t("accessAdmin.refresh")}
           </Button>
         </div>
       </div>
@@ -286,7 +293,7 @@ export function FeedbackAdminPage() {
       {loading ? (
         <div className="flex h-48 items-center justify-center text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin" />
-          <span className="ml-2 text-sm">Loading feedback…</span>
+          <span className="ml-2 text-sm">{t("feedbackAdmin.loading")}</span>
         </div>
       ) : error ? (
         <Card>
@@ -298,69 +305,72 @@ export function FeedbackAdminPage() {
       ) : rows.length === 0 ? (
         <EmptyState
           icon={MessageSquareText}
-          title="No feedback reports"
+          title={t("feedbackAdmin.emptyTitle")}
           description={
-            filtersActive
-              ? "No reports match the current filters."
-              : "When users send feedback through the Feedback button, their reports will appear here."
+            filtersActive ? t("feedbackAdmin.emptyFiltered") : t("feedbackAdmin.emptyDefault")
           }
         />
       ) : (
         <>
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Reports</CardTitle>
+              <CardTitle className="text-sm">{t("feedbackAdmin.reportsTitle")}</CardTitle>
               <CardDescription>{pageLabel}</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Date &amp; time</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead className="hidden md:table-cell">Module / screen</TableHead>
-                    <TableHead className="hidden lg:table-cell">Stage</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="hidden sm:table-cell">User</TableHead>
+                    <TableHead>{t("feedback.fields.dateTime")}</TableHead>
+                    <TableHead>{t("feedback.fields.type")}</TableHead>
+                    <TableHead>{t("feedback.description")}</TableHead>
+                    <TableHead className="hidden md:table-cell">{t("feedbackAdmin.th.moduleScreen")}</TableHead>
+                    <TableHead className="hidden lg:table-cell">{t("feedback.fields.stage")}</TableHead>
+                    <TableHead>{t("feedback.fields.status")}</TableHead>
+                    <TableHead className="hidden sm:table-cell">{t("feedbackAdmin.th.user")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {rows.map((r) => (
-                    <TableRow
-                      key={r.id}
-                      className="cursor-pointer"
-                      onClick={() => setSelectedId(r.id)}
-                    >
-                      <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                        {new Date(r.created_at).toLocaleString()}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary" className="font-normal">
-                          {FEEDBACK_KINDS.find((k) => k.value === r.kind)?.label ?? r.kind}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="max-w-md">
-                        <span className="line-clamp-2 text-sm">{r.description}</span>
-                        {r.is_general && (
-                          <span className="ml-1.5 text-xs text-muted-foreground">(general)</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="hidden text-sm text-muted-foreground md:table-cell">
-                        {r.module ?? "—"}
-                        {r.screen ? ` · ${r.screen}` : ""}
-                      </TableCell>
-                      <TableCell className="hidden text-sm text-muted-foreground lg:table-cell">
-                        {r.stage ?? "—"}
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge status={r.status} />
-                      </TableCell>
-                      <TableCell className="hidden text-sm text-muted-foreground sm:table-cell">
-                        {r.user_id ? (emails[r.user_id] ?? "Signed-in user") : "Anónimo"}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {rows.map((r) => {
+                    const kindEntry = FEEDBACK_KINDS.find((k) => k.value === r.kind);
+                    return (
+                      <TableRow
+                        key={r.id}
+                        className="cursor-pointer"
+                        onClick={() => setSelectedId(r.id)}
+                      >
+                        <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                          {new Date(r.created_at).toLocaleString()}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className="font-normal">
+                            {kindEntry ? t(feedbackKindLabelKeys[kindEntry.value]) : r.kind}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="max-w-md">
+                          <span className="line-clamp-2 text-sm">{r.description}</span>
+                          {r.is_general && (
+                            <span className="ml-1.5 text-xs text-muted-foreground">
+                              {t("feedbackAdmin.generalTag")}
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="hidden text-sm text-muted-foreground md:table-cell">
+                          {r.module ?? "—"}
+                          {r.screen ? ` · ${r.screen}` : ""}
+                        </TableCell>
+                        <TableCell className="hidden text-sm text-muted-foreground lg:table-cell">
+                          {r.stage ?? "—"}
+                        </TableCell>
+                        <TableCell>
+                          <StatusBadge status={r.status} />
+                        </TableCell>
+                        <TableCell className="hidden text-sm text-muted-foreground sm:table-cell">
+                          {r.user_id ? (emails[r.user_id] ?? t("feedbackAdmin.signedInUser")) : t("feedbackAdmin.anonymous")}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </CardContent>
@@ -376,10 +386,10 @@ export function FeedbackAdminPage() {
                 disabled={page === 0}
                 onClick={() => setPage((p) => Math.max(0, p - 1))}
               >
-                Previous
+                {t("ui.previous")}
               </Button>
               <span className="flex items-center px-2 text-xs text-muted-foreground">
-                Page {page + 1} of {totalPages}
+                {t("feedbackAdmin.pageOf", { page: page + 1, total: totalPages })}
               </span>
               <Button
                 variant="outline"
@@ -387,7 +397,7 @@ export function FeedbackAdminPage() {
                 disabled={page >= totalPages - 1}
                 onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
               >
-                Next
+                {t("ui.next")}
               </Button>
             </div>
           </div>

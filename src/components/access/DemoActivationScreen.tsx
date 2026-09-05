@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { CalendarDays, Loader2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { activateDemo, describeRpcError } from "@/lib/access/api";
+import { activateDemo } from "@/lib/access/api";
 import { DEMO_DAYS, type TaxType } from "@/lib/access/types";
+import { useRpcError } from "@/hooks/useRpcError";
 import { Field } from "@/components/entities/field";
 import { cn } from "@/lib/utils";
 import { useOra } from "@/store/OraContext";
@@ -19,6 +21,8 @@ type TaxKind = "individual" | "company";
  * ORA. The 12-month reuse rule is enforced by the backend via request_demo.
  */
 export function DemoActivationScreen() {
+  const { t } = useTranslation();
+  const rpcError = useRpcError();
   const { refreshAccess, applyAccess, signOut } = useOra();
   const [kind, setKind] = useState<TaxKind>("individual");
   const [clientName, setClientName] = useState("");
@@ -43,11 +47,11 @@ export function DemoActivationScreen() {
 
     const digits = taxId.replace(/\D/g, "");
     if (kind === "individual" && (digits.length < 7 || digits.length > 8)) {
-      setError("Enter a valid DNI (7–8 digits).");
+      setError(t("demo.activate.invalidDni"));
       return;
     }
     if (kind === "company" && digits.length !== 11) {
-      setError("Enter a valid CUIT (11 digits).");
+      setError(t("demo.activate.invalidCuit"));
       return;
     }
 
@@ -59,7 +63,7 @@ export function DemoActivationScreen() {
         clientName: kind === "company" ? clientName : undefined,
       });
       if (result.ok) {
-        toast.success("Your 15-day DEMO is active. Welcome to ORA.");
+        toast.success(t("demo.activate.welcomeToast", { days: DEMO_DAYS }));
         // request_demo already returns the authoritative demo_active access
         // state — apply it directly and skip the extra get_my_access round trip.
         if (result.access) {
@@ -71,10 +75,10 @@ export function DemoActivationScreen() {
         if (result.reason === "not_eligible") {
           setEligibleAfter(result.eligible_after ?? null);
         }
-        setError(describeRpcError(result));
+        setError(rpcError(result));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not activate the DEMO.");
+      setError(err instanceof Error ? err.message : t("demo.activate.couldNotActivate"));
     } finally {
       setBusy(false);
     }
@@ -92,25 +96,21 @@ export function DemoActivationScreen() {
             <ShieldCheck className="h-6 w-6" />
           </div>
           <h1 className="mt-3 font-display text-2xl font-bold tracking-tight">ORA</h1>
-          <p className="text-sm text-muted-foreground">Organizational Resilience Analyzer</p>
+          <p className="text-sm text-muted-foreground">{t("brand.subtitle")}</p>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>Activate your {DEMO_DAYS}-day DEMO</CardTitle>
-            <CardDescription>
-              To start using ORA you need to activate a free {DEMO_DAYS}-day DEMO. Provide your
-              DNI (individual) or CUIT (company). Each DNI/CUIT is eligible for one DEMO every 12
-              months.
-            </CardDescription>
+            <CardTitle>{t("demo.activate.title", { days: DEMO_DAYS })}</CardTitle>
+            <CardDescription>{t("demo.activate.description", { days: DEMO_DAYS })}</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-2 rounded-md bg-muted p-1">
                 {(
                   [
-                    { key: "individual", label: "Individual" },
-                    { key: "company", label: "Company / organization" },
+                    { key: "individual", labelKey: "demo.activate.individual" },
+                    { key: "company", labelKey: "demo.activate.company" },
                   ] as const
                 ).map((option) => (
                   <button
@@ -128,27 +128,34 @@ export function DemoActivationScreen() {
                         : "text-muted-foreground hover:text-foreground",
                     )}
                   >
-                    {option.label}
+                    {t(option.labelKey)}
                   </button>
                 ))}
               </div>
 
               {kind === "company" && (
-                <Field label="Organization name" hint="Optional, used as the client name.">
+                <Field label={t("demo.activate.organizationName")} hint={t("demo.activate.organizationNameHint")}>
                   <Input
                     value={clientName}
                     onChange={(e) => setClientName(e.target.value)}
-                    placeholder="e.g. Acme S.A."
+                    placeholder={t("demo.activate.organizationNamePlaceholder")}
                     autoComplete="organization"
                   />
                 </Field>
               )}
 
-              <Field label={taxLabel} hint={kind === "individual" ? "Your national ID number." : "Your organization tax ID (11 digits)."}>
+              <Field
+                label={taxLabel}
+                hint={kind === "individual" ? t("demo.activate.dniHint") : t("demo.activate.cuitHint")}
+              >
                 <Input
                   value={taxId}
                   onChange={(e) => setTaxId(e.target.value.replace(/\D/g, "").slice(0, 11))}
-                  placeholder={kind === "individual" ? "e.g. 30123456" : "e.g. 20123456789"}
+                  placeholder={
+                    kind === "individual"
+                      ? t("demo.activate.dniPlaceholder")
+                      : t("demo.activate.cuitPlaceholder")
+                  }
                   inputMode="numeric"
                   autoFocus
                 />
@@ -159,8 +166,10 @@ export function DemoActivationScreen() {
                   <p className="flex items-start gap-2">
                     <CalendarDays className="mt-0.5 h-4 w-4 shrink-0" />
                     <span>
-                      This {taxLabel} was used for a DEMO in the last 12 months. A new DEMO for it
-                      becomes available on <strong>{eligibilityDate}</strong>.
+                      {t("demo.activate.notEligibleUntil", {
+                        taxLabel,
+                        date: eligibilityDate,
+                      })}
                     </span>
                   </p>
                 </div>
@@ -175,10 +184,10 @@ export function DemoActivationScreen() {
               <Button type="submit" className="w-full" disabled={busy}>
                 {busy ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin" /> Activating…
+                    <Loader2 className="h-4 w-4 animate-spin" /> {t("demo.activate.activating")}
                   </>
                 ) : (
-                  `Activate ${DEMO_DAYS}-day DEMO`
+                  t("demo.activate.action", { days: DEMO_DAYS })
                 )}
               </Button>
 
@@ -187,7 +196,7 @@ export function DemoActivationScreen() {
                 onClick={() => void signOut()}
                 className="w-full text-center text-sm text-muted-foreground hover:text-foreground"
               >
-                Sign out
+                {t("auth.signOut")}
               </button>
             </form>
           </CardContent>

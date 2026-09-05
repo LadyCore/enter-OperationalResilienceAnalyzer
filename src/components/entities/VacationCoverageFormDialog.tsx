@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,6 +35,7 @@ export function VacationCoverageFormDialog({
   onOpenChange,
   coverage,
 }: VacationCoverageFormDialogProps) {
+  const { t } = useTranslation();
   const { db, upsert } = useOra();
   const [coveringPersonId, setCoveringPersonId] = useState("");
   const [coveredPersonId, setCoveredPersonId] = useState("");
@@ -60,10 +62,7 @@ export function VacationCoverageFormDialog({
   const roleOptions = db.roles.map((r) => ({ value: r.id, label: r.name }));
 
   const availableCovered = useMemo(
-    () =>
-      db.people.filter(
-        (p) => p.id !== coveringPersonId && p.isActive,
-      ),
+    () => db.people.filter((p) => p.id !== coveringPersonId && p.isActive),
     [db.people, coveringPersonId],
   );
 
@@ -74,11 +73,11 @@ export function VacationCoverageFormDialog({
       : [];
     const baseSet = new Set(base);
     return db.tasks
-      .filter((t) => baseSet.has(t.id))
-      .map((t) => {
-        const fn = db.functions.find((f) => f.id === t.functionId);
+      .filter((task) => baseSet.has(task.id))
+      .map((task) => {
+        const fn = db.functions.find((f) => f.id === task.functionId);
         const proc = fn ? db.processes.find((p) => p.id === fn.processId) : undefined;
-        return { value: t.id, label: t.name, description: proc ? `${proc.name} / ${fn?.name}` : undefined };
+        return { value: task.id, label: task.name, description: proc ? `${proc.name} / ${fn?.name}` : undefined };
       });
   }, [db, coveredPersonId]);
 
@@ -86,7 +85,7 @@ export function VacationCoverageFormDialog({
 
   const handleSave = () => {
     if (!coveringPersonId || !coveredPersonId || coveringPersonId === coveredPersonId) {
-      toast.error("Select two different people");
+      toast.error(t("coverage.errorSamePerson"));
       return;
     }
     upsert("vacationCoverages", {
@@ -97,7 +96,7 @@ export function VacationCoverageFormDialog({
       taskIds,
       competencyIds,
     });
-    toast.success(coverage ? "Coverage updated" : "Coverage created");
+    toast.success(coverage ? t("coverage.updated") : t("coverage.created"));
     onOpenChange(false);
   };
 
@@ -107,24 +106,25 @@ export function VacationCoverageFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{coverage ? "Edit vacation coverage" : "New vacation coverage"}</DialogTitle>
+          <DialogTitle>{coverage ? t("coverage.dialog.edit") : t("coverage.dialog.new")}</DialogTitle>
           <DialogDescription>
-            {personName(coveringPersonId) || "This person"} can temporarily cover concrete tasks of another
-            person while that person is on a planned vacation. It never changes anyone's ordinary profile.
+            {t("coverage.dialog.description", {
+              person: personName(coveringPersonId) || t("coverage.thisPerson"),
+            })}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
-          <Field label="Covering person (who covers)">
+          <Field label={t("coverage.coveringLabel")}>
             <SearchableSelect
               options={peopleOptions}
               value={coveringPersonId}
               onChange={setCoveringPersonId}
-              placeholder="Select a person…"
-              searchPlaceholder="Search name or surname…"
+              placeholder={t("entity.selectPerson")}
+              searchPlaceholder={t("entity.searchPerson")}
               className="w-full"
             />
           </Field>
-          <Field label="Covered person (on vacation)" hint="The original dependency this coverage supports.">
+          <Field label={t("coverage.coveredLabel")} hint={t("coverage.coveredHint")}>
             <SearchableSelect
               options={availableCovered.map((p) => ({
                 value: p.id,
@@ -133,18 +133,18 @@ export function VacationCoverageFormDialog({
               }))}
               value={coveredPersonId}
               onChange={setCoveredPersonId}
-              placeholder="Select a person…"
-              searchPlaceholder="Search name or surname…"
+              placeholder={t("entity.selectPerson")}
+              searchPlaceholder={t("entity.searchPerson")}
               className="w-full"
             />
           </Field>
-          <Field label="Covered role (optional)" hint="The role/puesto of the covered dependency.">
+          <Field label={t("coverage.coveredRole")} hint={t("coverage.coveredRoleHint")}>
             <Select value={roleId || "none"} onValueChange={(v) => setRoleId(v === "none" ? "" : v)}>
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="No specific role" />
+                <SelectValue placeholder={t("coverage.noSpecificRole")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">No specific role</SelectItem>
+                <SelectItem value="none">{t("coverage.noSpecificRole")}</SelectItem>
                 {roleOptions.map((r) => (
                   <SelectItem key={r.value} value={r.value}>
                     {r.label}
@@ -154,36 +154,32 @@ export function VacationCoverageFormDialog({
             </Select>
           </Field>
           <Field
-            label="Concrete tasks covered"
-            hint={
-              coveredPersonId
-                ? "Tasks of the covered person this coverage enables."
-                : "Select the covered person first to see their tasks."
-            }
+            label={t("coverage.tasksLabel")}
+            hint={coveredPersonId ? t("coverage.tasksHint") : t("coverage.selectCoveredFirst")}
           >
             <MultiSelect
               options={availableTasks}
               values={taskIds}
               onChange={setTaskIds}
-              placeholder="Select tasks…"
-              emptyText="No tasks for the covered person"
+              placeholder={t("entity.selectTasks")}
+              emptyText={t("coverage.noTasksForPerson")}
             />
           </Field>
-          <Field label="Enabling competencies">
+          <Field label={t("coverage.competenciesLabel")}>
             <MultiSelect
               options={competencyOptions}
               values={competencyIds}
               onChange={setCompetencyIds}
-              placeholder="Select competencies…"
+              placeholder={t("entity.selectCompetencies")}
             />
           </Field>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button onClick={handleSave} disabled={!valid}>
-            Save
+            {t("common.save")}
           </Button>
         </DialogFooter>
       </DialogContent>

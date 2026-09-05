@@ -1,4 +1,5 @@
 import { Suspense, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import {
@@ -28,24 +29,26 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ChangePasswordDialog } from "@/components/auth/ChangePasswordDialog";
+import { LanguageSwitcher } from "@/components/language-switcher";
 import { cn } from "@/lib/utils";
 import { useOra } from "@/store/OraContext";
 
 const nav = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
-  { to: "/processes", label: "Processes", icon: Workflow },
-  { to: "/tasks", label: "Tasks", icon: ListChecks },
-  { to: "/competencies", label: "Competencies", icon: Award },
-  { to: "/people", label: "People", icon: Users },
-  { to: "/analysis", label: "Analysis", icon: Activity },
-  { to: "/simulation", label: "Simulation", icon: CalendarClock },
-  { to: "/organization", label: "Organization", icon: Building2 },
-  { to: "/access", label: "Access & licensing", icon: KeyRound, ownerOnly: true },
-  { to: "/feedback", label: "Feedback", icon: MessageSquareText, ownerOnly: true },
+  { to: "/", labelKey: "nav.dashboard", icon: LayoutDashboard, end: true },
+  { to: "/processes", labelKey: "nav.processes", icon: Workflow },
+  { to: "/tasks", labelKey: "nav.tasks", icon: ListChecks },
+  { to: "/competencies", labelKey: "nav.competencies", icon: Award },
+  { to: "/people", labelKey: "nav.people", icon: Users },
+  { to: "/analysis", labelKey: "nav.analysis", icon: Activity },
+  { to: "/simulation", labelKey: "nav.simulation", icon: CalendarClock },
+  { to: "/organization", labelKey: "nav.organization", icon: Building2 },
+  { to: "/access", labelKey: "nav.accessLicensing", icon: KeyRound, ownerOnly: true },
+  { to: "/feedback", labelKey: "nav.feedback", icon: MessageSquareText, ownerOnly: true },
 ];
 
 function SidebarNav() {
   const { isOwner } = useOra();
+  const { t } = useTranslation();
   return (
     <nav className="flex flex-1 flex-col gap-1 px-3">
       {nav
@@ -65,7 +68,7 @@ function SidebarNav() {
             }
           >
             <item.icon className="h-4 w-4 shrink-0" />
-            {item.label}
+            {t(item.labelKey)}
           </NavLink>
         ))}
     </nav>
@@ -73,6 +76,7 @@ function SidebarNav() {
 }
 
 function Brand() {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2.5">
       <div className="flex h-9 w-9 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
@@ -81,7 +85,7 @@ function Brand() {
       <div className="leading-tight">
         <p className="font-display text-base font-bold tracking-tight">ORA</p>
         <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-sidebar-foreground/60">
-          Resilience Analyzer
+          {t("brand.tagline")}
         </p>
       </div>
     </div>
@@ -91,6 +95,7 @@ function Brand() {
 function OrganizationSwitcher() {
   const { organizations, activeOrganizationId, setActiveOrganization } = useOra();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const active = organizations.find((o) => o.id === activeOrganizationId);
 
   return (
@@ -100,7 +105,7 @@ function OrganizationSwitcher() {
           type="button"
           className="flex w-full items-center justify-between gap-2 rounded-md border border-sidebar-border bg-sidebar-accent/40 px-2.5 py-2 text-left text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent/70"
         >
-          <span className="min-w-0 truncate">{active?.name ?? "Organization"}</span>
+          <span className="min-w-0 truncate">{active?.name ?? t("nav.organization")}</span>
           <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 opacity-60" />
         </button>
       </DropdownMenuTrigger>
@@ -110,7 +115,7 @@ function OrganizationSwitcher() {
             <span className="min-w-0 flex-1 truncate">{o.name}</span>
             {o.isDemo && (
               <Badge variant="secondary" className="ml-2 shrink-0 px-1.5 text-[10px] font-medium">
-                Demo
+                {t("common.demo")}
               </Badge>
             )}
             {o.id === activeOrganizationId && <Check className="ml-1 h-4 w-4 shrink-0 text-primary" />}
@@ -119,7 +124,7 @@ function OrganizationSwitcher() {
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={() => navigate("/import")}>
           <Plus className="h-4 w-4" />
-          Import organization
+          {t("common.importOrganization")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -128,6 +133,7 @@ function OrganizationSwitcher() {
 
 function UserMenu() {
   const { user, signOut } = useOra();
+  const { t } = useTranslation();
   const [passwordOpen, setPasswordOpen] = useState(false);
 
   return (
@@ -145,12 +151,12 @@ function UserMenu() {
         <DropdownMenuContent align="start" sideOffset={6}>
           <DropdownMenuItem onSelect={() => setPasswordOpen(true)}>
             <KeyRound className="h-4 w-4" />
-            Change password
+            {t("auth.changePassword")}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => void signOut()}>
             <LogOut className="h-4 w-4" />
-            Sign out
+            {t("auth.signOut")}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -161,33 +167,40 @@ function UserMenu() {
 
 function MobileNav() {
   const { isOwner } = useOra();
+  const { t } = useTranslation();
   return (
-    <nav className="flex gap-1 overflow-x-auto border-b border-sidebar-border bg-sidebar px-3 py-2 text-sidebar-foreground lg:hidden">
-      {nav
-        .filter((item) => !item.ownerOnly || isOwner)
-        .map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            className={({ isActive }) =>
-              cn(
-                "flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
-                isActive
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent/70"
-              )
-            }
-          >
-            <item.icon className="h-3.5 w-3.5" />
-            {item.label}
-          </NavLink>
-        ))}
+    <nav className="flex items-center gap-1 border-b border-sidebar-border bg-sidebar px-3 py-2 text-sidebar-foreground lg:hidden">
+      <div className="flex flex-1 gap-1 overflow-x-auto">
+        {nav
+          .filter((item) => !item.ownerOnly || isOwner)
+          .map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.end}
+              className={({ isActive }) =>
+                cn(
+                  "flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
+                  isActive
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent/70"
+                )
+              }
+            >
+              <item.icon className="h-3.5 w-3.5" />
+              {t(item.labelKey)}
+            </NavLink>
+          ))}
+      </div>
+      <div className="ml-auto shrink-0 border-l border-sidebar-border pl-2">
+        <LanguageSwitcher className="min-w-0" />
+      </div>
     </nav>
   );
 }
 
 export function AppShell() {
+  const { t } = useTranslation();
   return (
     <div className="flex h-full w-full bg-background">
       <aside className="hidden w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground lg:flex">
@@ -197,8 +210,9 @@ export function AppShell() {
         </div>
         <SidebarNav />
         <div className="space-y-3 border-t border-sidebar-border px-4 py-4">
+          <LanguageSwitcher className="w-full" />
           <p className="text-[11px] leading-relaxed text-sidebar-foreground/55">
-            Analyzes operational dependency and capability coverage — never individual performance.
+            {t("shell.sidebarFootnote")}
           </p>
           <UserMenu />
         </div>
@@ -209,7 +223,7 @@ export function AppShell() {
           <div className="min-w-0 flex-1">
             <Brand />
           </div>
-          <div className="w-44 shrink-0">
+          <div className="w-40 shrink-0">
             <OrganizationSwitcher />
           </div>
         </header>

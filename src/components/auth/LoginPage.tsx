@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -6,8 +7,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { Field } from "@/components/entities/field";
+import { LanguageSwitcher } from "@/components/language-switcher";
 import { useOra } from "@/store/OraContext";
-import { PASSWORD_PLACEHOLDER, validatePassword } from "@/lib/passwordPolicy";
+import { validatePassword } from "@/lib/passwordPolicy";
 
 type Mode = "login" | "signup";
 
@@ -19,6 +21,7 @@ const VERIFY_REDIRECT = `${window.location.origin}/verify-email`;
  * sign-in attempts are denied with a clear explanation and a resend option.
  */
 export function LoginPage() {
+  const { t } = useTranslation();
   const { signOut } = useOra();
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
@@ -35,7 +38,7 @@ export function LoginPage() {
     setResent(false);
 
     if (!email.trim() || !password) {
-      setError("Enter a valid email and your password.");
+      setError(t("auth.enterEmailAndPassword"));
       return;
     }
     // The password policy applies when creating a new password (signup), not
@@ -43,7 +46,7 @@ export function LoginPage() {
     if (mode === "signup") {
       const policyError = validatePassword(password);
       if (policyError) {
-        setError(policyError);
+        setError(t(policyError));
         return;
       }
     }
@@ -72,7 +75,7 @@ export function LoginPage() {
         setVerifyPrompt({ email: email.trim() });
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Authentication failed.";
+      const message = err instanceof Error ? err.message : t("auth.authenticationFailed");
       // Unverified account: the provider denies access until the email is confirmed.
       if (/not confirmed|confirm your email|email not verified/i.test(message)) {
         setVerifyPrompt({ email: email.trim() });
@@ -98,7 +101,7 @@ export function LoginPage() {
       if (error) throw error;
       setResent(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not resend the verification email.");
+      setError(err instanceof Error ? err.message : t("auth.couldNotResendVerification"));
     } finally {
       setBusy(false);
     }
@@ -112,40 +115,45 @@ export function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+    <div className="relative flex min-h-screen items-center justify-center bg-background px-4">
+      <div className="absolute right-4 top-4">
+        <LanguageSwitcher />
+      </div>
       <div className="w-full max-w-md">
         <div className="mb-6 flex flex-col items-center text-center">
           <div className="flex h-11 w-11 items-center justify-center rounded-md bg-primary text-primary-foreground">
             <ShieldCheck className="h-6 w-6" />
           </div>
           <h1 className="mt-3 font-display text-2xl font-bold tracking-tight">ORA</h1>
-          <p className="text-sm text-muted-foreground">Organizational Resilience Analyzer</p>
+          <p className="text-sm text-muted-foreground">{t("brand.subtitle")}</p>
         </div>
 
         <Card>
           <CardHeader>
             <CardTitle>
-              {verifyPrompt ? "Verify your email" : mode === "login" ? "Sign in" : "Create account"}
+              {verifyPrompt
+                ? t("auth.verifyEmailTitle")
+                : mode === "login"
+                  ? t("auth.signIn")
+                  : t("auth.createAccount")}
             </CardTitle>
             <CardDescription>
               {verifyPrompt
-                ? "Your email address must be verified before you can access ORA."
+                ? t("auth.verifyEmailDescription")
                 : mode === "login"
-                  ? "Access your organizations and their operational analysis."
-                  : "Sign up to start analyzing your organization. Activate your free DEMO on first access."}
+                  ? t("auth.signInDescription")
+                  : t("auth.createAccountDescription")}
             </CardDescription>
           </CardHeader>
           <CardContent>
             {verifyPrompt ? (
               <div className="space-y-4">
                 <p className="text-sm text-muted-foreground">
-                  We sent a verification link to <span className="font-medium">{verifyPrompt.email}</span>.
-                  Check your inbox and click the link to confirm your email address. You will be able to
-                  sign in once your email is verified.
+                  {t("auth.verificationSentLine", { email: verifyPrompt.email })}
                 </p>
                 {resent && (
                   <p className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-                    Verification email sent. Check your inbox.
+                    {t("auth.verificationEmailSent")}
                   </p>
                 )}
                 {error && (
@@ -154,7 +162,7 @@ export function LoginPage() {
                   </p>
                 )}
                 <Button className="w-full" onClick={resendVerification} disabled={busy}>
-                  {busy ? "Sending…" : "Resend verification email"}
+                  {busy ? t("auth.sending") : t("auth.resendVerificationEmail")}
                 </Button>
                 <Button
                   variant="ghost"
@@ -166,30 +174,32 @@ export function LoginPage() {
                     setResent(false);
                   }}
                 >
-                  Back to sign in
+                  {t("auth.backToSignIn")}
                 </Button>
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
-                <Field label="Email">
+                <Field label={t("auth.email")}>
                   <Input
                     type="email"
                     autoComplete="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@company.com"
+                    placeholder={t("common.emailPlaceholder")}
                   />
                 </Field>
                 <Field
-                  label="Password"
-                  hint={mode === "signup" ? "Exactly 8 characters, with a letter, a number and a special character. No spaces." : undefined}
+                  label={t("auth.password")}
+                  hint={mode === "signup" ? t("auth.passwordPolicyHint") : undefined}
                 >
                   <Input
                     type="password"
                     autoComplete={mode === "login" ? "current-password" : "new-password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder={mode === "signup" ? PASSWORD_PLACEHOLDER : "Your password"}
+                    placeholder={
+                      mode === "signup" ? t("auth.passwordPlaceholder") : t("auth.yourPassword")
+                    }
                   />
                 </Field>
 
@@ -199,7 +209,7 @@ export function LoginPage() {
                       to="/forgot-password"
                       className="text-sm text-muted-foreground hover:text-foreground"
                     >
-                      Forgot password?
+                      {t("auth.forgotPassword")}
                     </Link>
                   </div>
                 )}
@@ -211,7 +221,11 @@ export function LoginPage() {
                 )}
 
                 <Button type="submit" className="w-full" disabled={busy}>
-                  {busy ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}
+                  {busy
+                    ? t("auth.pleaseWait")
+                    : mode === "login"
+                      ? t("auth.signIn")
+                      : t("auth.createAccount")}
                 </Button>
 
                 <button
@@ -219,9 +233,7 @@ export function LoginPage() {
                   onClick={switchMode}
                   className="w-full text-center text-sm text-muted-foreground hover:text-foreground"
                 >
-                  {mode === "login"
-                    ? "Don't have an account? Create one"
-                    : "Already have an account? Sign in"}
+                  {mode === "login" ? t("auth.switchToSignup") : t("auth.switchToLogin")}
                 </button>
               </form>
             )}

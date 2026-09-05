@@ -1,4 +1,5 @@
 import { Suspense, lazy } from "react";
+import { useTranslation } from "react-i18next";
 import { Navigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { useOra } from "@/store/OraContext";
@@ -28,8 +29,9 @@ function FullPageSpinner({ label }: { label: string }) {
 }
 
 function LazyGate() {
+  const { t } = useTranslation();
   return (
-    <Suspense fallback={<FullPageSpinner label="Checking access…" />}>
+    <Suspense fallback={<FullPageSpinner label={t("auth.checkingAccess")} />}>
       <AccessGate />
     </Suspense>
   );
@@ -49,11 +51,12 @@ function LazyGate() {
  *     the ORA shell.
  */
 export function AppGuard() {
+  const { t } = useTranslation();
   const { user, isLoading, db, access, accessFailed, pendingRecovery, emailUnverified, workspaceFailed, retryWorkspace } = useOra();
 
   // Session restore in progress (initial getSession / auth listener).
   if (isLoading) {
-    return <FullPageSpinner label="Loading ORA…" />;
+    return <FullPageSpinner label={t("auth.loadingOra")} />;
   }
 
   if (!user) return <LoginPage />;
@@ -73,7 +76,7 @@ export function AppGuard() {
 
   // Access still resolving.
   if (!access && !accessFailed) {
-    return <FullPageSpinner label="Checking access…" />;
+    return <FullPageSpinner label={t("auth.checkingAccess")} />;
   }
 
   // Access resolution failed or access is not unlocked → gate screens handle
@@ -91,14 +94,14 @@ export function AppGuard() {
     return (
       <div className="flex h-screen items-center justify-center px-4">
         <div className="w-full max-w-sm rounded-lg border bg-card p-6 text-center">
-          <h2 className="font-display text-base font-semibold">Could not load your organizations</h2>
-          <p className="mt-2 text-sm text-muted-foreground">Please retry to continue.</p>
+          <h2 className="font-display text-base font-semibold">{t("auth.couldNotLoadOrganizations")}</h2>
+          <p className="mt-2 text-sm text-muted-foreground">{t("auth.retryToContinue")}</p>
           <button
             type="button"
             onClick={retryWorkspace}
             className="mt-4 w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/80"
           >
-            Retry
+            {t("common.retry")}
           </button>
         </div>
       </div>
@@ -107,11 +110,11 @@ export function AppGuard() {
 
   // Access is unlocked but the workspace is still loading.
   if (!db) {
-    return <FullPageSpinner label="Loading your organizations…" />;
+    return <FullPageSpinner label={t("auth.loadingOrganizations")} />;
   }
 
   return (
-    <Suspense fallback={<FullPageSpinner label="Loading ORA…" />}>
+    <Suspense fallback={<FullPageSpinner label={t("auth.loadingOra")} />}>
       <AccessGate>
         <AppShell />
       </AccessGate>

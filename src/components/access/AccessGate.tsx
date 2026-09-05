@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useOra } from "@/store/OraContext";
@@ -14,18 +15,17 @@ import { AccessBlockedScreen } from "./AccessBlockedScreen";
  * The backend (get_my_access) is authoritative; this layer enforces it in the UI.
  */
 export function AccessGate({ children }: { children: React.ReactNode }) {
+  const { t } = useTranslation();
   const { access, accessFailed, refreshAccess } = useOra();
 
   if (accessFailed && !access) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background px-4">
         <div className="w-full max-w-sm rounded-lg border bg-card p-6 text-center">
-          <h2 className="font-display text-base font-semibold">Could not verify access</h2>
-          <p className="mt-2 text-sm text-muted-foreground">
-            ORA could not confirm your access status. Please retry.
-          </p>
+          <h2 className="font-display text-base font-semibold">{t("access.couldNotVerify")}</h2>
+          <p className="mt-2 text-sm text-muted-foreground">{t("access.couldNotVerifyNote")}</p>
           <Button className="mt-4 w-full" onClick={() => void refreshAccess()}>
-            <RefreshCw className="h-4 w-4" /> Retry
+            <RefreshCw className="h-4 w-4" /> {t("common.retry")}
           </Button>
         </div>
       </div>
@@ -36,7 +36,7 @@ export function AccessGate({ children }: { children: React.ReactNode }) {
     return (
       <div className="flex h-screen items-center justify-center text-muted-foreground">
         <Loader2 className="h-5 w-5 animate-spin" />
-        <span className="ml-2 text-sm">Checking access…</span>
+        <span className="ml-2 text-sm">{t("auth.checkingAccess")}</span>
       </div>
     );
   }

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ArrowRight, CalendarClock, ListPlus, ShieldAlert, Trash2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { ArrowRight, CalendarClock, ListPlus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,22 +23,37 @@ import { exposureBadgeClass } from "@/components/common/exposureBadgeClass";
 import { useOra } from "@/store/OraContext";
 import { simulateScenario, type AbsenceKind, type ScenarioAbsence, type ScenarioResult } from "@/lib/simulation";
 import { deriveTaskCriticality } from "@/lib/analysis";
-import { buildExposureReport, EXPOSURE_LABELS } from "@/lib/exposure";
+import { buildExposureReport } from "@/lib/exposure";
 import { Field } from "../entities/field";
 import { cn } from "@/lib/utils";
 
-const ABSENCE_TYPES = [
-  "Vacation",
-  "Maternity / parental leave",
-  "Training",
-  "Assignment / temporary duty",
-  "Other",
+/**
+ * Planned-absence categories. Values stay as stable English codes because the
+ * engine detects vacation coverage by matching the normalized "Vacation" value;
+ * only the displayed labels are localized.
+ */
+const ABSENCE_CATEGORIES = [
+  { value: "Vacation", labelKey: "sim.category.vacation" },
+  { value: "Maternity / parental leave", labelKey: "sim.category.maternity" },
+  { value: "Training", labelKey: "sim.category.training" },
+  { value: "Assignment / temporary duty", labelKey: "sim.category.assignment" },
+  { value: "Other", labelKey: "sim.category.other" },
 ] as const;
 
-const KIND_LABELS: Record<AbsenceKind, string> = {
-  temporary: "Temporary absence",
-  planned: "Planned absence",
-  permanent: "Permanent unavailability",
+const CATEGORY_LABEL_KEYS: Record<string, string> = Object.fromEntries(
+  ABSENCE_CATEGORIES.map((c) => [c.value, c.labelKey]),
+);
+
+const KIND_LABEL_KEYS: Record<AbsenceKind, string> = {
+  temporary: "sim.kind.temporary",
+  planned: "sim.kind.planned",
+  permanent: "sim.kind.permanent",
+};
+
+const KIND_TOGGLE_KEYS: Record<AbsenceKind, string> = {
+  temporary: "sim.toggle.temporary",
+  planned: "sim.toggle.planned",
+  permanent: "sim.toggle.permanent",
 };
 
 interface Row {
@@ -59,6 +75,7 @@ function inclusiveDays(startDate: string, endDate: string): number {
 }
 
 export function SimulationPanel() {
+  const { t } = useTranslation();
   const { db } = useOra();
   const [rows, setRows] = useState<Row[]>([]);
   const [globalKind, setGlobalKind] = useState<AbsenceKind>("temporary");
@@ -77,6 +94,10 @@ export function SimulationPanel() {
   }));
   const personName = (id: string) => db.people.find((p) => p.id === id)?.name ?? id;
   const usedPersonIds = new Set(rows.map((r) => r.personId));
+
+  const dayCountLabel = (n: number) => (n === 1 ? t("sim.oneDay") : t("sim.nDays", { count: n }));
+  const categoryLabel = (cat?: string) =>
+    cat ? (CATEGORY_LABEL_KEYS[cat] ? t(CATEGORY_LABEL_KEYS[cat]) : cat) : "";
 
   /** Absence list passed to the engine (only rows with a chosen person). */
   const buildAbsences = (list: Row[]): ScenarioAbsence[] =>
@@ -126,7 +147,7 @@ export function SimulationPanel() {
 
   const run = () => {
     if (rows.length === 0) {
-      toast.error("Add at least one person to the scenario");
+      toast.error(t("sim.errorEmpty"));
       return;
     }
     const invalid = rows.find(
@@ -135,7 +156,7 @@ export function SimulationPanel() {
         (r.kind === "planned" && (!r.startDate || !r.endDate || inclusiveDays(r.startDate, r.endDate) <= 0)),
     );
     if (invalid) {
-      toast.error(`Complete the period/duration for ${personName(invalid.personId)}`);
+      toast.error(t("sim.errorIncomplete", { person: personName(invalid.personId) }));
       return;
     }
     setResult(simulateScenario(db, buildAbsences(rows)));
@@ -147,28 +168,18 @@ export function SimulationPanel() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Absence scenario</CardTitle>
-          <CardDescription>
-            Build a scenario with one or several people unavailable at the same time. Every absence
-            applies simultaneously — ORA analyzes the joint state of the organization, never the sum
-            of individual results.
-          </CardDescription>
+          <CardTitle className="text-base">{t("sim.title")}</CardTitle>
+          <CardDescription>{t("sim.titleDescription")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Defaults for people added below */}
           <div className="grid gap-4 rounded-lg border bg-muted/40 p-4 sm:grid-cols-[1fr_auto_auto] sm:items-end">
             <Field
-              label="Default type for added people"
-              hint="Each row can later be overridden individually."
+              label={t("sim.defaultType")}
+              hint={t("sim.defaultHint")}
             >
               <div className="flex h-10 items-center gap-1 rounded-md border bg-card p-1">
-                {(
-                  [
-                    { key: "temporary", label: "Temporary" },
-                    { key: "planned", label: "Planned" },
-                    { key: "permanent", label: "Permanent" },
-                  ] as const
-                ).map(({ key, label }) => (
+                {(["temporary", "planned", "permanent"] as const).map((key) => (
                   <button
                     key={key}
                     type="button"
@@ -184,13 +195,13 @@ export function SimulationPanel() {
                         : "text-muted-foreground hover:text-foreground",
                     )}
                   >
-                    {label}
+                    {t(KIND_TOGGLE_KEYS[key])}
                   </button>
                 ))}
               </div>
             </Field>
             {globalKind === "temporary" && (
-              <Field label="Default days">
+              <Field label={t("sim.defaultDays")}>
                 <Input
                   type="number"
                   min={1}
@@ -202,24 +213,24 @@ export function SimulationPanel() {
             )}
             {globalKind === "planned" && (
               <>
-                <Field label="Default absence type" hint="Informational except Vacation coverage.">
+                <Field label={t("sim.defaultCategory")} hint={t("sim.defaultCategoryHint")}>
                   <Select value={globalCategory} onValueChange={setGlobalCategory}>
                     <SelectTrigger className="w-full sm:w-52">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {ABSENCE_TYPES.map((t) => (
-                        <SelectItem key={t} value={t}>
-                          {t}
+                      {ABSENCE_CATEGORIES.map((c) => (
+                        <SelectItem key={c.value} value={c.value}>
+                          {t(c.labelKey)}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </Field>
-                <Field label="Default period — from">
+                <Field label={t("sim.periodFrom")}>
                   <Input type="date" value={globalStart} onChange={(e) => setGlobalStart(e.target.value)} className="sm:w-40" />
                 </Field>
-                <Field label="Default period — to">
+                <Field label={t("sim.periodTo")}>
                   <Input type="date" value={globalEnd} onChange={(e) => setGlobalEnd(e.target.value)} className="sm:w-40" />
                 </Field>
               </>
@@ -228,14 +239,14 @@ export function SimulationPanel() {
 
           {/* Person picker — adds one person per pick with the defaults above */}
           <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
-            <Field label="People in the scenario" hint="Pick as many people as the scenario needs — each pick adds a row.">
+            <Field label={t("sim.peopleLabel")} hint={t("sim.peopleHint")}>
               <SearchableSelect
                 options={personOptions.filter((o) => !usedPersonIds.has(o.value))}
                 value=""
                 onChange={addPerson}
-                placeholder="Add a person…"
-                searchPlaceholder="Search name or surname…"
-                emptyText="No more people to add"
+                placeholder={t("sim.addPersonPlaceholder")}
+                searchPlaceholder={t("entity.searchPerson")}
+                emptyText={t("sim.noMorePeople")}
                 className="w-full"
               />
             </Field>
@@ -246,21 +257,21 @@ export function SimulationPanel() {
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-1.5">
                 <Badge variant="secondary" className="font-normal">
-                  {rows.length} {rows.length === 1 ? "person" : "people"} in scenario
+                  {rows.length === 1 ? t("sim.inScenarioOne") : t("sim.inScenarioMany", { count: rows.length })}
                 </Badge>
                 {personCountByKind("temporary") > 0 && (
                   <Badge variant="secondary" className="font-normal">
-                    {personCountByKind("temporary")} temporary
+                    {t("sim.countTemporary", { count: personCountByKind("temporary") })}
                   </Badge>
                 )}
                 {personCountByKind("planned") > 0 && (
                   <Badge variant="secondary" className="font-normal">
-                    {personCountByKind("planned")} planned
+                    {t("sim.countPlanned", { count: personCountByKind("planned") })}
                   </Badge>
                 )}
                 {personCountByKind("permanent") > 0 && (
                   <Badge className="border-transparent bg-risk-high/10 text-risk-high">
-                    {personCountByKind("permanent")} permanent
+                    {t("sim.countPermanent", { count: personCountByKind("permanent") })}
                   </Badge>
                 )}
               </div>
@@ -275,10 +286,10 @@ export function SimulationPanel() {
                       </span>
                       <span className="text-xs text-muted-foreground">
                         {row.kind === "temporary"
-                          ? `${row.days} ${row.days === 1 ? "day" : "days"}`
+                          ? dayCountLabel(row.days)
                           : row.kind === "planned"
-                            ? `${row.category || "Planned"} · ${rowDays} ${rowDays === 1 ? "day" : "days"} · ${row.startDate} → ${row.endDate}`
-                            : "Permanent"}
+                            ? `${categoryLabel(row.category) || t("sim.toggle.planned")} · ${dayCountLabel(rowDays)} · ${row.startDate} → ${row.endDate}`
+                            : t("sim.toggle.permanent")}
                       </span>
                       <Select
                         value={row.kind}
@@ -288,9 +299,9 @@ export function SimulationPanel() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {(Object.keys(KIND_LABELS) as AbsenceKind[]).map((k) => (
+                          {(Object.keys(KIND_LABEL_KEYS) as AbsenceKind[]).map((k) => (
                             <SelectItem key={k} value={k}>
-                              {KIND_LABELS[k]}
+                              {t(KIND_LABEL_KEYS[k])}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -314,9 +325,9 @@ export function SimulationPanel() {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              {ABSENCE_TYPES.map((t) => (
-                                <SelectItem key={t} value={t}>
-                                  {t}
+                              {ABSENCE_CATEGORIES.map((c) => (
+                                <SelectItem key={c.value} value={c.value}>
+                                  {t(c.labelKey)}
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -340,7 +351,7 @@ export function SimulationPanel() {
                         size="icon"
                         className="h-8 w-8 text-muted-foreground hover:text-destructive"
                         onClick={() => removeRow(row.localId)}
-                        aria-label={`Remove ${personName(row.personId)}`}
+                        aria-label={t("sim.removeAria", { person: personName(row.personId) })}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -353,7 +364,7 @@ export function SimulationPanel() {
 
           <div className="flex justify-end">
             <Button onClick={run} disabled={rows.length === 0}>
-              <CalendarClock className="h-4 w-4" /> Run scenario
+              <CalendarClock className="h-4 w-4" /> {t("sim.run")}
             </Button>
           </div>
         </CardContent>
@@ -362,8 +373,8 @@ export function SimulationPanel() {
       {!result && (
         <EmptyState
           icon={ListPlus}
-          title="Simulate a scenario"
-          description="Add one or more people — vacations, medical leaves, simultaneous losses or any combination — and ORA recalculates the operational coverage of the whole organization with all of them unavailable at the same time."
+          title={t("sim.emptyTitle")}
+          description={t("sim.emptyDescription")}
         />
       )}
 
@@ -371,39 +382,40 @@ export function SimulationPanel() {
         <>
           {(() => {
             const exposure = buildExposureReport(db, result);
-            const exposureByTask = new Map(exposure.tasks.map((t) => [t.taskId, t]));
+            const exposureByTask = new Map(exposure.tasks.map((task) => [task.taskId, task]));
             const titleSuffix =
               result.absences.length === 1
-                ? `${result.absences[0].person.name} being unavailable`
-                : `${result.absences.length} people being unavailable simultaneously`;
+                ? t("sim.unavailableSingle", { person: result.absences[0].person.name })
+                : t("sim.unavailableMany", { count: result.absences.length });
+            const total = result.busFactorPersonIds.length;
             return (
               <>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                   <StatCard
-                    label="Affected tasks"
+                    label={t("sim.affectedTasks")}
                     value={result.summary.affectedTasks}
                     tone={result.summary.affectedTasks > 0 ? "high" : "default"}
                   />
                   <StatCard
-                    label="Tasks without coverage"
+                    label={t("sim.tasksWithoutCoverage")}
                     value={result.summary.uncoveredTasks}
-                    hint="No other capable person"
+                    hint={t("sim.noOtherCapable")}
                     tone={result.summary.uncoveredTasks > 0 ? "critical" : "low"}
                   />
                   <StatCard
-                    label="Reduced to single person"
+                    label={t("sim.reducedToSingle")}
                     value={result.summary.reducedToSingle}
                     tone={result.summary.reducedToSingle > 0 ? "high" : "low"}
                   />
                   <StatCard
-                    label="Affected processes"
+                    label={t("sim.affectedProcesses")}
                     value={result.summary.affectedProcesses}
                     tone={result.summary.affectedProcesses > 0 ? "medium" : "default"}
                   />
                   <StatCard
-                    label="Uncovered competencies"
+                    label={t("sim.uncoveredCompetencies")}
                     value={result.summary.uncoveredCompetencies}
-                    hint={`${result.summary.uncoveredCriticalCompetencies} critical`}
+                    hint={t("sim.criticalCount", { count: result.summary.uncoveredCriticalCompetencies })}
                     tone={result.summary.uncoveredCriticalCompetencies > 0 ? "critical" : "default"}
                   />
                 </div>
@@ -411,38 +423,36 @@ export function SimulationPanel() {
                 {/* Critical impact */}
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   <StatCard
-                    label="Affected critical tasks"
+                    label={t("sim.affectedCriticalTasks")}
                     value={result.summary.affectedCriticalTasks}
-                    hint="Critical tasks the absent people can perform"
+                    hint={t("sim.criticalTasksAbsentCanPerform")}
                     tone={result.summary.affectedCriticalTasks > 0 ? "high" : "default"}
                   />
                   <StatCard
-                    label="Critical tasks without coverage"
+                    label={t("sim.criticalTasksWithoutCoverage")}
                     value={result.summary.uncoveredCriticalTasks}
-                    hint="No one can perform them anymore"
+                    hint={t("sim.noOneCanPerform")}
                     tone={result.summary.uncoveredCriticalTasks > 0 ? "critical" : "low"}
                   />
                   {result.summary.reducedToSingleCritical > 0 && (
                     <StatCard
-                      label="Critical tasks reduced to one"
+                      label={t("sim.criticalTasksReducedToOne")}
                       value={result.summary.reducedToSingleCritical}
-                      hint="One person can still perform them"
+                      hint={t("sim.onePersonStillPerforms")}
                       tone="high"
                     />
                   )}
                   <StatCard
-                    label="Affected critical processes"
+                    label={t("sim.affectedCriticalProcesses")}
                     value={result.summary.affectedCriticalProcesses}
-                    hint="Essential processes losing critical coverage"
+                    hint={t("sim.essentialProcessesLosing")}
                     tone={result.summary.affectedCriticalProcesses > 0 ? "critical" : "low"}
                   />
                 </div>
 
                 {result.busFactorAtRisk && (
                   <p className="rounded-md border border-risk-high/20 bg-risk-high/5 px-3 py-2 text-xs leading-relaxed text-risk-high">
-                    Bus factor: {result.busFactorPersonIds.length}{" "}
-                    {result.busFactorPersonIds.length === 1 ? "person is" : "people are"} among the absent
-                    that concentrate critical tasks — the scenario hits key operational capability.
+                    {total === 1 ? t("sim.busFactorOne") : t("sim.busFactorMany", { count: total })}
                   </p>
                 )}
 
@@ -450,33 +460,37 @@ export function SimulationPanel() {
                 {result.appliedCoverages.length > 0 && (
                   <Card className="border-risk-low/20">
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-base">Vacation coverage applied</CardTitle>
+                      <CardTitle className="text-base">{t("sim.coveredTitle")}</CardTitle>
                       <CardDescription>
-                        {result.appliedCoverages.length}{" "}
-                        {result.appliedCoverages.length === 1 ? "temporary coverage" : "temporary coverages"}{" "}
-                        were available to cover the absent people during their vacations.
+                        {result.appliedCoverages.length === 1
+                          ? t("sim.coveredDescriptionOne")
+                          : t("sim.coveredDescriptionMany", { count: result.appliedCoverages.length })}
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-2">
                       <div className="flex flex-wrap gap-1.5">
                         {result.vacationCoveredTaskIds.length > 0 && (
                           <Badge className="border-transparent bg-risk-low/10 text-risk-low">
-                            {result.vacationCoveredTaskIds.length} task(s) kept covered
+                            {result.vacationCoveredTaskIds.length === 1
+                              ? t("sim.coveredTaskOne")
+                              : t("sim.coveredTaskMany", { count: result.vacationCoveredTaskIds.length })}
                           </Badge>
                         )}
                         {result.vacationCoveredCompetencyIds.length > 0 && (
                           <Badge className="border-transparent bg-risk-low/10 text-risk-low">
-                            {result.vacationCoveredCompetencyIds.length} competency(ies) kept covered
+                            {result.vacationCoveredCompetencyIds.length === 1
+                              ? t("sim.coveredCompOne")
+                              : t("sim.coveredCompMany", { count: result.vacationCoveredCompetencyIds.length })}
                           </Badge>
                         )}
                       </div>
                       <ul className="space-y-1 text-sm text-muted-foreground">
-                        {result.appliedCoverages.map((c, i) => (
-                          <li key={i}>
-                            {c.covererName} covers {c.coveredName}
-                            {c.taskNames.length > 0 ? `: ${c.taskNames.join(", ")}` : ""}.
-                          </li>
-                        ))}
+                        {result.appliedCoverages.map((c, i) => {
+                          const line = c.taskNames.length
+                            ? t("sim.coveredLineTasks", { coverer: c.covererName, covered: c.coveredName, tasks: c.taskNames.join(", ") })
+                            : t("sim.coveredLine", { coverer: c.covererName, covered: c.coveredName });
+                          return <li key={i}>{line}</li>;
+                        })}
                       </ul>
                     </CardContent>
                   </Card>
@@ -486,27 +500,27 @@ export function SimulationPanel() {
                 {exposure.overall !== "none" && (
                   <Card>
                     <CardHeader>
-                      <CardTitle className="text-base">Temporal exposure</CardTitle>
-                      <CardDescription>
-                        How long each affected capability loses coverage. Exposure is derived per task
-                        from the absences that affect it: any permanent absence is sustained; otherwise
-                        the level follows the longest governing absence.
-                      </CardDescription>
+                      <CardTitle className="text-base">{t("sim.exposureTitle")}</CardTitle>
+                      <CardDescription>{t("sim.exposureDescription")}</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-3">
                       <div className="flex flex-wrap gap-2">
-                        {(["short", "prolonged", "sustained"] as const).map((lv) =>
-                          exposure.counts[lv] > 0 ? (
+                        {(["short", "prolonged", "sustained"] as const).map((lv) => {
+                          const fullKey =
+                            lv === "short"
+                              ? "sim.exposureFullShort"
+                              : lv === "prolonged"
+                                ? "sim.exposureFullProlonged"
+                                : "sim.exposureFullSustained";
+                          return exposure.counts[lv] > 0 ? (
                             <Badge key={lv} className={exposureBadgeClass(lv)}>
-                              {EXPOSURE_LABELS[lv]}: {exposure.counts[lv]}
+                              {t(fullKey)}: {exposure.counts[lv]}
                             </Badge>
-                          ) : null,
-                        )}
+                          ) : null;
+                        })}
                       </div>
                       <p className="rounded-md border bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground">
-                        Exposure reflects how long the same coverage loss lasts (short → prolonged →
-                        sustained) for each affected task. It is an analytical approximation and never
-                        changes the task's criticality or its coverage.
+                        {t("sim.exposureFootnote")}
                       </p>
                     </CardContent>
                   </Card>
@@ -514,23 +528,23 @@ export function SimulationPanel() {
 
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-base">Impact of {titleSuffix}</CardTitle>
+                    <CardTitle className="text-base">{t("sim.impactTitle", { suffix: titleSuffix })}</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-6">
                     {/* Absent people */}
                     <div>
                       <h4 className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                        Scenario set
+                        {t("sim.scenarioSet")}
                       </h4>
                       <div className="flex flex-wrap gap-1.5">
                         {result.absences.map((a) => (
                           <Badge key={a.person.id} variant="secondary" className="font-normal">
                             {a.person.name} ·{" "}
                             {a.kind === "permanent"
-                              ? "Permanent"
+                              ? t("sim.toggle.permanent")
                               : a.kind === "planned"
-                                ? `${a.category || "Planned"} · ${a.days} days`
-                                : `${a.days} days`}
+                                ? `${categoryLabel(a.category) || t("sim.toggle.planned")} · ${dayCountLabel(a.days)}`
+                                : dayCountLabel(a.days)}
                           </Badge>
                         ))}
                       </div>
@@ -539,17 +553,14 @@ export function SimulationPanel() {
                     {/* Affected tasks */}
                     <div>
                       <h4 className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                        Affected tasks (before → after)
+                        {t("sim.affectedTasksBefore")}
                       </h4>
                       {result.taskChanges.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">
-                          None of the absent people are assigned to any task, so no task coverage
-                          changes.
-                        </p>
+                        <p className="text-sm text-muted-foreground">{t("sim.noTaskChange")}</p>
                       ) : (
                         <ul className="divide-y rounded-lg border">
                           {result.taskChanges.map((change) => {
-                            const task = db.tasks.find((t) => t.id === change.taskId);
+                            const task = db.tasks.find((tt) => tt.id === change.taskId);
                             const uncovered = result.uncoveredTaskIds.includes(change.taskId);
                             const reduced = result.reducedToSingleTaskIds.includes(change.taskId);
                             const taskExposure = exposureByTask.get(change.taskId);
@@ -570,7 +581,10 @@ export function SimulationPanel() {
                                     <ArrowRight className="h-4 w-4 text-muted-foreground" />
                                     <DependencyBadge level={change.after.level} />
                                     <span className="text-xs text-muted-foreground">
-                                      ({change.before.capableCount} → {change.after.capableCount} capable)
+                                      {t("sim.capableCounts", {
+                                        before: change.before.capableCount,
+                                        after: change.after.capableCount,
+                                      })}
                                     </span>
                                   </div>
                                   {taskExposure && taskExposure.level !== "none" && (
@@ -584,12 +598,12 @@ export function SimulationPanel() {
                                 </div>
                                 {uncovered && (
                                   <Badge className="border-transparent bg-risk-critical/10 text-risk-critical">
-                                    No coverage
+                                    {t("sim.noCoverageBadge")}
                                   </Badge>
                                 )}
                                 {!uncovered && reduced && (
                                   <Badge className="border-transparent bg-risk-high/10 text-risk-high">
-                                    Now single-person
+                                    {t("sim.nowSinglePerson")}
                                   </Badge>
                                 )}
                               </li>
@@ -603,10 +617,10 @@ export function SimulationPanel() {
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
                         <h4 className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                          Affected functions
+                          {t("sim.affectedFunctions")}
                         </h4>
                         {result.affectedFunctionIds.length === 0 ? (
-                          <p className="text-sm text-muted-foreground">None</p>
+                          <p className="text-sm text-muted-foreground">{t("sim.noneFunctions")}</p>
                         ) : (
                           <div className="flex flex-wrap gap-1.5">
                             {result.affectedFunctionIds.map((fid) => (
@@ -619,10 +633,10 @@ export function SimulationPanel() {
                       </div>
                       <div>
                         <h4 className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                          Affected processes
+                          {t("sim.affectedProcesses")}
                         </h4>
                         {result.affectedProcessIds.length === 0 ? (
-                          <p className="text-sm text-muted-foreground">None</p>
+                          <p className="text-sm text-muted-foreground">{t("sim.noneProcesses")}</p>
                         ) : (
                           <div className="flex flex-wrap gap-1.5">
                             {result.affectedProcessIds.map((pid) => (
@@ -638,12 +652,10 @@ export function SimulationPanel() {
                     {/* Uncovered competencies */}
                     <div>
                       <h4 className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                        Competencies left without coverage
+                        {t("sim.competenciesUncovered")}
                       </h4>
                       {result.uncoveredCompetencyIds.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">
-                          Every competency the absent people hold remains covered by other people.
-                        </p>
+                        <p className="text-sm text-muted-foreground">{t("sim.everyCompetencyCovered")}</p>
                       ) : (
                         <div className="flex flex-wrap gap-1.5">
                           {result.uncoveredCompetencyIds.map((cid) => {
@@ -659,7 +671,7 @@ export function SimulationPanel() {
                                 }
                               >
                                 {comp?.name ?? cid}
-                                {critical ? " · required by critical tasks" : ""}
+                                {critical ? t("sim.requiredByCritical") : ""}
                               </Badge>
                             );
                           })}
@@ -670,12 +682,10 @@ export function SimulationPanel() {
                     {/* Critical competencies left concentrated */}
                     <div>
                       <h4 className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                        Critical competencies left with a single holder
+                        {t("sim.singleHolder")}
                       </h4>
                       {result.singleHolderCriticalCompetencyIds.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">
-                          No critical competency is reduced to a single holder by this scenario.
-                        </p>
+                        <p className="text-sm text-muted-foreground">{t("sim.noSingleHolder")}</p>
                       ) : (
                         <div className="flex flex-wrap gap-1.5">
                           {result.singleHolderCriticalCompetencyIds.map((cid) => {
@@ -694,10 +704,7 @@ export function SimulationPanel() {
                     </div>
 
                     <p className="rounded-md border bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground">
-                      This simulation measures the joint change in operational dependency when all the
-                      selected people are unavailable at the same time. It does not evaluate any
-                      person's value. Vacation coverage only applies to planned absences categorized as
-                      vacations; passive on-call is never used as vacation coverage.
+                      {t("sim.simulationFootnote")}
                     </p>
                   </CardContent>
                 </Card>

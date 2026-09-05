@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -11,8 +12,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { reissueDemo, describeRpcError } from "@/lib/access/api";
+import { reissueDemo } from "@/lib/access/api";
 import { DEMO_DAYS, type TaxType } from "@/lib/access/types";
+import { useRpcError } from "@/hooks/useRpcError";
 import { Field } from "@/components/entities/field";
 import { cn } from "@/lib/utils";
 
@@ -28,6 +30,8 @@ interface ReissueDemoDialogProps {
  * reuse rule is still enforced by the backend.
  */
 export function ReissueDemoDialog({ open, onOpenChange, presetEmail, onDone }: ReissueDemoDialogProps) {
+  const { t } = useTranslation();
+  const rpcError = useRpcError();
   const [email, setEmail] = useState(presetEmail ?? "");
   const [kind, setKind] = useState<"individual" | "company">("individual");
   const [clientName, setClientName] = useState("");
@@ -56,14 +60,14 @@ export function ReissueDemoDialog({ open, onOpenChange, presetEmail, onDone }: R
         clientName: kind === "company" ? clientName : undefined,
       });
       if (result.ok) {
-        toast.success(`${DEMO_DAYS}-day DEMO started for ${email.trim()}.`);
+        toast.success(t("license.demoStartedToast", { days: DEMO_DAYS, email: email.trim() }));
         onOpenChange(false);
         onDone();
       } else {
-        toast.error(describeRpcError(result));
+        toast.error(rpcError(result));
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not start the DEMO.");
+      toast.error(err instanceof Error ? err.message : t("license.couldNotStartDemo"));
     } finally {
       setBusy(false);
     }
@@ -73,22 +77,21 @@ export function ReissueDemoDialog({ open, onOpenChange, presetEmail, onDone }: R
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Start a {DEMO_DAYS}-day DEMO</DialogTitle>
+          <DialogTitle>{t("license.startDemoTitle", { days: DEMO_DAYS })}</DialogTitle>
           <DialogDescription>
-            Starts a new {DEMO_DAYS}-day DEMO for a user. The {taxLabel} eligibility rule (one DEMO
-            per DNI/CUIT every 12 months) is still enforced.
+            {t("license.startDemoDescription", { days: DEMO_DAYS, taxLabel })}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
-          <Field label="User email">
+          <Field label={t("auth.email")}>
             <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@company.com" autoFocus />
           </Field>
 
           <div className="grid grid-cols-2 gap-2 rounded-md bg-muted p-1">
             {(
               [
-                { key: "individual", label: "Individual" },
-                { key: "company", label: "Company" },
+                { key: "individual", labelKey: "demo.activate.individual" },
+                { key: "company", labelKey: "license.company" },
               ] as const
             ).map((option) => (
               <button
@@ -102,14 +105,14 @@ export function ReissueDemoDialog({ open, onOpenChange, presetEmail, onDone }: R
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
-                {option.label}
+                {t(option.labelKey)}
               </button>
             ))}
           </div>
 
           {kind === "company" && (
-            <Field label="Organization name">
-              <Input value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Organization name" />
+            <Field label={t("license.organizationName")}>
+              <Input value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder={t("license.organizationNamePlaceholder")} />
             </Field>
           )}
 
@@ -117,18 +120,22 @@ export function ReissueDemoDialog({ open, onOpenChange, presetEmail, onDone }: R
             <Input
               value={taxId}
               onChange={(e) => setTaxId(e.target.value.replace(/\D/g, "").slice(0, 11))}
-              placeholder={kind === "individual" ? "e.g. 30123456" : "e.g. 20123456789"}
+              placeholder={
+                kind === "individual"
+                  ? t("demo.activate.dniPlaceholder")
+                  : t("demo.activate.cuitPlaceholder")
+              }
               inputMode="numeric"
             />
           </Field>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button onClick={() => void handleSubmit()} disabled={busy || !email.trim() || !taxId.trim()}>
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            Start DEMO
+            {t("license.startDemoAction")}
           </Button>
         </DialogFooter>
       </DialogContent>

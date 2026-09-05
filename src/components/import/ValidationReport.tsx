@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { AlertTriangle, CheckCircle2, FileWarning } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,26 +27,27 @@ function Stat({ label, value }: { label: string; value: number }) {
 }
 
 export function ValidationReport({ summary, resolutions, onResolve }: ValidationReportProps) {
+  const { t } = useTranslation();
   const errors = summary.issues.filter((i) => i.severity === "error");
   const warnings = summary.issues.filter((i) => i.severity === "warning");
 
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat label="Total rows" value={summary.totalRows} />
-        <Stat label="People" value={summary.people} />
-        <Stat label="Excluded (no name)" value={summary.excludedRows} />
-        <Stat label="Hierarchy relations" value={summary.hierarchyRelations} />
-        <Stat label="Areas" value={summary.areas} />
-        <Stat label="Roles" value={summary.roles} />
-        <Stat label="Processes" value={summary.processes} />
-        <Stat label="Functions" value={summary.functions} />
-        <Stat label="Tasks" value={summary.tasks} />
-        <Stat label="Competencies" value={summary.competencies} />
-        <Stat label="On-call (guardia)" value={summary.onCallAssignments} />
-        <Stat label="Vacation coverages" value={summary.vacationCoverages} />
-        <Stat label="Possible duplicates" value={summary.possibleDuplicates} />
-        <Stat label="Incomplete records" value={summary.incompleteRows} />
+        <Stat label={t("validation.stat.totalRows")} value={summary.totalRows} />
+        <Stat label={t("validation.stat.people")} value={summary.people} />
+        <Stat label={t("validation.stat.excluded")} value={summary.excludedRows} />
+        <Stat label={t("validation.stat.hierarchy")} value={summary.hierarchyRelations} />
+        <Stat label={t("validation.stat.areas")} value={summary.areas} />
+        <Stat label={t("validation.stat.roles")} value={summary.roles} />
+        <Stat label={t("validation.stat.processes")} value={summary.processes} />
+        <Stat label={t("validation.stat.functions")} value={summary.functions} />
+        <Stat label={t("validation.stat.tasks")} value={summary.tasks} />
+        <Stat label={t("validation.stat.competencies")} value={summary.competencies} />
+        <Stat label={t("validation.stat.onCall")} value={summary.onCallAssignments} />
+        <Stat label={t("validation.stat.vacationCoverages")} value={summary.vacationCoverages} />
+        <Stat label={t("validation.stat.possibleDuplicates")} value={summary.possibleDuplicates} />
+        <Stat label={t("validation.stat.incomplete")} value={summary.incompleteRows} />
       </div>
 
       {(errors.length > 0 || summary.blocking) && (
@@ -53,7 +55,7 @@ export function ValidationReport({ summary, resolutions, onResolve }: Validation
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-sm text-destructive">
               <AlertTriangle className="h-4 w-4" />
-              Blocking issues — review before importing
+              {t("validation.blockingTitle")}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -63,8 +65,8 @@ export function ValidationReport({ summary, resolutions, onResolve }: Validation
                   const key = `${ref.kind}:${ref.sourceRow}`;
                   const label =
                     ref.kind === "manager"
-                      ? `manager "${ref.refName}"`
-                      : `covered person "${ref.refName}"`;
+                      ? t("validation.ref.manager", { name: ref.refName })
+                      : t("validation.ref.coverage", { name: ref.refName });
                   return (
                     <div
                       key={key}
@@ -72,10 +74,13 @@ export function ValidationReport({ summary, resolutions, onResolve }: Validation
                     >
                       <div className="min-w-0 text-sm">
                         <p className="font-medium">
-                          {ref.personName} → {label}
+                          {t("validation.ambiguousLine", {
+                            person: ref.personName,
+                            target: label,
+                          })}
                         </p>
                         <p className="text-muted-foreground">
-                          Matches {ref.candidates.length} people. Choose the intended person.
+                          {t("validation.ambiguousHint", { count: ref.candidates.length })}
                         </p>
                       </div>
                       <Select
@@ -85,10 +90,10 @@ export function ValidationReport({ summary, resolutions, onResolve }: Validation
                         }
                       >
                         <SelectTrigger className="w-full sm:w-64">
-                          <SelectValue placeholder="Choose person" />
+                          <SelectValue placeholder={t("validation.choosePerson")} />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="unresolved">Leave unresolved</SelectItem>
+                          <SelectItem value="unresolved">{t("validation.leaveUnresolved")}</SelectItem>
                           {ref.candidates.map((c) => (
                             <SelectItem key={c} value={c}>
                               {c}
@@ -119,7 +124,7 @@ export function ValidationReport({ summary, resolutions, onResolve }: Validation
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-sm">
               <CheckCircle2 className="h-4 w-4 text-risk-medium" />
-              Warnings
+              {t("validation.warnings")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -137,7 +142,7 @@ export function ValidationReport({ summary, resolutions, onResolve }: Validation
 
       {summary.unmappedColumns.length > 0 && (
         <div className="rounded-md border p-3 text-sm">
-          <p className="font-medium">Columns not mapped to any ORA field</p>
+          <p className="font-medium">{t("validation.unmappedTitle")}</p>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {summary.unmappedColumns.map((c) => (
               <Badge key={c} variant="secondary" className="font-normal">
@@ -150,7 +155,7 @@ export function ValidationReport({ summary, resolutions, onResolve }: Validation
 
       {summary.unusableValues.length > 0 && (
         <div className="rounded-md border border-risk-medium/30 p-3 text-sm">
-          <p className="font-medium text-risk-medium">Values that could not be used</p>
+          <p className="font-medium text-risk-medium">{t("validation.unusableTitle")}</p>
           <ul className="mt-1.5 space-y-1 text-muted-foreground">
             {summary.unusableValues.map((v, i) => (
               <li key={i}>• {v}</li>
@@ -160,9 +165,7 @@ export function ValidationReport({ summary, resolutions, onResolve }: Validation
       )}
 
       {summary.issues.length === 0 && (
-        <p className="text-sm text-muted-foreground">
-          No issues detected. The data is ready to be imported.
-        </p>
+        <p className="text-sm text-muted-foreground">{t("validation.clean")}</p>
       )}
     </div>
   );

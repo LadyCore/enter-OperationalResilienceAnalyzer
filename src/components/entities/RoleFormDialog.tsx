@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,6 +25,7 @@ interface RoleFormDialogProps {
 }
 
 export function RoleFormDialog({ open, onOpenChange, role }: RoleFormDialogProps) {
+  const { t } = useTranslation();
   const { db, upsert } = useOra();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -47,7 +49,7 @@ export function RoleFormDialog({ open, onOpenChange, role }: RoleFormDialogProps
       description: description.trim(),
       competencyIds,
     });
-    toast.success(role ? "Role updated" : "Role created");
+    toast.success(role ? t("role.updated") : t("role.created"));
     onOpenChange(false);
   };
 
@@ -55,34 +57,32 @@ export function RoleFormDialog({ open, onOpenChange, role }: RoleFormDialogProps
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{role ? "Edit role" : "New role"}</DialogTitle>
-          <DialogDescription>
-            A role bundles competencies. People are assigned to roles.
-          </DialogDescription>
+          <DialogTitle>{role ? t("role.edit") : t("role.new")}</DialogTitle>
+          <DialogDescription>{t("role.description")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
-          <Field label="Name">
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. IT Systems Administrator" />
+          <Field label={t("entity.name")}>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("role.namePlaceholder")} />
           </Field>
-          <Field label="Description">
+          <Field label={t("entity.description")}>
             <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
           </Field>
-          <Field label="Associated competencies">
+          <Field label={t("role.competenciesLabel")}>
             <MultiSelect
               options={competencyOptions}
               values={competencyIds}
               onChange={setCompetencyIds}
-              placeholder="Select competencies…"
-              emptyText="No competencies defined yet"
+              placeholder={t("entity.selectCompetencies")}
+              emptyText={t("entity.noCompetencies")}
             />
           </Field>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button onClick={handleSave} disabled={!name.trim()}>
-            Save
+            {t("common.save")}
           </Button>
         </DialogFooter>
       </DialogContent>

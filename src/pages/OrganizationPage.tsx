@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Building2, Check, Eye, GitBranch, ListChecks, Plus, Trash2, Users } from "lucide-react";
@@ -12,49 +13,50 @@ import { useOra } from "@/store/OraContext";
 
 export function OrganizationPage() {
   const { db, organizations, activeOrganizationId, setActiveOrganization, removeOrganization } = useOra();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
   const structure = [
-    { icon: GitBranch, label: "Processes", value: db.processes.length },
-    { icon: ListChecks, label: "Functions", value: db.functions.length },
-    { icon: ListChecks, label: "Tasks", value: db.tasks.length },
-    { icon: Users, label: "Roles", value: db.roles.length },
-    { icon: Users, label: "People", value: db.people.length },
-    { icon: Eye, label: "Competencies", value: db.competencies.length },
-    { icon: Building2, label: "Areas", value: db.areas.length },
+    { icon: GitBranch, labelKey: "nav.processes", value: db.processes.length },
+    { icon: ListChecks, labelKey: "orgPage.structure.functions", value: db.functions.length },
+    { icon: ListChecks, labelKey: "nav.tasks", value: db.tasks.length },
+    { icon: Users, labelKey: "orgPage.structure.roles", value: db.roles.length },
+    { icon: Users, labelKey: "nav.people", value: db.people.length },
+    { icon: Eye, labelKey: "nav.competencies", value: db.competencies.length },
+    { icon: Building2, labelKey: "orgPage.structure.areas", value: db.areas.length },
   ];
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
     try {
       await removeOrganization(deleteTarget.id);
-      toast.success(`Organization "${deleteTarget.name}" deleted.`);
+      toast.success(t("orgPage.deletedToast", { name: deleteTarget.name }));
       setDeleteTarget(null);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not delete the organization.");
+      toast.error(err instanceof Error ? err.message : t("orgPage.deleteFailed"));
       setDeleteTarget(null);
     }
   };
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Organization" description="Manage your organizations and the structure of the active one.">
-        <Button onClick={() => setOpen(true)}>Edit organization</Button>
+      <PageHeader title={t("nav.organization")} description={t("orgPage.description")}>
+        <Button onClick={() => setOpen(true)}>{t("organization.edit")}</Button>
         <Button onClick={() => navigate("/import")}>
-          <Plus className="h-4 w-4" /> Import organization
+          <Plus className="h-4 w-4" /> {t("common.importOrganization")}
         </Button>
       </PageHeader>
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Organizations</CardTitle>
-          <CardDescription>Switch the active organization. The demo organization can never be deleted.</CardDescription>
+          <CardTitle className="text-base">{t("orgPage.organizations")}</CardTitle>
+          <CardDescription>{t("orgPage.organizationsHint")}</CardDescription>
         </CardHeader>
         <CardContent>
           {organizations.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No organizations yet.</p>
+            <p className="text-sm text-muted-foreground">{t("orgPage.empty")}</p>
           ) : (
             <ul className="divide-y">
               {organizations.map((org) => {
@@ -70,12 +72,12 @@ export function OrganizationPage() {
                       <span className="min-w-0 flex-1 truncate text-sm font-medium">{org.name}</span>
                       {org.isDemo && (
                         <Badge variant="secondary" className="shrink-0 px-1.5 text-[10px] font-medium">
-                          Demo
+                          {t("common.demo")}
                         </Badge>
                       )}
                       {isActive && (
                         <span className="flex shrink-0 items-center gap-1 text-xs text-primary">
-                          <Check className="h-3.5 w-3.5" /> Active
+                          <Check className="h-3.5 w-3.5" /> {t("orgPage.active")}
                         </span>
                       )}
                     </button>
@@ -85,6 +87,7 @@ export function OrganizationPage() {
                         size="icon"
                         className="shrink-0 text-destructive hover:text-destructive"
                         onClick={() => setDeleteTarget({ id: org.id, name: org.name })}
+                        aria-label={t("orgPage.deleteOrganization", { name: org.name })}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -104,7 +107,7 @@ export function OrganizationPage() {
           </div>
           <div>
             <CardTitle>{db.organization.name}</CardTitle>
-            <CardDescription>Organization profile</CardDescription>
+            <CardDescription>{t("orgPage.profile")}</CardDescription>
           </div>
         </CardHeader>
         <CardContent>
@@ -114,16 +117,16 @@ export function OrganizationPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Model in numbers</CardTitle>
-          <CardDescription>Current size of the operational model.</CardDescription>
+          <CardTitle className="text-base">{t("orgPage.modelTitle")}</CardTitle>
+          <CardDescription>{t("orgPage.modelDescription")}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {structure.map((s) => (
-              <div key={s.label} className="rounded-md border p-3">
+              <div key={s.labelKey} className="rounded-md border p-3">
                 <s.icon className="h-4 w-4 text-muted-foreground" />
                 <p className="mt-2 font-mono text-2xl font-semibold tabular-nums">{s.value}</p>
-                <p className="text-xs text-muted-foreground">{s.label}</p>
+                <p className="text-xs text-muted-foreground">{t(s.labelKey)}</p>
               </div>
             ))}
           </div>
@@ -135,8 +138,8 @@ export function OrganizationPage() {
       <ConfirmDeleteDialog
         open={Boolean(deleteTarget)}
         onOpenChange={(o) => !o && setDeleteTarget(null)}
-        title={`Delete "${deleteTarget?.name}"?`}
-        description="This removes the organization and all of its data. The demo organization is never affected."
+        title={t("orgPage.deleteTitle", { name: deleteTarget?.name ?? "" })}
+        description={t("orgPage.deleteDescription")}
         onConfirm={handleDelete}
       />
     </div>

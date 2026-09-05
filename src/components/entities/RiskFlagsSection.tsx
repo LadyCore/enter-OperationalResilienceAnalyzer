@@ -1,18 +1,21 @@
+import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
-import { RISK_CATEGORY_LABELS, type RiskFlag } from "@/lib/analysis";
+import type { RiskFlag } from "@/lib/analysis";
 import { RiskFlagCard } from "@/components/common/RiskFlagCard";
+import { riskCategoryLabelKeys } from "@/components/common/riskI18n";
 
 interface RiskFlagsSectionProps {
   flags: RiskFlag[];
 }
 
 export function RiskFlagsSection({ flags }: RiskFlagsSectionProps) {
+  const { t } = useTranslation();
   const categories = Array.from(new Set(flags.map((f) => f.category)));
 
   if (flags.length === 0) {
     return (
       <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-        No risk flags detected with the current data.
+        {t("riskFlags.none")}
       </div>
     );
   }
@@ -25,7 +28,7 @@ export function RiskFlagsSection({ flags }: RiskFlagsSectionProps) {
           <section key={category}>
             <div className="mb-2 flex items-center gap-2">
               <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                {RISK_CATEGORY_LABELS[category]}
+                {t(riskCategoryLabelKeys[category])}
               </h3>
               <Badge variant="secondary" className="font-mono">
                 {items.length}
