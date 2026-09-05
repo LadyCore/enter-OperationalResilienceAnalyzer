@@ -1,240 +1,159 @@
-# Escenario de simulación multi-persona + Cobertura por vacaciones + Guardia pasiva en ORA
+# ORA · H-010 — Screenshots a Storage + email de confirmación de feedback
 
 ## Context
 
-ORA modela la resiliencia operacional desde personas cuyas capacidades habituales (`taskIds`,
-`competencyIds`) definen la cobertura de cada tarea. Necesita evolucionar en dos ejes:
+Hoy cada reporte de feedback guarda las capturas como data URLs base64 dentro de
+`feedback_reports.context.screenshots` (una fila real pesa ~106 KB). Eso escala mal
+en tamaño de fila y mantiene PII/imágenes embebidas en la base de datos.
 
-1. **Simulación multi-persona simultánea** (capacidad general de ORA, no solo vacaciones): hoy
-   `simulateAbsence(db, personId, days)` modela una única persona ausente. Se requiere un modelo de
-   **escenario** donde varias personas están indisponibles a la vez — vacaciones masivas, bajas
-   simultáneas, pérdida simultánea de personas clave, combinación de tipos — y el resultado es el
-   **estado conjunto** de la organización tras aplicar todas las indisponibilidades (nunca la suma
-   de simulaciones individuales).
-2. **Dos conceptos operacionales nuevos**, siempre separados del rol habitual de la persona:
-   - **Cobertura temporal por ausencia planificada (vacaciones)**: persona B cubre tareas concretas
-     de la persona A solo durante la ausencia de A, con categoría "Vacations". No altera el perfil
-     ordinario de B ni la estructura org.
-   - **Guardia pasiva (on-call)**: disponibilidad operacional permanente de una persona fuera del
-     horario ordinario (H24 o turnos, esquema libre), que cubre un set de tareas. No reemplaza a
-     nadie, **no** participa en simulaciones y **no** se agrega a `holdersOf`/`capablePeople` del
-     análisis base.
+La mejora H-010 pide:
+1. **Migrar screenshots a file storage** (bucket **privado** `feedback-screenshots` +
+   URLs firmadas temporales para el admin). No romper históricos; regla **1–3
+   screenshots** validada en frontend **y** backend.
+2. **Email de confirmación al autor** tras persistir el reporte (best-effort: suma
+   ~2–5 s, nunca bloquea el reporte si el email falla; errores logueados).
+   Contenido: app, confirmación, ID reporte, fecha, tipo, módulo, N screenshots.
+   Texto "received with N screenshot(s)" sin adjuntar imágenes.
+3. **Migrar también los históricos** (data URLs base64 → Storage), **conservando el
+   original** (`context.screenshotsLegacy`) hasta verificar en el panel.
 
-Decisiones confirmadas con la propietaria:
-- Entidades nuevas con **tablas/colecciones separadas** (patrón `org_scoped` existente).
-- Cobertura por vacaciones = tareas concretas + competencias que mitigan en simulación.
-- Guardia = tareas concretas + modalidad/período **texto libre** + competencias.
-- Ambas se cargan desde la **planilla** (columnas opcionales) y se administran en **tabs nuevos
-  dentro de People**.
-- El **seed del demo** incluye ejemplos de ambas.
-- Indicadores de guardia pasiva en el **dashboard principal**.
-- Simulación: **tipo global en la UI + override por persona**; exposición temporal **por tarea**
-  según las ausencias que la afectan.
-- Si una persona figura como cobertura pero **también está ausente en el mismo escenario, no puede
-  usarse como cobertura**.
+Decisiones de producto confirmadas por el owner:
+- El **email es obligatorio para todo reporte** (también anónimos). Se pide en el diálogo.
+- El email se envía **dentro de la misma operación de persistencia**, best-effort.
+- Arquitectura: **bucket privado + URLs firmadas vía backend function** y email
+  reutilizando **Turbo SMTP** (secrets `TURBO_SMTP_USER` / `TURBO_SMTP_PASSWORD`).
+- Idempotencia: `reportId` (uuid) generado en el cliente; reintentos no duplican fila ni email.
 
-## Invariantes (reglas conceptuales)
+## Arquitectura elegida
 
-- `Person.taskIds/competencyIds` = rol habitual. No se tocan para guardias ni coberturas.
-- Cobertura de vacaciones **solo** en ausencias `planned` con categoría `Vacation`, evaluada
-  considerando **todas** las personas ausentes del escenario a la vez.
-- Una persona ausente **no aporta** cobertura ni competencias a otra ausente en ese escenario.
-- Las no seleccionadas permanecen disponibles según su perfil ordinario.
-- La guardia pasiva nunca es mecanismo de cobertura de vacaciones ni entra en `holdersOf`/capaz
-  del análisis base.
-- El resultado de un escenario refleja el estado conjunto tras aplicar simultáneamente todas las
-  indisponibilidades.
+La persistencia pasa por una backend function `submit-feedback` (la única forma de
+validar 1–3 en backend real y enviar email tras persistir en una sola operación).
+RLS existente **no se toca** (insert/select/update siguen iguales); la fila se
+inserta con el id del cliente y `ignoreDuplicates`. El bucket se crea desde la
+function con service role (`storage.createBucket`) — no se hace DDL ni policies en
+el esquema `storage`.
 
-## Modelo de simulación (núcleo nuevo)
+### Formato de `context.screenshots` (array de strings, como hoy)
+- **Histórico / old:** `"data:image/jpeg;base64,..."`
+- **Nuevo / migrado:** storage key string → `feedback/{reportId}/{i}.jpg`
+  (dentro del bucket privado `feedback-screenshots`). Se conserva `string[]`, así
+  conteo, tests y regla 1–3 no cambian de forma.
 
-`src/lib/simulation.ts` evoluciona:
+El admin resuelve las keys con URLs firmadas **solo al abrir el detalle**, vía una
+function que exige JWT y deja que RLS del reporte decida (usuario propietario u
+owner). Migración de históricos: function **solo owner** que recorre filas con data
+URLs, las sube a Storage y reescribe `context` conservando el original en
+`context.screenshotsLegacy`.
 
-```ts
-export type AbsenceKind = "temporary" | "planned" | "permanent";
+## Cambios de backend
 
-export interface ScenarioAbsence {
-  personId: string;
-  kind: AbsenceKind;
-  category?: string;   // planned: "Vacation", "Maternity / parental leave", "Training", …
-  days?: number;       // temporary / planned (duración)
-  startDate?: string;  // planned
-  endDate?: string;    // planned
-}
+### Migración SQL (defensa en profundidad, no toca RLS)
+Nuevo trigger en `feedback_reports` **solo INSERT** que exige
+`context->'screenshots'` array de 1 a 3 strings no vacíos. No es CHECK para no
+romper UPDATE de estado sobre filas viejas. Se aplica con `supabase_migration`.
 
-export function simulateScenario(db: Db, absences: ScenarioAbsence[]): ScenarioResult;
-```
+### Backend functions (en `supabase/functions/`)
+| Function | verify_jwt | Rol | Qué hace |
+|---|---|---|---|
+| `submit-feedback` | `false` | anon + autenticado | valida payload (kind, description, email, 1–3 capturas data URL, tamaños); resuelve `user_id` del JWT si hay sesión; asegura bucket privado; sube cada captura decodificada a `feedback/{id}/{i}.jpg`; inserta fila `id=clientReportId` con `context.screenshots`=keys y `context.reporterEmail`=email (insert `.upsert(..., {onConflict:'id', ignoreDuplicates:true})`); si la fila **ya existía** → responde OK sin re-enviar (idempotente); si fue insert nuevo → envía email Turbo SMTP best-effort y guarda `context.confirmation` `{state:'sent'\|'failed', sentAt, error}`; devuelve `{ok, id, emailState}` |
+| `feedback-screenshot-urls` | `true` (default) | autor del reporte u owner | body `{reportId}`; crea client con el JWT del caller (RLS decide quién puede ver); firma con service role cada key de `context.screenshots` que no sea `data:`; devuelve `{urls:[{index,url}]}` por índice original |
+| `feedback-migrate-screenshots` | `true` (default) | **solo owner** (`is_owner()` con client del caller) | procesa N filas por llamada cuyo `context.screenshots` contenga algún `data:`; por cada una sube a `feedback/{id}/{i}.jpg`, escribe `context.screenshots`=keys y guarda el original en `context.screenshotsLegacy`; devuelve `{scanned,migrated,skipped,remaining}` |
 
-Cómo se construye el Db simulado (una sola copia para todo el escenario):
-1. Todas las personas del escenario quedan `isActive: false`.
-2. Se colectan las coberturas de vacaciones aplicables: cobertura `B → A` entra **solo** si la
-   ausencia de A es `planned` + categoría `Vacation`, `B.isActive`, **B no está en el escenario**, y
-   A está en el escenario.
-3. En la copia simulada, a cada B aplicable se le **agregan** los `taskIds`/`competencyIds` de la
-   cobertura (capacidad temporal, nunca en el db real).
-4. Se corre el diff/impacto **conjunto** (misma lógica actual, generalizada).
+Detalles comunes: `Deno.serve`, CORS (headers `authorization, x-client-info,
+apikey, content-type`), imports desde esm.sh, client `createClient(SUPABASE_URL,
+SUPABASE_SERVICE_ROLE_KEY, {auth:{persistSession:false}})` (env estándar que el
+runtime ya inyecta; se valida en logs), **sin SQL crudo**. Email: helper SMTP en
+línea copiado del patrón de `smtp-diagnose` (TLS 465 a `pro.turbo-smtp.com`, FROM
+`no-reply@oraresilience.com`), cuerpo plano con los datos + "received with N
+screenshot(s)", sin adjuntos.
 
-`SimulationResult` se generaliza conservando la superficie de métricas que la UI usa hoy:
-- `absences: ResolvedAbsence[]` (persona + kind + category + days) en lugar de `person` único.
-- Campos agregados intactos: `affectedTaskIds`, `uncoveredTaskIds`, `reducedToSingleTaskIds`,
-  `affectedFunctionIds`, `affectedProcessIds`, competencias, critical tasks/processes,
-  `singleHolderCriticalCompetencyIds`, `taskChanges`, `summary`.
-- Por tarea, se resuelve **qué ausencias la gobiernan** (ausentes que eran capaces de esa tarea
-  antes del escenario) para la exposición: `governingAbsencesByTask: Record<taskId, ResolvedAbsence[]>`.
-- Mitigación por cobertura: `vacationCoveredTaskIds`, `vacationCoveredCompetencyIds`,
-  `appliedCoverages: { covererName: string; coveredName: string; taskNames: string[] }[]`.
-- `busFactorAtRisk` se conserva como lista por persona ausente concentradora (puede haber varias).
+### `supabase/config.toml`
+Añadir `[functions.submit-feedback] verify_jwt = false`. Las otras dos usan el
+default (`true`).
 
-Compatibilidad: `simulateAbsence(db, personId, days)` pasa a ser un wrapper que construye un
-escenario de una persona `temporary` (los tests existentes se migran al nuevo API y a
-`buildExposureReport` por escenario, pero el comportamiento esperado no cambia).
+## Cambios de frontend
 
-## Exposición temporal por tarea (`src/lib/exposure.ts`)
+- `src/lib/feedback/types.ts` — `FeedbackInput.email: string` (obligatorio).
+- `src/lib/feedback/screenshots.ts` — helper `assertFeedbackEmailValid(email)`
+  (no vacío + formato básico). Se mantiene `assertFeedbackScreenshotsValid`.
+- `src/lib/feedback/api.ts` — `submitFeedback()` genera `crypto.randomUUID()` y
+  llama `supabase.functions.invoke('submit-feedback', {body})`; valida email +
+  1–3 antes; devuelve `{id, emailState}`. Se elimina el insert directo.
+- `src/lib/feedback/admin.ts` — helpers puros:
+  - `isStorageScreenshotKey(value)` → no empieza por `data:`.
+  - `parseFeedbackReporterEmail(context)` (lee `context.reporterEmail`).
+  - `fetchFeedbackScreenshotUrls(reportId)` → invoke `feedback-screenshot-urls`.
+- `src/components/feedback/FeedbackDialog.tsx` — input de **email obligatorio**
+  (prefill con email de sesión vía `FeedbackFab`); mensaje de privacidad breve;
+  pantalla de éxito menciona el email de confirmación; estados de error si el
+  email falla (el reporte igual quedó persistido).
+- `src/components/feedback/FeedbackFab.tsx` — pasa `user?.email` como email inicial.
+- `src/components/feedback/FeedbackDetailDialog.tsx` — muestra email del autor
+  (perfil si hay `user_id`, si no `context.reporterEmail`); resuelve screenshots:
+  las `data:` se renderizan directo; las storage keys piden URLs firmadas al abrir
+  el detalle (estado loading/error por si expira o falla) y se muestran igual.
+- `src/pages/FeedbackAdminPage.tsx` — botón owner-only **"Move historical
+  screenshots to secure storage"** que invoca `feedback-migrate-screenshots` y
+  muestra resultado (migrated/remaining) con toast.
 
-- `buildExposureReport(db, result)` ya no recibe `isPermanent` global: lo deriva por tarea desde
-  `governingAbsencesByTask`.
-- Por tarea afectada: si alguna ausencia que la gobierna es `permanent` → `sustained`; si no, el
-  nivel se calcula con la duración máxima entre sus ausencias gobernantes (short/prolonged/sustained
-  con los umbrales actuales de `exposure.ts`).
-- Las tareas cubiertas por cobertura de vacaciones quedan sin impacto si la cobertura las sostiene.
+## Reuso
+- `fileToCompressedDataUrl()` (compresión a JPEG) — sin cambios.
+- `assertFeedbackScreenshotsValid()` — sin cambios (misma regla 1–3).
+- Patrón SMTP de `supabase/functions/smtp-diagnose/index.ts` (secrets Turbo).
+- `parseFeedbackContext` / tabla + RLS existentes intactas.
+- Tipos `Database["public"]["Tables"]["feedback_reports"]` sin cambios de columna
+  (todo vive en `context`, columna ya `jsonb`).
 
-## Modelo de datos persistente
-
-### Colecciones nuevas en `Db` (`src/types/index.ts`)
-
-```ts
-export interface VacationCoverage {
-  id: string;
-  coveringPersonId: string;  // B: cubre
-  coveredPersonId: string;   // A: dependencia original
-  roleId?: string;           // rol de A que cubre (opcional)
-  taskIds: string[];         // tareas concretas de A que B puede realizar
-  competencyIds: string[];   // competencias habilitantes (mitigan en sim de vacaciones)
-}
-
-export interface OnCallAssignment {
-  id: string;
-  personId: string;
-  modality: string;          // texto libre: "H24", "Shifts"…
-  period: string;            // texto libre: "Night", "Weekend", "Semana 2"…
-  taskIds: string[];         // función/capacidad cubierta = tareas
-  competencyIds: string[];
-}
-```
-
-- `Db` gana `vacationCoverages: VacationCoverage[]` y `onCallAssignments: OnCallAssignment[]`;
-  `Entity` y `CollectionKey` se extienden.
-
-### Migración SQL nueva
-
-Patrón de `migration_20260829_233022000` (tablas `org_scoped`):
-- `public.vacation_coverages`: `id text pk`, `organization_id` → orgs (cascade),
-  `covering_person_id` → people, `covered_person_id` → people, `role_id` → roles (nullable),
-  `task_ids text[]`, `competency_ids text[]`, `check (covering_person_id <> covered_person_id)`.
-- `public.on_call_assignments`: `id text pk`, `organization_id` → orgs (cascade),
-  `person_id` → people, `modality text`, `period text`, `task_ids text[]`, `competency_ids text[]`.
-- RLS habilitada + policies `*_org_scoped` (`organization_id = any(user_org_ids())` + `with check`).
-- Actualizar `public.bootstrap_demo_organization(p_data jsonb)` para insertar ambas (estilo
-  `jsonb_to_recordset` existente), después de people.
-
-## Archivos a modificar
-
-| Archivo | Cambio |
-|---|---|
-| `supabase/migrations/<nueva>` | Tablas + RLS + bootstrap |
-| `src/types/index.ts` | Tipos nuevos + `Db`/`Entity`/`CollectionKey` |
-| `src/store/OraContext.tsx` | `EMPTY_DB` con los dos arrays |
-| `src/data/seed.ts` | Arrays + ejemplos + `remapSeedIds` |
-| `src/integrations/ora/api.ts` | `TableName`, `COLLECTION_TABLE`, `payloadFor`, converters, `loadOrganization`, onda nueva en `insertChildren`, `CHILD_TABLES`, `ensureDemoOrganization` |
-| `src/lib/simulation.ts` | Núcleo `simulateScenario` + wrapper `simulateAbsence` |
-| `src/lib/exposure.ts` | Exposición por tarea desde el escenario |
-| `src/components/entities/SimulationPanel.tsx` | Builder de escenario multi-persona |
-| `src/pages/SimulationPage.tsx` | Ajuste de copys |
-| `src/lib/oncall.ts` (nuevo) + `oncall.test.ts` | Métricas permanentes de guardia |
-| `src/pages/Dashboard.tsx` | Card "On-call (guardia)" solo con datos |
-| `src/pages/PeoplePage.tsx` | Tab "Coverage & on-call" |
-| `src/components/entities/VacationCoveragePanel.tsx` (nuevo) + diálogo | CRUD coberturas |
-| `src/components/entities/OnCallPanel.tsx` (nuevo) + diálogo | CRUD guardias |
-| `src/lib/importer/types.ts` | `ImportField`/labels/`NormalizedRow`/summary |
-| `src/lib/importer/mapping.ts` | keywords de sugerencia |
-| `src/lib/importer/validate.ts` | campos opcionales + duplicados + resoluciones |
-| `src/lib/importer/buildOrganization.ts` | Construcción de ambas colecciones |
-| `src/lib/importer/downloadTemplate.ts` | Columnas opcionales + instrucciones |
-| `public/PLANTILLA DE DATOS.xlsx` | Regenerar |
-| `src/components/import/ValidationReport.tsx` | Contadores nuevos |
-| `src/pages/ImportOrganizationPage.tsx` | Stats de confirmación |
-| `src/components/import/ImportHelpCard.tsx` | Ayuda de campos opcionales |
-| Tests | `simulation.test.ts`, `analysis.test.ts`, `exposure.test.ts`, nuevos de escenario/cobertura/on-call/import |
-
-Nota: `src/integrations/supabase/types.ts` es generado — no se edita; el código nuevo usa el patrón
-`as never` de `upsertRow`/`ensureDemoOrganization`. Reutilizar `MultiSelect`, `SearchableSelect`,
-`Field`, `uid()`, patrones de `PersonFormDialog` y `downloadTemplate`.
-
-## UI del escenario (SimulationPanel)
-
-- Tipo global (Temporary / Planned / Permanent) con su control actual (días / fechas + categoría).
-- Carga eficiente de muchas personas: `SearchableSelect` multi-add + chips con el **conjunto
-  incluido, visible antes de ejecutar** (nombres, tipo, período de cada fila).
-- Cada fila admite **override** del tipo global y sus campos (días / fechas+categoría).
-- Categoría "Vacation" disponible en planned; al ejecutar un escenario con vacaciones, si existen
-  coberturas aplicables se muestra banner "N coberturas aplicadas" + StatCards de mitigación
-  (tareas/competencias cubiertas).
-- Resultado: impactos agregados del escenario conjunto (taskChanges before→after, funciones,
-  procesos, competencias, critical tasks), lista de ausentes con su tipo, y exposición por tarea.
-
-## Planilla (columnas opcionales; vacías = sin datos, sin errores)
-
-Formato "una fila = una persona", multivalores `;`:
-- **Guardia** (fila = persona en guardia): `Guardia pasiva (Sí/No)` · `Modalidad guardia` ·
-  `Turno/Período guardia` · `Tareas de guardia` · `Competencias de guardia`.
-- **Cobertura** (fila = B que cubre): `Cubre ausencias de (Legajo o nombre de A)` ·
-  `Rol que cubre (opcional)` · `Tareas que cubre` · `Competencias de cobertura`.
-
-Validación: fila repetida no es duplicado si difiere en (área, rol, guardia, persona cubierta);
-warnings no bloqueantes para tareas de cobertura ajenas a A / modalidad vacía con tareas de guardia
-/ referencias inexistentes.
-
-## Seed del demo
-
-Ejemplos en Meridian Group:
-- Coberturas: Jorge cubre `t_validate`/`t_quote` (+ `c_pricing`) de Diana; Ana cubre
-  `t_backup`/`t_restore` de Bruno.
-- Guardias: Carlos (`Shifts`/`Night`, `t_triage`), Ana (`H24`/`H24`, `t_patch`/`t_triage`) para
-  poblar tab y dashboard.
+## Archivos críticos
+- `supabase/functions/submit-feedback/index.ts` (nuevo)
+- `supabase/functions/feedback-screenshot-urls/index.ts` (nuevo)
+- `supabase/functions/feedback-migrate-screenshots/index.ts` (nuevo)
+- `supabase/config.toml`
+- Migración SQL vía `supabase_migration` (trigger INSERT 1–3)
+- `src/lib/feedback/{types,screenshots,api,admin}.ts`
+- `src/components/feedback/{FeedbackDialog,FeedbackFab,FeedbackDetailDialog}.tsx`
+- `src/pages/FeedbackAdminPage.tsx`
 
 ## Implementation checklist
-
-- [ ] Migración crea `vacation_coverages` y `on_call_assignments` con FK/arrays/RLS `org_scoped` y
-      actualiza `bootstrap_demo_organization`.
-- [ ] `types/index.ts`: `VacationCoverage`, `OnCallAssignment`, `Db`, `Entity`, `CollectionKey`.
-- [ ] `OraContext.tsx` `EMPTY_DB` incluye ambos arrays.
-- [ ] `api.ts`: tablas en `COLLECTION_TABLE`, `payloadFor`, converters, `loadOrganization`,
-      onda de inserción post tasks/people, `CHILD_TABLES` primero, `ensureDemoOrganization`.
-- [ ] `seed.ts`: arrays poblados + `remapSeedIds` remapea sus ids.
-- [ ] `simulation.ts`: `simulateScenario` multi-ausencia simultánea (reglas de exclusión de
-      cobertura y de ausentes como coverers), `SimulationResult` generalizado, wrapper
-      `simulateAbsence` de compatibilidad.
-- [ ] `exposure.ts`: exposición por tarea según `governingAbsencesByTask` (permanent → sustained;
-      resto por duración máxima); `buildExposureReport` sin flag global.
-- [ ] `SimulationPanel`: builder con tipo global + override por fila + carga multi-persona + vista
-      previa del conjunto + activación de cobertura solo en planned/Vacation.
-- [ ] UI People: tab "Coverage & on-call" + diálogos CRUD.
-- [ ] `oncall.ts` + card en Dashboard solo con datos + test.
-- [ ] Importador: campos opcionales de ambas + duplicados extendidos + warnings + contadores +
-      plantilla regenerada + ayuda.
-- [ ] Tests nuevos (escenario multi, exclusión de coverers ausentes, mitigación, on-call, import
-      con columnas vacías/pobladas) y migración de tests existentes al nuevo API.
+- [ ] Migración SQL aplicada: trigger BEFORE INSERT en `feedback_reports` que exige
+      `context->'screenshots'` array con 1–3 strings no vacíos; verificar con
+      `supabase_get_table_schema`.
+- [ ] `config.toml` con `[functions.submit-feedback] verify_jwt = false`.
+- [ ] Escribir `submit-feedback/index.ts`: validaciones (kind, description, email,
+      1–3 data URLs, topes de tamaño), resolución de `user_id` por JWT, ensure
+      bucket privado `feedback-screenshots`, upload `feedback/{id}/{i}.jpg`,
+      insert `onConflict:'id' ignoreDuplicates`, email Turbo SMTP best-effort,
+      `context.confirmation` y respuesta `{ok,id,emailState}`.
+- [ ] Deploy de `submit-feedback` y comprobación en logs de que
+      `SUPABASE_SERVICE_ROLE_KEY` está disponible y el bucket se crea.
+- [ ] Escribir y desplegar `feedback-screenshot-urls`: devuelve URLs firmadas por
+      índice solo si RLS deja leer la fila al caller.
+- [ ] Escribir y desplegar `feedback-migrate-screenshots`: solo owner, conserva
+      `context.screenshotsLegacy`, devuelve contadores; probado contra fila real
+      `ad6c7170-ea31-46a0-afb7-b4b201a4eba9`.
+- [ ] Frontend `types.ts` + `screenshots.ts` (email) + `api.ts` (invoke, uuid).
+- [ ] `FeedbackDialog.tsx`: campo email obligatorio + validación + textos.
+- [ ] `FeedbackFab.tsx`: prefill email de sesión.
+- [ ] `admin.ts` helpers + `FeedbackDetailDialog.tsx`: render data: directo, storage
+      keys vía URLs firmadas, email del autor correcto.
+- [ ] `FeedbackAdminPage.tsx`: botón de migración owner-only con resultado.
+- [ ] Tests de unidad actualizados/añadidos para helpers nuevos y regla de email
+      (mantener suite `feedback/*.test.ts` verde).
 
 ## Verification checklist
-
-- [ ] `pnpm run build` en verde (tsc + vite) y suite `vitest` en verde.
-- [ ] Positivo multi: escenario de 30 vacaciones simultáneas calcula el estado conjunto; una
-      cobertura cuyo coverer también está ausente **no** se aplica.
-- [ ] Positivo: ausencia única planned + Vacation con cobertura muestra tareas/competencias
-      cubiertas; temporary/planned no-vacación/permanent idénticos a antes.
-- [ ] Default: org sin guardias ni coberturas importa sin errores ni advertencias; persona repetida
-      con distinta (guardia/persona cubierta) no es duplicado.
-- [ ] RLS: un usuario autenticado solo ve/edita coberturas y guardias de sus organizaciones.
-- [ ] Dashboard: card on-call visible con seed y ausente al borrar guardias.
-- [ ] People > Coverage & on-call: crear/editar/borrar persiste tras recargar la org.
-- [ ] Exposición por tarea: escenario mixto (29 vacaciones 15d + 1 permanent) marca sustained solo
-      las tareas gobernadas por la ausencia permanente.
+- [ ] `pnpm lint` + `pnpm exec tsc --noEmit` + `pnpm test` (suite completa en verde).
+- [ ] Regla 1–3: 0 capturas → bloqueado; 1/2/3 → OK; 4ª → bloqueada (frontend **y**
+      function devuelve error si se fuerza por la API).
+- [ ] Envío real (feedback): reporte con 1, 2 y 3 screenshots persiste con keys de
+      storage (no base64) y `context.reporterEmail`; verificar fila por
+      `supabase_read_query` (tamaño de fila pequeño).
+- [ ] Idempotencia: repetir el mismo `reportId` no crea fila duplicada ni reenvía email.
+- [ ] Email: logs de `submit-feedback` muestran SMTP 250/aceptado (Turbo), con
+      contenido reporte id/fecha/tipo/módulo/N screenshots y sin adjuntos; si SMTP
+      falla, el reporte sigue persistido y `context.confirmation.state='failed'`.
+- [ ] Admin: abrir detalle como owner → screenshots visibles vía URL firmada (imagen
+      carga en el panel); como no-owner/no-autor → la function no firma (403/vacío).
+- [ ] Histórico: fila `ad6c7170-…` migrada → screenshots visibles y
+      `context.screenshotsLegacy` conserva el base64 original.
+- [ ] Email obligatorio: intentar submit sin email → error de validación en frontend
+      y en la function.
