@@ -139,3 +139,15 @@ export function parseFeedbackContext(context: FeedbackRow["context"]): Partial<F
   if (!context || typeof context !== "object" || Array.isArray(context)) return {};
   return context as Partial<FeedbackTechnicalContext>;
 }
+
+/**
+ * Extract the screenshots attached to a report from its stored context.
+ * They were persisted as compressed JPEG data URLs under `context.screenshots`
+ * by the submit flow, so no storage bucket or external reference is needed.
+ */
+export function parseFeedbackScreenshots(context: FeedbackRow["context"]): string[] {
+  if (!context || typeof context !== "object" || Array.isArray(context)) return [];
+  const shots = (context as Record<string, unknown>).screenshots;
+  if (!Array.isArray(shots)) return [];
+  return shots.filter((s): s is string => typeof s === "string" && s.length > 0);
+}

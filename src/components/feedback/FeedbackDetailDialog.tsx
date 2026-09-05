@@ -15,7 +15,12 @@ import {
 } from "@/components/ui/select";
 import type { Database } from "@/integrations/supabase/types";
 import { FEEDBACK_KINDS } from "@/lib/feedback/types";
-import { FEEDBACK_STATUSES, parseFeedbackContext, type FeedbackStatus } from "@/lib/feedback/admin";
+import {
+  FEEDBACK_STATUSES,
+  parseFeedbackContext,
+  parseFeedbackScreenshots,
+  type FeedbackStatus,
+} from "@/lib/feedback/admin";
 
 type FeedbackRow = Database["public"]["Tables"]["feedback_reports"]["Row"];
 
@@ -44,6 +49,7 @@ export function FeedbackDetailDialog({
 }: FeedbackDetailDialogProps) {
   if (!feedback) return null;
   const ctx = parseFeedbackContext(feedback.context);
+  const screenshots = parseFeedbackScreenshots(feedback.context);
   const kindLabel = FEEDBACK_KINDS.find((k) => k.value === feedback.kind)?.label ?? feedback.kind;
 
   return (
@@ -94,6 +100,39 @@ export function FeedbackDetailDialog({
             <p className="whitespace-pre-wrap rounded-lg border bg-muted/40 p-3 text-sm leading-relaxed">
               {feedback.description}
             </p>
+          </div>
+
+          {/* Screenshots — H-010 captures (persisted with the report) */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Screenshots ({screenshots.length})
+            </p>
+            {screenshots.length === 0 ? (
+              <p className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                No screenshots attached to this report.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {screenshots.map((shot, index) => (
+                  <a
+                    key={index}
+                    href={shot}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block overflow-hidden rounded-lg border bg-muted/40 transition-opacity hover:opacity-90"
+                  >
+                    <img
+                      src={shot}
+                      alt={`Screenshot ${index + 1}`}
+                      className="max-h-64 w-full object-contain"
+                    />
+                    <p className="border-t px-3 py-1.5 text-center text-xs text-muted-foreground">
+                      Screenshot {index + 1} — open full size
+                    </p>
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Reporter */}
