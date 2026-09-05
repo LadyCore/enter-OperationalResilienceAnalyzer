@@ -65,9 +65,6 @@ export function TermsPage() {
             <span className="rounded-full border bg-muted/40 px-3 py-1 text-xs font-medium text-muted-foreground">
               {t("terms.effective")}: {effectiveLabel}
             </span>
-            <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-700">
-              {t("terms.draft")}
-            </span>
           </div>
         </header>
 
