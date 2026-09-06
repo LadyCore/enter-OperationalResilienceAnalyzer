@@ -455,6 +455,8 @@
   "sim.peopleLabel": "Personas en el escenario",
   "sim.periodFrom": "Periodo por defecto — desde",
   "sim.periodTo": "Periodo por defecto — hasta",
+  "sim.plannedLockedHint": "Vacaciones, licencias por maternidad/paternidad, capacitación, asignaciones y otras ausencias planificadas — disponibles con la licencia completa.",
+  "sim.plannedRequiresLicense": "Adquirí una licencia para aprovechar todas nuestras funcionalidades.",
   "sim.reducedToSingle": "Reducidas a una sola persona",
   "sim.removeAria": "Quitar a {{person}}",
   "sim.requiredByCritical": " · requerida por tareas críticas",

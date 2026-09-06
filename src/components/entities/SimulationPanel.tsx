@@ -58,6 +58,9 @@ const KIND_TOGGLE_KEYS: Record<AbsenceKind, string> = {
   permanent: "sim.toggle.permanent",
 };
 
+/** All absence kinds shown in the default-type selector, in display order. */
+const ABSENCE_KINDS: AbsenceKind[] = ["temporary", "planned", "permanent"];
+
 interface Row {
   localId: number;
   personId: string;
@@ -80,11 +83,10 @@ export function SimulationPanel() {
   const { t } = useTranslation();
   const { db, access } = useOra();
   const demoLimited = isDemoLimited(access);
-  // Limited DEMOs keep unplanned (temporary) and permanent absences; planned
-  // (calendar-based) absences and their coverage planning need a full license.
-  const availableKinds: AbsenceKind[] = demoLimited
-    ? ["temporary", "permanent"]
-    : ["temporary", "planned", "permanent"];
+  // Limited DEMOs keep unplanned (temporary) and permanent absences fully
+  // working. "Planned absence" stays VISIBLE but locked for them (commercial
+  // upgrade prompt); full-license accounts use it normally.
+  const plannedLocked = demoLimited;
   const [rows, setRows] = useState<Row[]>([]);
   const [globalKind, setGlobalKind] = useState<AbsenceKind>("temporary");
   const [globalDays, setGlobalDays] = useState(60);
@@ -160,8 +162,8 @@ export function SimulationPanel() {
     }
     // Defense in depth: a limited DEMO must never run planned absences, even if
     // a planned row somehow reached the included set.
-    if (demoLimited && rows.some((r) => r.kind === "planned")) {
-      toast.error(t("sim.demoPlannedLocked"));
+    if (plannedLocked && rows.some((r) => r.kind === "planned")) {
+      toast(t("sim.plannedRequiresLicense"));
       return;
     }
     const invalid = rows.find(
@@ -198,28 +200,42 @@ export function SimulationPanel() {
           <div className="grid gap-4 rounded-lg border bg-muted/40 p-4 sm:grid-cols-[1fr_auto_auto] sm:items-end">
             <Field
               label={t("sim.defaultType")}
-              hint={t("sim.defaultHint")}
+              hint={plannedLocked ? t("sim.plannedLockedHint") : t("sim.defaultHint")}
             >
               <div className="flex h-10 items-center gap-1 rounded-md border bg-card p-1">
-                {availableKinds.map((key) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => {
-                      setGlobalKind(key);
-                      setResult(null);
-                    }}
-                    aria-pressed={globalKind === key}
-                    className={cn(
-                      "h-7 rounded px-3 text-xs font-medium transition-colors",
-                      globalKind === key
-                        ? "bg-card text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {t(KIND_TOGGLE_KEYS[key])}
-                  </button>
-                ))}
+                {ABSENCE_KINDS.map((key) => {
+                  const isLocked = plannedLocked && key === "planned";
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => {
+                        if (isLocked) {
+                          // Visible-but-disabled for the DEMO plan: a clear
+                          // commercial message instead of selecting the kind.
+                          toast(t("sim.plannedRequiresLicense"));
+                          return;
+                        }
+                        setGlobalKind(key);
+                        setResult(null);
+                      }}
+                      aria-pressed={globalKind === key}
+                      aria-disabled={isLocked || undefined}
+                      title={isLocked ? t("sim.plannedRequiresLicense") : undefined}
+                      className={cn(
+                        "flex h-7 items-center gap-1.5 rounded px-3 text-xs font-medium transition-colors",
+                        isLocked
+                          ? "cursor-not-allowed border border-dashed border-border bg-muted/40 text-muted-foreground/70"
+                          : globalKind === key
+                            ? "bg-card text-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {t(KIND_TOGGLE_KEYS[key])}
+                      {isLocked && <Lock className="h-3 w-3" aria-hidden="true" />}
+                    </button>
+                  );
+                })}
               </div>
             </Field>
             {globalKind === "temporary" && (
