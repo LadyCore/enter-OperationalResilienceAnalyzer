@@ -964,5 +964,20 @@
   "errorScreen.backHome": "Back to home",
   "errorScreen.message": "Something unexpected happened in ORA. The incident was logged. Reload to continue, or return to home.",
   "errorScreen.retry": "Reload",
-  "errorScreen.title": "Unexpected application error"
+  "errorScreen.title": "Unexpected application error",
+  "risk.desc.compMany": "Only {{count}} people hold this competency, which critical tasks require ({{tasks}}).",
+  "risk.desc.compOne": "Only {{person}} holds this competency, which critical tasks require ({{tasks}}).",
+  "risk.desc.doc": "This critical task has no documentation, so its knowledge cannot be transferred easily.",
+  "risk.desc.noCoverage": "No active person is capable of performing this task.",
+  "risk.desc.personExclusive": "These critical tasks ({{tasks}}) rely on a limited number of capable people. If {{person}} is unavailable, {{exclusive}} of them would have no alternative coverage.",
+  "risk.desc.personReduced": "These critical tasks ({{tasks}}) rely on a limited number of capable people. Their absence would leave several of them with reduced backup coverage.",
+  "risk.desc.role": "Everyone capable of this critical task belongs to the {{role}} role.",
+  "risk.desc.single": "Only {{person}} can perform this critical task. If they are unavailable, no one can perform it.",
+  "risk.title.compMany": "Competency \"{{competency}}\" has limited coverage",
+  "risk.title.compOne": "Competency \"{{competency}}\" is concentrated in one person",
+  "risk.title.doc": "{{task}} is not documented",
+  "risk.title.noCoverage": "{{task}} has no available coverage",
+  "risk.title.person": "Capability for {{count}} critical tasks is concentrated in one person ({{person}})",
+  "risk.title.role": "Coverage for \"{{task}}\" comes from a single role",
+  "risk.title.single": "Coverage for \"{{task}}\" relies on one person"
 }

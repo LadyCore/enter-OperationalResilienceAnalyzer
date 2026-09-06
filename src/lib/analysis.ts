@@ -468,6 +468,18 @@ export interface RiskFlag {
   taskId?: string;
   personId?: string;
   competencyId?: string;
+  /** Structured data so the UI can render localized titles/descriptions. */
+  taskName?: string;
+  personName?: string;
+  competencyName?: string;
+  roleName?: string;
+  holderCount?: number;
+  /** Referenced task names (bounded top-N) used by the localized text. */
+  refNames?: string[];
+  /** Main count used by the localized text (e.g. critical task count). */
+  count?: number;
+  /** Exclusive-count variant used by person concentration. */
+  exclusive?: number;
 }
 
 export function detectRiskFlags(db: Db): RiskFlag[] {
@@ -486,6 +498,8 @@ export function detectRiskFlags(db: Db): RiskFlag[] {
         description: `Only ${people[0].name} can perform this critical task. If they are unavailable, no one can perform it.`,
         taskId: task.id,
         personId: people[0].id,
+        taskName: task.name,
+        personName: people[0].name,
       });
     }
   }
@@ -501,13 +515,15 @@ export function detectRiskFlags(db: Db): RiskFlag[] {
         title: `${task.name} has no available coverage`,
         description: "No active person is capable of performing this task.",
         taskId: task.id,
+        taskName: task.name,
       });
     }
   }
 
   // Competency concentration (1–2 holders, required by critical tasks)
   for (const c of computeCompetencyConcentration(db)) {
-    const criticalNames = c.requiredByCriticalTasks.map((t) => t.name).slice(0, 3).join(", ");
+    const refNames = c.requiredByCriticalTasks.map((t) => t.name).slice(0, 3);
+    const criticalNames = refNames.join(", ");
     if (c.holderCount === 1) {
       flags.push({
         id: `comp-${c.competency.id}`,
@@ -517,6 +533,10 @@ export function detectRiskFlags(db: Db): RiskFlag[] {
         description: `Only ${c.holders[0].name} holds this competency, which critical tasks require (${criticalNames}).`,
         competencyId: c.competency.id,
         personId: c.holders[0].id,
+        competencyName: c.competency.name,
+        personName: c.holders[0].name,
+        holderCount: c.holderCount,
+        refNames,
       });
     } else {
       flags.push({
@@ -526,6 +546,9 @@ export function detectRiskFlags(db: Db): RiskFlag[] {
         title: `Competency "${c.competency.name}" has limited coverage`,
         description: `Only ${c.holders.length} people hold this competency, which critical tasks require (${criticalNames}).`,
         competencyId: c.competency.id,
+        competencyName: c.competency.name,
+        holderCount: c.holderCount,
+        refNames,
       });
     }
   }
@@ -533,7 +556,8 @@ export function detectRiskFlags(db: Db): RiskFlag[] {
   // Person concentration (bus factor) — framed as capability concentration,
   // never as the person's value
   for (const c of computePersonConcentration(db)) {
-    const taskNames = c.criticalTasks.map((t) => t.name).slice(0, 4).join(", ");
+    const refNames = c.criticalTasks.map((t) => t.name).slice(0, 4);
+    const taskNames = refNames.join(", ");
     const exclusive = c.exclusiveCriticalTasks.length;
     flags.push({
       id: `person-${c.person.id}`,
@@ -546,6 +570,10 @@ export function detectRiskFlags(db: Db): RiskFlag[] {
           ? `If ${c.person.name} is unavailable, ${exclusive} of them would have no alternative coverage.`
           : "Their absence would leave several of them with reduced backup coverage."),
       personId: c.person.id,
+      personName: c.person.name,
+      count: c.criticalTaskCount,
+      refNames,
+      exclusive,
     });
   }
 
@@ -558,6 +586,7 @@ export function detectRiskFlags(db: Db): RiskFlag[] {
       title: `${task.name} is not documented`,
       description: "This critical task has no documentation, so its knowledge cannot be transferred easily.",
       taskId: task.id,
+      taskName: task.name,
     });
   }
 
@@ -573,6 +602,8 @@ export function detectRiskFlags(db: Db): RiskFlag[] {
         title: `Coverage for "${task.name}" comes from a single role`,
         description: `Everyone capable of this critical task belongs to the ${roleName} role.`,
         taskId: task.id,
+        taskName: task.name,
+        roleName,
       });
     }
   }

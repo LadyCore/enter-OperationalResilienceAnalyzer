@@ -3,7 +3,7 @@ import type { LucideIcon } from "lucide-react";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { RiskFlag, RiskSeverity } from "@/lib/analysis";
-import { riskCategoryLabelKeys, riskSeverityLabelKeys } from "./riskI18n";
+import { localizeRiskFlag, riskCategoryLabelKeys, riskSeverityLabelKeys } from "./riskI18n";
 
 const severityStyles: Record<RiskSeverity, { dot: string; text: string }> = {
   critical: { dot: "bg-risk-critical", text: "text-risk-critical" },
@@ -19,6 +19,7 @@ interface RiskFlagCardProps {
 export function RiskFlagCard({ flag, icon: Icon }: RiskFlagCardProps) {
   const { t } = useTranslation();
   const s = severityStyles[flag.severity];
+  const localized = localizeRiskFlag(flag, t);
   return (
     <Card className="flex gap-3 border-l-[3px] p-4 shadow-sm" style={{ borderLeftColor: "hsl(var(--border))" }}>
       <div className={cn("mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full", s.dot)} />
@@ -33,9 +34,9 @@ export function RiskFlagCard({ flag, icon: Icon }: RiskFlagCardProps) {
         </div>
         <CardTitle className="mt-1.5 flex items-center gap-2 text-[15px]">
           {Icon && <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />}
-          {flag.title}
+          {localized.title}
         </CardTitle>
-        <CardDescription className="mt-1.5">{flag.description}</CardDescription>
+        <CardDescription className="mt-1.5">{localized.description}</CardDescription>
       </div>
     </Card>
   );

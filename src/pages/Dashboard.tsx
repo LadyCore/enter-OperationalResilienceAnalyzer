@@ -27,6 +27,7 @@ import { computeDashboardMetrics, detectRiskFlags } from "@/lib/analysis";
 import { buildOnCallMetrics } from "@/lib/oncall";
 import { ImportHelpCard } from "@/components/import/ImportHelpCard";
 import { DemoBanner } from "@/components/access/DemoBanner";
+import { localizeRiskFlag } from "@/components/common/riskI18n";
 
 export function Dashboard() {
   const { t } = useTranslation();
@@ -286,8 +287,8 @@ export function Dashboard() {
                     }`}
                   />
                   <div className="min-w-0">
-                    <p className="text-sm font-medium">{flag.title}</p>
-                    <p className="text-sm text-muted-foreground">{flag.description}</p>
+                    <p className="text-sm font-medium">{localizeRiskFlag(flag, t).title}</p>
+                    <p className="text-sm text-muted-foreground">{localizeRiskFlag(flag, t).description}</p>
                   </div>
                 </li>
               ))}

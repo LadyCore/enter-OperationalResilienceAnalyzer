@@ -964,5 +964,20 @@
   "errorScreen.backHome": "Volver al inicio",
   "errorScreen.message": "Algo inesperado ocurrió en ORA. La incidencia quedó registrada. Recargá para continuar o volvé al inicio.",
   "errorScreen.retry": "Recargar",
-  "errorScreen.title": "Error inesperado en la aplicación"
+  "errorScreen.title": "Error inesperado en la aplicación",
+  "risk.desc.compMany": "Solo {{count}} personas poseen esta competencia, que las tareas críticas requieren ({{tasks}}).",
+  "risk.desc.compOne": "Solo {{person}} posee esta competencia, que las tareas críticas requieren ({{tasks}}).",
+  "risk.desc.doc": "Esta tarea crítica no tiene documentación, por lo que su conocimiento no puede transferirse fácilmente.",
+  "risk.desc.noCoverage": "Ninguna persona activa es capaz de realizar esta tarea.",
+  "risk.desc.personExclusive": "Estas tareas críticas ({{tasks}}) dependen de un número limitado de personas capaces. Si {{person}} no está disponible, {{exclusive}} de ellas no tendrían cobertura alternativa.",
+  "risk.desc.personReduced": "Estas tareas críticas ({{tasks}}) dependen de un número limitado de personas capaces. Su ausencia dejaría a varias de ellas con una cobertura de respaldo reducida.",
+  "risk.desc.role": "Todas las personas capaces de esta tarea crítica pertenecen al rol {{role}}.",
+  "risk.desc.single": "Solo {{person}} puede realizar esta tarea crítica. Si no está disponible, nadie puede realizarla.",
+  "risk.title.compMany": "La competencia \"{{competency}}\" tiene cobertura limitada",
+  "risk.title.compOne": "La competencia \"{{competency}}\" está concentrada en una sola persona",
+  "risk.title.doc": "{{task}} no está documentada",
+  "risk.title.noCoverage": "{{task}} no tiene cobertura disponible",
+  "risk.title.person": "La capacidad para {{count}} tareas críticas está concentrada en una sola persona ({{person}})",
+  "risk.title.role": "La cobertura de \"{{task}}\" proviene de un solo rol",
+  "risk.title.single": "La cobertura de \"{{task}}\" depende de una sola persona"
 }
