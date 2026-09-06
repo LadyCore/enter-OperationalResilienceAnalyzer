@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { validatePassword } from "@/lib/passwordPolicy";
 
 describe("validatePassword (ORA password policy)", () => {
-  it("accepts a valid password: exactly 8 chars with letter, number and special char", () => {
+  it("accepts a valid password: exactly 8 chars with uppercase, number and special char", () => {
     expect(validatePassword("Ora8#x2k")).toBeNull();
     expect(validatePassword("Ab1!cdef")).toBeNull();
   });
@@ -29,11 +29,16 @@ describe("validatePassword (ORA password policy)", () => {
     expect(validatePassword("1234#567")).toBe("passwordPolicy.letter");
   });
 
+  it("rejects passwords without an uppercase letter", () => {
+    expect(validatePassword("abc1234!")).toBe("passwordPolicy.uppercase");
+    expect(validatePassword("ora8#x2k")).toBe("passwordPolicy.uppercase");
+  });
+
   it("rejects passwords without a number", () => {
-    expect(validatePassword("abcd#efg")).toBe("passwordPolicy.number");
+    expect(validatePassword("Abcd#efg")).toBe("passwordPolicy.number");
   });
 
   it("rejects passwords without a special character", () => {
-    expect(validatePassword("abcd1234")).toBe("passwordPolicy.special");
+    expect(validatePassword("Abcd1234")).toBe("passwordPolicy.special");
   });
 });

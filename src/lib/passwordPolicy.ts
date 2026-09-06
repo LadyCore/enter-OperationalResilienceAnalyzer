@@ -4,14 +4,14 @@
  *
  * Rules:
  *  - at least 8 characters (no artificial upper limit)
- *  - at least one letter
+ *  - at least one uppercase letter
  *  - at least one number
  *  - at least one special character
  *  - no spaces
  */
 
 export const PASSWORD_POLICY_HINT =
-  "At least 8 characters with at least one letter, one number and one special character. No spaces.";
+  "At least 8 characters with at least one uppercase letter, one number and one special character. No spaces.";
 
 export const PASSWORD_PLACEHOLDER = "At least 8 characters";
 
@@ -22,6 +22,7 @@ export const PASSWORD_ERROR_KEYS = {
   length: "passwordPolicy.length",
   spaces: "passwordPolicy.spaces",
   letter: "passwordPolicy.letter",
+  uppercase: "passwordPolicy.uppercase",
   number: "passwordPolicy.number",
   special: "passwordPolicy.special",
 } as const;
@@ -36,6 +37,7 @@ export function validatePassword(password: string): string | null {
   if (password.length < 8) return PASSWORD_ERROR_KEYS.length;
   if (/\s/.test(password)) return PASSWORD_ERROR_KEYS.spaces;
   if (!/[A-Za-z]/.test(password)) return PASSWORD_ERROR_KEYS.letter;
+  if (!/[A-Z]/.test(password)) return PASSWORD_ERROR_KEYS.uppercase;
   if (!/[0-9]/.test(password)) return PASSWORD_ERROR_KEYS.number;
   if (!/[^A-Za-z0-9]/.test(password)) return PASSWORD_ERROR_KEYS.special;
   return null;
