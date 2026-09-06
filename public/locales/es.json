@@ -960,5 +960,9 @@
   "presentation.subtitle": "Conocé qué es ORA, qué analiza y cómo funciona.",
   "presentation.title": "Presentación de ORA",
   "presentation.view": "Ver presentación",
-  "presentation.viewerHint": "La presentación se abre aquí abajo, sin salir de ORA."
+  "presentation.viewerHint": "La presentación se abre aquí abajo, sin salir de ORA.",
+  "errorScreen.backHome": "Volver al inicio",
+  "errorScreen.message": "Algo inesperado ocurrió en ORA. La incidencia quedó registrada. Recargá para continuar o volvé al inicio.",
+  "errorScreen.retry": "Recargar",
+  "errorScreen.title": "Error inesperado en la aplicación"
 }

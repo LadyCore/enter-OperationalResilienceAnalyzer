@@ -960,5 +960,9 @@
   "presentation.subtitle": "Learn what ORA is, what it analyzes and how it works.",
   "presentation.title": "ORA Presentation",
   "presentation.view": "View presentation",
-  "presentation.viewerHint": "The presentation opens below, without leaving ORA."
+  "presentation.viewerHint": "The presentation opens below, without leaving ORA.",
+  "errorScreen.backHome": "Back to home",
+  "errorScreen.message": "Something unexpected happened in ORA. The incident was logged. Reload to continue, or return to home.",
+  "errorScreen.retry": "Reload",
+  "errorScreen.title": "Unexpected application error"
 }

@@ -1,6 +1,7 @@
 import { lazy } from "react";
 import { AppGuard } from "@/components/auth/AppGuard";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { RouteErrorScreen } from "@/components/common/RouteErrorScreen";
 
 // Public auth routes and the 404 are loaded on demand: an anonymous visitor
 // landing on "/" should not download the verify/forgot/reset/not-found code.
@@ -58,6 +59,7 @@ const FeedbackAdminPage = lazy(() =>
 export const routers = [
   {
     element: <AppLayout />,
+    errorElement: <RouteErrorScreen />,
     children: [
       /* Public auth routes (reachable with or without a session) */
       { path: "/verify-email", name: "verify-email", element: <VerifyEmailPage /> },

@@ -1,0 +1,27 @@
+-- =====================================================================
+-- Registro de errores de cliente (instrumentación / diagnóstico).
+-- Captura errores de React/runtime del navegador con contexto mínimo
+-- (ruta, url, user-agent, mensaje, stack) para diagnosticar reportes
+-- como el crash "removeChild" que no deja traza server-side.
+-- Solo el owner puede leerlos; cualquier sesión (o anónimo) puede insertar.
+-- =====================================================================
+create table if not exists public.client_error_logs (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  user_id uuid references auth.users (id) on delete set null,
+  route text,
+  url text,
+  source text,
+  message text,
+  stack text,
+  user_agent text
+);
+alter table public.client_error_logs enable row level security;
+
+create policy "client_error_logs_insert_all" on public.client_error_logs
+  for insert with check (true);
+
+create policy "client_error_logs_select_owner" on public.client_error_logs
+  for select using (public.is_owner());
+
+grant insert, select on public.client_error_logs to authenticated, anon;

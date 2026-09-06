@@ -1,0 +1,1 @@
+delete from public.client_error_logs where message like '%test removeChild%';
