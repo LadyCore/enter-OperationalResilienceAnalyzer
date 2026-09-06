@@ -55,7 +55,10 @@ export interface RpcResult {
 }
 
 /* Commercial constants — single source of truth for the UI. */
+/** Internal owner account email (used to identify the platform owner). */
 export const OWNER_EMAIL = "mariaeugeniasaldi@gmail.com";
+/** Public contact address shown for license requests and general contact. */
+export const LICENSE_CONTACT_EMAIL = "hola@oraresilience.com";
 export const DEMO_DAYS = 15;
 export const ELIGIBILITY_MONTHS = 12;
 /** Subscription is architected but not enabled commercially yet. */

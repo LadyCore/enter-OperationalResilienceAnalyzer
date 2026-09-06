@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { ArrowLeft, FileText } from "lucide-react";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { TERMS_EFFECTIVE_DATE, TERMS_VERSION } from "@/lib/terms";
-import { OWNER_EMAIL } from "@/lib/access/types";
+import { LICENSE_CONTACT_EMAIL } from "@/lib/access/types";
 
 /**
  * Section keys (static i18n keys, one title + one body per section).
@@ -73,7 +73,7 @@ export function TermsPage() {
             <section key={section.title} className="border-t pt-6 first:border-t-0 first:pt-0">
               <h2 className="text-base font-semibold tracking-tight">{t(section.title)}</h2>
               <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
-                {t(section.body, { email: OWNER_EMAIL })}
+                {t(section.body, { email: LICENSE_CONTACT_EMAIL })}
               </p>
             </section>
           ))}

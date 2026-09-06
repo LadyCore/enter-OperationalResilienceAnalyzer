@@ -8,7 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { OWNER_EMAIL } from "@/lib/access/types";
+import { LICENSE_CONTACT_EMAIL } from "@/lib/access/types";
 
 interface LicenseInfoDialogProps {
   open: boolean;
@@ -60,14 +60,14 @@ export function LicenseInfoDialog({ open, onOpenChange }: LicenseInfoDialogProps
 
         <div className="rounded-md bg-muted/60 px-3 py-2.5 text-xs text-muted-foreground">
           {t("license.contactLine")}{" "}
-          <a href={`mailto:${OWNER_EMAIL}`} className="font-medium text-foreground underline underline-offset-2">
-            {OWNER_EMAIL}
+          <a href={`mailto:${LICENSE_CONTACT_EMAIL}`} className="font-medium text-foreground underline underline-offset-2">
+            {LICENSE_CONTACT_EMAIL}
           </a>{" "}
           {t("license.requestPerpetual")}
         </div>
 
         <Button variant="outline" asChild>
-          <a href={`mailto:${OWNER_EMAIL}`}>
+          <a href={`mailto:${LICENSE_CONTACT_EMAIL}`}>
             <Mail className="h-4 w-4" /> {t("license.contactTeam")}
           </a>
         </Button>
