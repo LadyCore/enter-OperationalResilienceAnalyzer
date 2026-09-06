@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { useOra } from "@/store/OraContext";
 import { validatePassword } from "@/lib/passwordPolicy";
+import { localizeAuthError } from "@/lib/authErrors";
 import { Field } from "@/components/entities/field";
 
 type Status = "checking" | "ready" | "invalid";
@@ -83,7 +84,7 @@ export function ResetPasswordPage() {
       await signOut();
       setDone(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("auth.couldNotResetPassword"));
+      setError(localizeAuthError(err instanceof Error ? err.message : t("auth.couldNotResetPassword"), t));
     } finally {
       setBusy(false);
     }

@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { Field } from "@/components/entities/field";
+import { localizeAuthError } from "@/lib/authErrors";
 
 export function ForgotPasswordPage() {
   const { t } = useTranslation();
@@ -33,7 +34,7 @@ export function ForgotPasswordPage() {
       if (resetError) throw resetError;
       setSent(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("auth.couldNotSendResetLink"));
+      setError(localizeAuthError(err instanceof Error ? err.message : t("auth.couldNotSendResetLink"), t));
     } finally {
       setBusy(false);
     }

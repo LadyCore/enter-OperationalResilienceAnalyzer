@@ -120,6 +120,14 @@ export interface ImportIssue {
   code: string;
   message: string;
   row?: number;
+  /** Raw value the engine could not interpret (e.g. an unrecognized criticality). */
+  value?: string;
+  /** Person name referenced by the message (duplicate / manager by name). */
+  name?: string;
+  /** Referenced person name for ambiguous/not-found messages. */
+  refName?: string;
+  /** Match count for ambiguous references. */
+  count?: number;
 }
 
 /** An ambiguous person reference that the user must resolve before importing. */

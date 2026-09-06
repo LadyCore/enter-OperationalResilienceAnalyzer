@@ -17,6 +17,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { submitFeedback } from "@/lib/feedback/api";
 import { FEEDBACK_KINDS, type FeedbackContext, type FeedbackKind, type FeedbackTechnicalContext } from "@/lib/feedback/types";
 import { feedbackKindLabelKeys } from "./feedbackI18n";
+import { localizeFeedbackContext } from "./feedbackContextI18n";
 import {
   fileToCompressedDataUrl,
   MAX_FEEDBACK_SCREENSHOTS,
@@ -143,7 +144,7 @@ export function FeedbackDialog({ open, onOpenChange, context, technical, initial
 
   const contextLabel = isGeneral
     ? t("feedback.generalContext")
-    : context.breadcrumb ?? context.screen;
+    : localizeFeedbackContext(context, t);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>

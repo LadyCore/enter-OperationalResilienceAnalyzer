@@ -11,6 +11,7 @@ import { LanguageSwitcher } from "@/components/language-switcher";
 import { useOra } from "@/store/OraContext";
 import { validatePassword } from "@/lib/passwordPolicy";
 import { isEmailFormatError } from "@/lib/emailVerification";
+import { localizeAuthError } from "@/lib/authErrors";
 
 type Mode = "login" | "signup";
 
@@ -88,7 +89,7 @@ export function LoginPage() {
         setEmailError(t("auth.emailInvalidFormat"));
         setError(null);
       } else {
-        setError(message);
+        setError(localizeAuthError(message, t));
       }
     } finally {
       setBusy(false);
@@ -109,7 +110,7 @@ export function LoginPage() {
       if (error) throw error;
       setResent(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("auth.couldNotResendVerification"));
+      setError(localizeAuthError(err instanceof Error ? err.message : t("auth.couldNotResendVerification"), t));
     } finally {
       setBusy(false);
     }

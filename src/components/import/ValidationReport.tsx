@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { ValidationSummary } from "@/lib/importer/types";
+import { localizeIssue, localizeUnusableValue } from "./validationI18n";
 
 interface ValidationReportProps {
   summary: ValidationSummary;
@@ -111,7 +112,7 @@ export function ValidationReport({ summary, resolutions, onResolve }: Validation
               {errors.map((issue, i) => (
                 <li key={i} className="flex items-start gap-2 text-sm text-destructive">
                   <FileWarning className="mt-0.5 h-4 w-4 shrink-0" />
-                  <span>{issue.message}</span>
+                  <span>{localizeIssue(issue, t)}</span>
                 </li>
               ))}
             </ul>
@@ -132,7 +133,7 @@ export function ValidationReport({ summary, resolutions, onResolve }: Validation
               {warnings.map((issue, i) => (
                 <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
                   <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-risk-medium" />
-                  <span>{issue.message}</span>
+                  <span>{localizeIssue(issue, t)}</span>
                 </li>
               ))}
             </ul>
@@ -158,7 +159,7 @@ export function ValidationReport({ summary, resolutions, onResolve }: Validation
           <p className="font-medium text-risk-medium">{t("validation.unusableTitle")}</p>
           <ul className="mt-1.5 space-y-1 text-muted-foreground">
             {summary.unusableValues.map((v, i) => (
-              <li key={i}>• {v}</li>
+              <li key={i}>• {localizeUnusableValue(v, t)}</li>
             ))}
           </ul>
         </div>

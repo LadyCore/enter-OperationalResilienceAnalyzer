@@ -247,6 +247,7 @@ export function validateImport(
         severity: "warning",
         code: "duplicate-person",
         message: `The person "${person.name}" appears more than once with the same area, role and optional on-call/coverage — possible duplicate.`,
+        name: person.name,
       });
     }
   }
@@ -291,6 +292,8 @@ export function validateImport(
       code: kind === "manager" ? "manager-ambiguous" : "coverage-ambiguous",
       message: `Row ${row.sourceRow}: ${refName} matches ${matches.length} people. Review it before importing.`,
       row: row.sourceRow,
+      refName,
+      count: matches.length,
     });
   };
 
@@ -311,6 +314,7 @@ export function validateImport(
           code: "manager-not-found",
           message: `Row ${row.sourceRow}: manager identifier "${row.managerId}" does not match any imported person.`,
           row: row.sourceRow,
+          value: row.managerId,
         });
         continue;
       }
@@ -330,6 +334,7 @@ export function validateImport(
           code: "manager-not-found",
           message: `Row ${row.sourceRow}: manager "${row.responsable}" does not match any imported person.`,
           row: row.sourceRow,
+          name: row.responsable,
         });
         continue;
       }
@@ -387,6 +392,7 @@ export function validateImport(
         code: "coverage-not-found",
         message: `Row ${row.sourceRow}: the covered person "${refName}" does not match any imported person.`,
         row: row.sourceRow,
+        refName,
       });
     }
   }

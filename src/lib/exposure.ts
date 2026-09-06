@@ -56,6 +56,18 @@ export interface ExposureDescription {
   title: string;
   /** Why this is (or is not) serious. */
   note: string;
+  /**
+   * Stable structured variant of this description so the UI can render a
+   * localized title/note without re-implementing the analysis logic. The
+   * English title/note strings above remain the engine's canonical output.
+   */
+  kind: "maintained" | "permanent-gap" | "permanent-dependency" | "gap" | "reduction";
+  /** Short vs long explanation wording for the note. */
+  noteLength: "short" | "long";
+  /** Horizon adjective used by gap/reduction titles. */
+  horizon: "temporary" | "prolonged" | "sustained";
+  /** Criticality adjective that the localized wording must keep. */
+  criticality: Criticality;
 }
 
 const pluralDays = (days: number) => `${days} ${days === 1 ? "day" : "days"}`;
@@ -72,7 +84,14 @@ export function describeExposure(
   criticality: Criticality,
 ): ExposureDescription {
   if (impact === "none") {
-    return { title: "Coverage maintained", note: "Other capable people keep this task covered." };
+    return {
+      title: "Coverage maintained",
+      note: "Other capable people keep this task covered.",
+      kind: "maintained",
+      noteLength: "short",
+      horizon: "temporary",
+      criticality,
+    };
   }
 
   const relevance =
@@ -87,10 +106,18 @@ export function describeExposure(
       ? {
           title: "Permanent coverage gap",
           note: `No one can perform this ${relevance}task and the person will not return — a permanent gap.`,
+          kind: "permanent-gap",
+          noteLength: "long",
+          horizon: "sustained",
+          criticality,
         }
       : {
           title: "Permanent single-person dependency",
           note: `Only one capable person remains for this ${relevance}task and the person will not return — a persistent structural dependency.`,
+          kind: "permanent-dependency",
+          noteLength: "long",
+          horizon: "sustained",
+          criticality,
         };
   }
 
@@ -105,6 +132,10 @@ export function describeExposure(
         level === "short"
           ? `No one can perform this ${relevance}task for ${duration}.`
           : `No one can perform this ${relevance}task for ${duration}; the longer the gap, the greater the operational risk.`,
+      kind: "gap",
+      noteLength: level === "short" ? "short" : "long",
+      horizon: level,
+      criticality,
     };
   }
 
@@ -112,12 +143,20 @@ export function describeExposure(
     return {
       title: `Temporary reduction to single-person coverage — ${duration}`,
       note: `Only one capable person remains for this ${relevance}task for ${duration}.`,
+      kind: "reduction",
+      noteLength: "short",
+      horizon: "temporary",
+      criticality,
     };
   }
   const horizon = level === "prolonged" ? "Prolonged" : "Sustained";
   return {
     title: `${horizon} single-person dependency — ${duration}`,
     note: `Only one capable person remains for this ${relevance}task for ${duration}; the organization stays exposed to that person for a long period.`,
+    kind: "reduction",
+    noteLength: "long",
+    horizon: level,
+    criticality,
   };
 }
 

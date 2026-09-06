@@ -14,6 +14,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { validatePassword } from "@/lib/passwordPolicy";
+import { localizeAuthError } from "@/lib/authErrors";
 import { Field } from "@/components/entities/field";
 
 interface ChangePasswordDialogProps {
@@ -63,7 +64,7 @@ export function ChangePasswordDialog({ open, onOpenChange }: ChangePasswordDialo
       reset();
       onOpenChange(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("auth.couldNotChangePassword"));
+      setError(localizeAuthError(err instanceof Error ? err.message : t("auth.couldNotChangePassword"), t));
     } finally {
       setBusy(false);
     }

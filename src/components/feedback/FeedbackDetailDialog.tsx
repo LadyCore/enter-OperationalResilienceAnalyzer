@@ -31,6 +31,7 @@ import { toast } from "sonner";
 import type { Database } from "@/integrations/supabase/types";
 import { FEEDBACK_KINDS } from "@/lib/feedback/types";
 import { feedbackKindLabelKeys, feedbackStatusLabelKeys } from "./feedbackI18n";
+import { localizeFeedbackStage, localizeModuleLabel } from "./feedbackContextI18n";
 import { isLegacyDataUrl } from "@/lib/feedback/screenshots";
 import {
   FEEDBACK_STATUSES,
@@ -153,9 +154,9 @@ export function FeedbackDetailDialog({
             <InfoRow label="ID" value={feedback.id} />
             <InfoRow label={t("feedback.fields.dateTime")} value={new Date(feedback.created_at).toLocaleString()} />
             <InfoRow label={t("feedback.fields.type")} value={kindLabel} />
-            <InfoRow label={t("feedback.fields.module")} value={feedback.module ?? "—"} />
+            <InfoRow label={t("feedback.fields.module")} value={localizeModuleLabel(feedback.module, t) || "—"} />
             <InfoRow label={t("feedback.fields.screen")} value={feedback.screen ?? "—"} />
-            <InfoRow label={t("feedback.fields.stage")} value={feedback.stage ?? "—"} />
+            <InfoRow label={t("feedback.fields.stage")} value={localizeFeedbackStage(feedback.stage, t) || "—"} />
             <InfoRow
               label={t("feedback.generalLabel")}
               value={feedback.is_general ? t("feedback.yes") : t("feedback.no")}

@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { Field } from "@/components/entities/field";
 import { isEmailFormatError } from "@/lib/emailVerification";
+import { localizeAuthError } from "@/lib/authErrors";
 
 type Status = "checking" | "verified" | "expired";
 
@@ -82,7 +83,7 @@ export function VerifyEmailPage() {
         setEmailError(t("auth.emailInvalidFormat"));
         setError(null);
       } else {
-        setError(message);
+        setError(localizeAuthError(message, t));
       }
     } finally {
       setBusy(false);

@@ -48,6 +48,10 @@ import {
   feedbackKindLabelKeys,
   feedbackStatusLabelKeys,
 } from "@/components/feedback/feedbackI18n";
+import {
+  localizeFeedbackStage,
+  localizeModuleLabel,
+} from "@/components/feedback/feedbackContextI18n";
 
 const PAGE_SIZE = 20;
 
@@ -240,7 +244,7 @@ export function FeedbackAdminPage() {
             <SelectItem value="all">{t("feedbackAdmin.filter.anyModule")}</SelectItem>
             {FEEDBACK_MODULES.map((m) => (
               <SelectItem key={m} value={m}>
-                {m}
+                {localizeModuleLabel(m, t)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -375,11 +379,11 @@ export function FeedbackAdminPage() {
                           )}
                         </TableCell>
                         <TableCell className="hidden text-sm text-muted-foreground md:table-cell">
-                          {r.module ?? "—"}
+                          {localizeModuleLabel(r.module, t) || "—"}
                           {r.screen ? ` · ${r.screen}` : ""}
                         </TableCell>
                         <TableCell className="hidden text-sm text-muted-foreground lg:table-cell">
-                          {r.stage ?? "—"}
+                          {localizeFeedbackStage(r.stage, t) || "—"}
                         </TableCell>
                         <TableCell>
                           <StatusBadge status={r.status} />

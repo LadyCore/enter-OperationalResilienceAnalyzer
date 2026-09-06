@@ -15,6 +15,7 @@ import { useOra } from "@/store/OraContext";
 import { buildTaskAnalysis, deriveTaskCriticality } from "@/lib/analysis";
 import { CriticalityBadge } from "@/components/common/CriticalityBadge";
 import { DependencyBadge } from "@/components/common/DependencyBadge";
+import { localizeReason } from "@/components/common/localizedReasons";
 import type { Task } from "@/types";
 
 interface TaskDependencyTableProps {
@@ -151,7 +152,7 @@ export function TaskDependencyTable({ filter }: TaskDependencyTableProps) {
                               {derived.reasons.map((r, i) => (
                                 <li key={i} className="flex items-start gap-2 text-sm">
                                   <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-muted-foreground" />
-                                  {r}
+                                  {localizeReason(r, t)}
                                 </li>
                               ))}
                             </ul>
@@ -164,7 +165,7 @@ export function TaskDependencyTable({ filter }: TaskDependencyTableProps) {
                               {dependency.reasons.map((r, i) => (
                                 <li key={i} className="flex items-start gap-2 text-sm">
                                   <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-muted-foreground" />
-                                  {r}
+                                  {localizeReason(r, t)}
                                 </li>
                               ))}
                             </ul>

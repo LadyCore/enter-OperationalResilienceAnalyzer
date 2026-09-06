@@ -24,6 +24,7 @@ import { useOra } from "@/store/OraContext";
 import { simulateScenario, type AbsenceKind, type ScenarioAbsence, type ScenarioResult } from "@/lib/simulation";
 import { deriveTaskCriticality } from "@/lib/analysis";
 import { buildExposureReport } from "@/lib/exposure";
+import { localizeExposureDescription } from "@/components/common/exposureI18n";
 import { Field } from "../entities/field";
 import { cn } from "@/lib/utils";
 
@@ -564,6 +565,10 @@ export function SimulationPanel() {
                             const uncovered = result.uncoveredTaskIds.includes(change.taskId);
                             const reduced = result.reducedToSingleTaskIds.includes(change.taskId);
                             const taskExposure = exposureByTask.get(change.taskId);
+                            const localizedExposure =
+                              taskExposure && taskExposure.level !== "none"
+                                ? localizeExposureDescription(taskExposure.description, taskExposure.days, t)
+                                : null;
                             return (
                               <li key={change.taskId} className="flex flex-wrap items-center gap-3 px-4 py-3">
                                 <div className="min-w-0 flex-1">
@@ -587,12 +592,12 @@ export function SimulationPanel() {
                                       })}
                                     </span>
                                   </div>
-                                  {taskExposure && taskExposure.level !== "none" && (
+                                  {localizedExposure && (
                                     <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
                                       <span className="font-medium text-foreground">
-                                        {taskExposure.description.title}.
+                                        {localizedExposure.title}.
                                       </span>{" "}
-                                      {taskExposure.description.note}
+                                      {localizedExposure.note}
                                     </p>
                                   )}
                                 </div>
