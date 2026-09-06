@@ -132,7 +132,7 @@ function OrganizationSwitcher() {
   );
 }
 
-function UserMenu() {
+function UserMenu({ compact = false }: { compact?: boolean }) {
   const { user, signOut } = useOra();
   const { t } = useTranslation();
   const [passwordOpen, setPasswordOpen] = useState(false);
@@ -143,13 +143,30 @@ function UserMenu() {
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent/70 hover:text-sidebar-foreground"
+            aria-label={user?.email ?? "user"}
+            title={compact ? user?.email : undefined}
+            className={cn(
+              "flex items-center gap-2 rounded-md transition-colors hover:bg-sidebar-accent/70 hover:text-sidebar-foreground",
+              compact
+                ? "h-9 w-9 shrink-0 justify-center border border-sidebar-border bg-sidebar-accent/40 text-sidebar-foreground/70"
+                : "w-full px-2 py-1.5 text-xs text-sidebar-foreground/70",
+            )}
           >
             <CircleUserRound className="h-4 w-4 shrink-0" />
-            <span className="min-w-0 truncate">{user?.email}</span>
+            {!compact && (
+              <>
+                <span className="min-w-0 flex-1 truncate text-left">{user?.email}</span>
+                <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 opacity-60" />
+              </>
+            )}
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" sideOffset={6}>
+        <DropdownMenuContent align="start" side="top" sideOffset={6} className="w-56">
+          {user?.email && (
+            <p className="border-b px-2 py-1.5 text-xs text-muted-foreground">
+              <span className="block truncate">{user.email}</span>
+            </p>
+          )}
           <DropdownMenuItem onSelect={() => setPasswordOpen(true)}>
             <KeyRound className="h-4 w-4" />
             {t("auth.changePassword")}
@@ -239,6 +256,7 @@ export function AppShell() {
           <div className="w-40 shrink-0">
             <OrganizationSwitcher />
           </div>
+          <UserMenu compact />
         </header>
         <MobileNav />
 
