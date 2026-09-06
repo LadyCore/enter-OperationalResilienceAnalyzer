@@ -4227,6 +4227,10 @@ export type Database = {
             }
         Returns: Json
       }
+      is_internal_email: {
+        Args: { p_email: string }
+        Returns: boolean
+      }
       is_owner: {
         Args: Record<PropertyKey, never>
         Returns: boolean

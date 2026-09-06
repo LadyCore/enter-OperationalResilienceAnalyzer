@@ -52,3 +52,12 @@ export function isDemoAccess(access: MyAccess | null): access is MyAccess & { st
 export function isExpiringAccess(access: MyAccess | null): boolean {
   return access?.status === "demo_expiring";
 }
+
+/**
+ * True when the account is a limited DEMO (server-computed): a DEMO whose
+ * planned-absence simulation is locked to the full-license tier. Internal ORA
+ * users are exempted server-side and never get this flag.
+ */
+export function isDemoLimited(access: MyAccess | null): boolean {
+  return access?.demo_limited === true;
+}

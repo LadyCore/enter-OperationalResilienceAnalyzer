@@ -38,6 +38,11 @@ export interface MyAccess {
   started_at?: string;
   expires_at?: string;
   renewal_date?: string | null;
+  /**
+   * True when the account is a limited DEMO: a DEMO that is not exempted as an
+   * internal user. Limited DEMOs cannot use planned-absence simulation.
+   */
+  demo_limited?: boolean;
   available_modalities?: Modality[];
   subscription_enabled?: boolean;
 }
@@ -59,7 +64,7 @@ export interface RpcResult {
 export const OWNER_EMAIL = "mariaeugeniasaldi@gmail.com";
 /** Public contact address shown for license requests and general contact. */
 export const LICENSE_CONTACT_EMAIL = "hola@oraresilience.com";
-export const DEMO_DAYS = 15;
+export const DEMO_DAYS = 2;
 export const ELIGIBILITY_MONTHS = 12;
 /** Subscription is architected but not enabled commercially yet. */
 export const SUBSCRIPTION_ENABLED = false;

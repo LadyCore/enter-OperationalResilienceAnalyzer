@@ -4,6 +4,7 @@ import {
   formatDateDDMMYYYY,
   gateState,
   isDemoAccess,
+  isDemoLimited,
   isExpiring,
   isExpiringAccess,
 } from "@/lib/access/status";
@@ -104,5 +105,14 @@ describe("demo banner predicates", () => {
   it("isExpiringAccess matches only the expiring variant", () => {
     expect(isExpiringAccess(base({ status: "demo_expiring" }))).toBe(true);
     expect(isExpiringAccess(base({ status: "demo_active" }))).toBe(false);
+  });
+
+  it("isDemoLimited is true only for the server-computed limited DEMO flag", () => {
+    expect(isDemoLimited(base({ status: "demo_active", demo_limited: true }))).toBe(true);
+    expect(isDemoLimited(base({ status: "demo_expiring", demo_limited: true }))).toBe(true);
+    expect(isDemoLimited(base({ status: "demo_active", demo_limited: false }))).toBe(false);
+    expect(isDemoLimited(base({ status: "perpetual_active" }))).toBe(false);
+    expect(isDemoLimited(base({ status: "demo_active" }))).toBe(false);
+    expect(isDemoLimited(null)).toBe(false);
   });
 });

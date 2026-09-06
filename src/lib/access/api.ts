@@ -22,7 +22,7 @@ export interface ActivateDemoInput {
   clientName?: string;
 }
 
-/** Activate a 15-day DEMO. Enforces the 12-month DNI/CUIT reuse rule server-side. */
+/** Activate a DEMO (2 days; 15 for internal users). Enforces the 12-month DNI/CUIT reuse rule server-side. */
 export async function activateDemo({ taxType, taxId, clientName }: ActivateDemoInput): Promise<RpcResult> {
   const { data, error } = await supabase.rpc("request_demo", {
     p_tax_type: taxType,

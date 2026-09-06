@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowRight, CalendarClock, ListPlus, Trash2 } from "lucide-react";
+import { ArrowRight, CalendarClock, ListPlus, Lock, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,7 @@ import { DependencyBadge } from "@/components/common/DependencyBadge";
 import { ExposureBadge } from "@/components/common/ExposureBadge";
 import { exposureBadgeClass } from "@/components/common/exposureBadgeClass";
 import { useOra } from "@/store/OraContext";
+import { isDemoLimited } from "@/lib/access/status";
 import { simulateScenario, type AbsenceKind, type ScenarioAbsence, type ScenarioResult } from "@/lib/simulation";
 import { deriveTaskCriticality } from "@/lib/analysis";
 import { buildExposureReport } from "@/lib/exposure";
@@ -77,7 +78,13 @@ function inclusiveDays(startDate: string, endDate: string): number {
 
 export function SimulationPanel() {
   const { t } = useTranslation();
-  const { db } = useOra();
+  const { db, access } = useOra();
+  const demoLimited = isDemoLimited(access);
+  // Limited DEMOs keep unplanned (temporary) and permanent absences; planned
+  // (calendar-based) absences and their coverage planning need a full license.
+  const availableKinds: AbsenceKind[] = demoLimited
+    ? ["temporary", "permanent"]
+    : ["temporary", "planned", "permanent"];
   const [rows, setRows] = useState<Row[]>([]);
   const [globalKind, setGlobalKind] = useState<AbsenceKind>("temporary");
   const [globalDays, setGlobalDays] = useState(60);
@@ -151,6 +158,12 @@ export function SimulationPanel() {
       toast.error(t("sim.errorEmpty"));
       return;
     }
+    // Defense in depth: a limited DEMO must never run planned absences, even if
+    // a planned row somehow reached the included set.
+    if (demoLimited && rows.some((r) => r.kind === "planned")) {
+      toast.error(t("sim.demoPlannedLocked"));
+      return;
+    }
     const invalid = rows.find(
       (r) =>
         (r.kind === "temporary" && (!r.days || r.days <= 0)) ||
@@ -173,6 +186,14 @@ export function SimulationPanel() {
           <CardDescription>{t("sim.titleDescription")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Limited DEMO: planned absences need a full license */}
+          {demoLimited && (
+            <p className="flex items-start gap-2 rounded-md border border-risk-medium/30 bg-risk-medium/5 px-3 py-2 text-xs leading-relaxed text-risk-medium">
+              <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              {t("sim.demoPlannedLocked")}
+            </p>
+          )}
+
           {/* Defaults for people added below */}
           <div className="grid gap-4 rounded-lg border bg-muted/40 p-4 sm:grid-cols-[1fr_auto_auto] sm:items-end">
             <Field
@@ -180,7 +201,7 @@ export function SimulationPanel() {
               hint={t("sim.defaultHint")}
             >
               <div className="flex h-10 items-center gap-1 rounded-md border bg-card p-1">
-                {(["temporary", "planned", "permanent"] as const).map((key) => (
+                {availableKinds.map((key) => (
                   <button
                     key={key}
                     type="button"
@@ -300,11 +321,13 @@ export function SimulationPanel() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {(Object.keys(KIND_LABEL_KEYS) as AbsenceKind[]).map((k) => (
-                            <SelectItem key={k} value={k}>
-                              {t(KIND_LABEL_KEYS[k])}
-                            </SelectItem>
-                          ))}
+                          {(Object.keys(KIND_LABEL_KEYS) as AbsenceKind[])
+                            .filter((k) => !demoLimited || k !== "planned")
+                            .map((k) => (
+                              <SelectItem key={k} value={k}>
+                                {t(KIND_LABEL_KEYS[k])}
+                              </SelectItem>
+                            ))}
                         </SelectContent>
                       </Select>
                       {row.kind === "temporary" && (
