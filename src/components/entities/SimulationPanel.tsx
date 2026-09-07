@@ -423,10 +423,19 @@ export function SimulationPanel() {
           {(() => {
             const exposure = buildExposureReport(db, result);
             const exposureByTask = new Map(exposure.tasks.map((task) => [task.taskId, task]));
-            const titleSuffix =
-              result.absences.length === 1
-                ? t("sim.unavailableSingle", { person: result.absences[0].person.name })
-                : t("sim.unavailableMany", { count: result.absences.length });
+            const titleSuffix = (() => {
+              const total = result.absences.length;
+              const simultaneous = result.maxSimultaneousAbsences;
+              if (total === 1) {
+                return t("sim.unavailableSingle", { person: result.absences[0].person.name });
+              }
+              if (simultaneous >= 2) {
+                // A genuine overlap exists: report the true simultaneous count.
+                return t("sim.unavailableMany", { count: simultaneous });
+              }
+              // Several people, but no period where more than one is absent.
+              return t("sim.unavailableNonOverlapping", { count: total });
+            })();
             const total = result.busFactorPersonIds.length;
             return (
               <>

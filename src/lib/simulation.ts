@@ -61,6 +61,20 @@ export interface ScenarioResult {
   taskChanges: TaskChange[];
   /** Absences whose absence changed each affected task (used by the exposure view). */
   governingAbsencesByTask: Record<string, ResolvedAbsence[]>;
+  /**
+   * Interval-derived coverage-loss facts for scenarios with calendar dates:
+   * per affected task, the days its coverage fell below the original level
+   * (lossDays) and the days with zero capability (uncoveredDays). Absent for
+   * scenarios without dates, where the exposure view falls back to absence
+   * durations.
+   */
+  coverageLossDaysByTask?: Record<string, { lossDays: number; uncoveredDays: number }>;
+  /**
+   * Greatest number of distinct people actually absent in any single time
+   * interval. Reflects real simultaneity for dated scenarios (e.g. 1 for two
+   * non-overlapping planned absences, 2 for a genuine overlap).
+   */
+  maxSimultaneousAbsences: number;
   /** Tasks of absent people kept covered only thanks to vacation coverage. */
   vacationCoveredTaskIds: string[];
   vacationCoveredCompetencyIds: string[];
@@ -111,70 +125,184 @@ function isVacationAbsence(a: ScenarioAbsence | ResolvedAbsence): boolean {
   return a.kind === "planned" && (a.category ?? "").toLowerCase().replace(/[^a-z]/g, "") === "vacation";
 }
 
+/** Whole days (UTC) of an ISO date ("2026-09-07"), used as interval boundaries. */
+function dayOf(iso: string): number {
+  return Math.floor(Date.parse(`${iso}T00:00:00Z`) / 86_400_000);
+}
+
 /**
- * Run a multi-person absence scenario: all selected people are unavailable
- * SIMULTANEOUSLY, vacation coverage (B → A, only for A's planned Vacation
- * absence, only when B is not absent) can keep some of A's capabilities covered,
- * and the whole organization is re-analyzed as a single joint state. The result
- * is never the sum of individual simulations.
+ * Run a multi-person absence scenario over a temporal timeline.
+ *
+ * Planned absences carry individual dates (person, start, end). The scenario
+ * is decomposed into contiguous time intervals whose absent set is constant,
+ * so non-overlapping absences are never treated as simultaneous: capability is
+ * computed per interval and aggregated into per-task facts. Absences without
+ * dates (temporary, permanent, or undated planned) apply to the whole scenario
+ * exactly as before. Vacation coverage (B → A, only for A's planned Vacation
+ * absence) applies only in the intervals where both conditions hold.
  */
 export function simulateScenario(db: Db, absences: ScenarioAbsence[]): ScenarioResult {
   const resolved = resolveAbsences(db, absences);
   const absentIds = new Set(resolved.map((r) => r.person.id));
   const byAbsentId = new Map(resolved.map((r) => [r.person.id, r]));
 
-  // A copy of the db where the absent people are inactive (their ordinary
-  // profile is untouched; availability is what changes).
-  const simulatedPeople = db.people.map((p) =>
-    absentIds.has(p.id) ? { ...p, isActive: false } : p
-  );
+  /*
+   * Per-person absence windows. Planned absences with dates become real day
+   * intervals; everything else spans the whole scenario. A person can have
+   * several dated windows (e.g. two separate leave periods).
+   */
+  const windowsByPerson = new Map<string, { startDay: number | null; endDay: number | null }[]>();
+  const boundaries = new Set<number>();
+  for (const a of absences) {
+    if (!db.people.some((p) => p.id === a.personId)) continue;
+    let startDay: number | null = null;
+    let endDay: number | null = null;
+    if (a.kind === "planned" && a.startDate && a.endDate) {
+      startDay = dayOf(a.startDate);
+      endDay = dayOf(a.endDate);
+      boundaries.add(startDay);
+      boundaries.add(endDay + 1);
+    }
+    const list = windowsByPerson.get(a.personId) ?? [];
+    list.push({ startDay, endDay });
+    windowsByPerson.set(a.personId, list);
+  }
+
+  const sortedBoundaries = Array.from(boundaries).sort((x, y) => x - y);
+  const hasCalendar = sortedBoundaries.length >= 2;
+  const intervals: { startDay: number; endDay: number; days: number | null }[] = [];
+  if (hasCalendar) {
+    for (let i = 0; i < sortedBoundaries.length - 1; i++) {
+      intervals.push({
+        startDay: sortedBoundaries[i]!,
+        endDay: sortedBoundaries[i + 1]! - 1,
+        days: sortedBoundaries[i + 1]! - sortedBoundaries[i]!,
+      });
+    }
+  } else {
+    intervals.push({ startDay: 0, endDay: 0, days: null });
+  }
+
+  const absentInInterval = (
+    personId: string,
+    iv: { startDay: number; endDay: number; days: number | null },
+  ): boolean => {
+    const windows = windowsByPerson.get(personId) ?? [];
+    if (windows.length === 0) return false;
+    if (iv.days === null) return true; // symbolic scenario → all absent people apply
+    for (const w of windows) {
+      if (w.startDay === null) return true; // whole-scenario absence
+      if (w.endDay! >= iv.startDay && w.startDay! <= iv.endDay) return true;
+    }
+    return false;
+  };
 
   /*
-   * Vacation coverage. Only for people absent on a planned Vacation; the
-   * coverer must be active and must NOT be absent in the same scenario. The
-   * covered task/competency sets are grafted onto the coverer only inside this
-   * simulated copy — the base analysis never sees them.
+   * Per-interval simulated people: interval-absent people are inactive; the
+   * vacation coverage is grafted only in the intervals where the covered person
+   * is absent and the coverer is available.
    */
   const appliedCoverages: ScenarioResult["appliedCoverages"] = [];
+  const appliedCoverageKeys = new Set<string>();
   const vacationCoveredTaskIds = new Set<string>();
   const vacationCoveredCompetencyIds = new Set<string>();
 
-  for (const cov of db.vacationCoverages ?? []) {
-    const covered = byAbsentId.get(cov.coveredPersonId);
-    if (!covered) continue;
-    if (!isVacationAbsence(covered)) continue;
-    if (!cov.coveringPersonId || absentIds.has(cov.coveringPersonId)) continue;
-    const coverer = simulatedPeople.find((p) => p.id === cov.coveringPersonId);
-    if (!coverer || !coverer.isActive) continue;
-    if (cov.taskIds.length === 0 && cov.competencyIds.length === 0) continue;
-
-    simulatedPeople[simulatedPeople.indexOf(coverer)] = {
-      ...coverer,
-      taskIds: Array.from(new Set([...coverer.taskIds, ...cov.taskIds])),
-      competencyIds: Array.from(new Set([...coverer.competencyIds, ...cov.competencyIds])),
-    };
-    cov.taskIds.forEach((t) => vacationCoveredTaskIds.add(t));
-    cov.competencyIds.forEach((c) => vacationCoveredCompetencyIds.add(c));
-    appliedCoverages.push({
-      covererName: coverer.name,
-      coveredName: covered.person.name,
-      taskNames: cov.taskIds
-        .map((tid) => db.tasks.find((t) => t.id === tid)?.name ?? tid),
-    });
-  }
-
-  const simulated: Db = { ...db, people: simulatedPeople };
+  const simulatedByInterval: Db[] = intervals.map((iv) => {
+    const people = db.people.map((p) =>
+      absentInInterval(p.id, iv) ? { ...p, isActive: false } : { ...p },
+    );
+    for (const cov of db.vacationCoverages ?? []) {
+      if (!absentInInterval(cov.coveredPersonId, iv)) continue;
+      const covered = byAbsentId.get(cov.coveredPersonId);
+      if (!covered || !isVacationAbsence(covered)) continue;
+      if (!cov.coveringPersonId || absentInInterval(cov.coveringPersonId, iv)) continue;
+      const coverer = people.find((p) => p.id === cov.coveringPersonId);
+      if (!coverer || !coverer.isActive) continue;
+      if (cov.taskIds.length === 0 && cov.competencyIds.length === 0) continue;
+      people[people.indexOf(coverer)] = {
+        ...coverer,
+        taskIds: Array.from(new Set([...coverer.taskIds, ...cov.taskIds])),
+        competencyIds: Array.from(new Set([...coverer.competencyIds, ...cov.competencyIds])),
+      };
+      const key = `${cov.coveringPersonId}:${cov.coveredPersonId}`;
+      if (!appliedCoverageKeys.has(key)) {
+        appliedCoverageKeys.add(key);
+        cov.taskIds.forEach((t) => vacationCoveredTaskIds.add(t));
+        cov.competencyIds.forEach((c) => vacationCoveredCompetencyIds.add(c));
+        appliedCoverages.push({
+          covererName: coverer.name,
+          coveredName: covered.person.name,
+          taskNames: cov.taskIds
+            .map((tid) => db.tasks.find((t) => t.id === tid)?.name ?? tid),
+        });
+      }
+    }
+    return { ...db, people };
+  });
 
   const taskIdsOfAbsent = resolved.flatMap((r) => r.person.taskIds);
   const affectedTaskIds = Array.from(new Set(
     taskIdsOfAbsent.filter((tid) => db.tasks.some((t) => t.id === tid))
   ));
 
-  const uncoveredTaskIds = affectedTaskIds.filter(
-    (tid) => capablePeople(simulated, tid).length === 0
+  /* Per-task interval aggregation. */
+  const uncoveredTaskIds: string[] = [];
+  const reducedToSingleTaskIds: string[] = [];
+  const coverageLossDaysByTask: ScenarioResult["coverageLossDaysByTask"] = {};
+  const taskChanges: TaskChange[] = [];
+  const governingAbsencesByTask: Record<string, ResolvedAbsence[]> = {};
+
+  for (const tid of affectedTaskIds) {
+    const task = db.tasks.find((t) => t.id === tid)!;
+    const before = taskDependency(db, tid);
+    const capableBefore = new Set(capablePeople(db, tid).map((p) => p.id));
+    governingAbsencesByTask[tid] = resolved.filter((r) => capableBefore.has(r.person.id));
+
+    const counts = simulatedByInterval.map((sim) => capablePeople(sim, tid).length);
+    const minCount = counts.length ? Math.min(...counts) : before.capableCount;
+    const hasUncovered = counts.some((c) => c === 0);
+    const isReduced = before.capableCount >= 2 && !hasUncovered && minCount === 1;
+
+    if (hasUncovered) uncoveredTaskIds.push(tid);
+    else if (isReduced) reducedToSingleTaskIds.push(tid);
+
+    if (hasCalendar) {
+      let lossDays = 0;
+      let uncoveredDays = 0;
+      for (let i = 0; i < intervals.length; i++) {
+        const d = intervals[i]!.days!;
+        if (counts[i]! < before.capableCount) lossDays += d;
+        if (counts[i]! === 0) uncoveredDays += d;
+      }
+      coverageLossDaysByTask[tid] = { lossDays, uncoveredDays };
+    }
+
+    // "after" = the task's dependency at its worst moment in the scenario.
+    let after: TaskDependency = before;
+    if (minCount !== before.capableCount) {
+      const worstIndex = counts.indexOf(minCount);
+      after = taskDependency(simulatedByInterval[worstIndex]!, tid);
+    }
+    taskChanges.push({ taskId: tid, taskName: task.name, before, after });
+  }
+
+  const uncoveredCompetencyIds = competenciesOfAbsent(resolved).filter(
+    (cid) => simulatedByInterval.some((sim) => holdersOf(sim, cid).length === 0)
   );
-  const reducedToSingleTaskIds = affectedTaskIds.filter(
-    (tid) => capablePeople(db, tid).length >= 2 && capablePeople(simulated, tid).length === 1
+
+  const criticalCompetencyIds = new Set(
+    criticalTasks(db).flatMap((t) => t.requiredCompetencyIds)
+  );
+  const uncoveredCriticalCompetencyIds = uncoveredCompetencyIds.filter((cid) =>
+    criticalCompetencyIds.has(cid)
+  );
+
+  // Critical competencies left with exactly one holder in some interval.
+  const singleHolderCriticalCompetencyIds = competenciesOfAbsent(resolved).filter(
+    (cid) =>
+      criticalCompetencyIds.has(cid) &&
+      !uncoveredCompetencyIds.includes(cid) &&
+      simulatedByInterval.some((sim) => holdersOf(sim, cid).length === 1)
   );
 
   const criticalIds = new Set(criticalTasks(db).map((t) => t.id));
@@ -214,56 +342,27 @@ export function simulateScenario(db: Db, absences: ScenarioAbsence[]): ScenarioR
     )
   );
 
-  /*
-   * Competencies: a competency is uncovered when at least one absent person held
-   * it and after the scenario NO ONE holds it (the base profile of the
-   * remaining people is unchanged; vacation coverage can keep one alive).
-   */
-  const competenciesOfAbsent = Array.from(new Set(resolved.flatMap((r) => r.person.competencyIds)));
-  const uncoveredCompetencyIds = competenciesOfAbsent.filter(
-    (cid) => holdersOf(simulated, cid).length === 0
-  );
-
-  const criticalCompetencyIds = new Set(
-    criticalTasks(db).flatMap((t) => t.requiredCompetencyIds)
-  );
-  const uncoveredCriticalCompetencyIds = uncoveredCompetencyIds.filter((cid) =>
-    criticalCompetencyIds.has(cid)
-  );
-
-  // Critical competencies left with exactly one holder after the scenario.
-  const singleHolderCriticalCompetencyIds = competenciesOfAbsent.filter(
-    (cid) => criticalCompetencyIds.has(cid) && holdersOf(simulated, cid).length === 1
-  );
-
   const concentration = computePersonConcentration(db);
   const busFactorPersonIds = resolved
     .filter((r) => concentration.some((c) => c.person.id === r.person.id))
     .map((r) => r.person.id);
-
-  const taskChanges: TaskChange[] = affectedTaskIds.map((tid) => {
-    const task = db.tasks.find((t) => t.id === tid)!;
-    return {
-      taskId: tid,
-      taskName: task.name,
-      before: taskDependency(db, tid),
-      after: taskDependency(simulated, tid),
-    };
-  });
-
-  // Which resolved absences changed each affected task (capable before the
-  // scenario). Drives the per-task temporal exposure.
-  const governingAbsencesByTask: Record<string, ResolvedAbsence[]> = {};
-  for (const tid of affectedTaskIds) {
-    const capableBefore = new Set(capablePeople(db, tid).map((p) => p.id));
-    governingAbsencesByTask[tid] = resolved.filter((r) => capableBefore.has(r.person.id));
-  }
 
   const levelChangedTasks = taskChanges.filter(
     (c) => c.before.level !== c.after.level
   ).length;
 
   const availablePeople = db.people.filter((p) => p.isActive && !absentIds.has(p.id));
+
+  const maxSimultaneousAbsences = Math.max(
+    0,
+    ...intervals.map((iv) => {
+      let n = 0;
+      for (const personId of windowsByPerson.keys()) {
+        if (absentInInterval(personId, iv)) n += 1;
+      }
+      return n;
+    }),
+  );
 
   return {
     absences: resolved,
@@ -285,6 +384,8 @@ export function simulateScenario(db: Db, absences: ScenarioAbsence[]): ScenarioR
     criticalTasksLosingBackup,
     taskChanges,
     governingAbsencesByTask,
+    coverageLossDaysByTask,
+    maxSimultaneousAbsences,
     vacationCoveredTaskIds: Array.from(vacationCoveredTaskIds),
     vacationCoveredCompetencyIds: Array.from(vacationCoveredCompetencyIds),
     appliedCoverages,
@@ -304,6 +405,11 @@ export function simulateScenario(db: Db, absences: ScenarioAbsence[]): ScenarioR
       levelChangedTasks,
     },
   };
+}
+
+/** Competency ids held by at least one resolved absent person. */
+function competenciesOfAbsent(resolved: ResolvedAbsence[]): string[] {
+  return Array.from(new Set(resolved.flatMap((r) => r.person.competencyIds)));
 }
 
 /**

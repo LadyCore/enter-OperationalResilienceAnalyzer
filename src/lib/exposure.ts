@@ -198,10 +198,17 @@ export function buildExposureReport(db: Db, result: ScenarioResult): ExposureRep
 
     const governing = result.governingAbsencesByTask[change.taskId] ?? [];
     const isPermanent = governing.some((a) => a.kind === "permanent");
-    const days = governing.reduce(
-      (max, a) => (a.kind !== "permanent" ? Math.max(max, a.days) : max),
-      0,
-    );
+    // Dated scenarios carry interval-accurate coverage-loss days; otherwise the
+    // exposure falls back to the longest governing non-permanent absence.
+    const facts = result.coverageLossDaysByTask?.[change.taskId];
+    const days = facts
+      ? impact === "uncovered"
+        ? facts.uncoveredDays
+        : facts.lossDays
+      : governing.reduce(
+          (max, a) => (a.kind !== "permanent" ? Math.max(max, a.days) : max),
+          0,
+        );
 
     const level = computeTaskExposure(impact, isPermanent, days);
     return {

@@ -471,6 +471,7 @@
   "sim.toggle.planned": "Planned",
   "sim.toggle.temporary": "Temporary",
   "sim.unavailableMany": "{{count}} people being unavailable simultaneously",
+  "sim.unavailableNonOverlapping": "{{count}} people absent in non-overlapping periods",
   "sim.unavailableSingle": "{{person}} being unavailable",
   "sim.uncoveredCompetencies": "Uncovered competencies",
   "task.areaOptional": "Area (optional)",
