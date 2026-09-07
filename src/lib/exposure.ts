@@ -198,13 +198,15 @@ export function buildExposureReport(db: Db, result: ScenarioResult): ExposureRep
 
     const governing = result.governingAbsencesByTask[change.taskId] ?? [];
     const isPermanent = governing.some((a) => a.kind === "permanent");
-    // Dated scenarios carry interval-accurate coverage-loss days; otherwise the
-    // exposure falls back to the longest governing non-permanent absence.
+    // Dated scenarios carry interval-accurate coverage-loss runs: exposure uses
+    // the LONGEST CONTINUOUS run, so two separate windows are never presented as
+    // one uninterrupted dependency. Otherwise it falls back to the longest
+    // governing non-permanent absence.
     const facts = result.coverageLossDaysByTask?.[change.taskId];
     const days = facts
       ? impact === "uncovered"
-        ? facts.uncoveredDays
-        : facts.lossDays
+        ? facts.longestUncoveredRun
+        : facts.longestLossRun
       : governing.reduce(
           (max, a) => (a.kind !== "permanent" ? Math.max(max, a.days) : max),
           0,

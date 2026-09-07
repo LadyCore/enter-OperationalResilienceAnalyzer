@@ -38,6 +38,19 @@ export interface TaskChange {
   after: TaskDependency;
 }
 
+/** One segment of a task's capability timeline during a dated scenario. */
+export interface TaskTimelineSegment {
+  /** UTC day numbers of the segment (inclusive). */
+  startDay: number;
+  endDay: number;
+  /** Calendar days in the segment. */
+  days: number;
+  /** Capable people before the scenario. */
+  beforeCount: number;
+  /** Capable people during this segment. */
+  capableCount: number;
+}
+
 export interface ScenarioResult {
   absences: ResolvedAbsence[];
   /** Active people NOT in the scenario (stays available with its ordinary profile). */
@@ -64,11 +77,26 @@ export interface ScenarioResult {
   /**
    * Interval-derived coverage-loss facts for scenarios with calendar dates:
    * per affected task, the days its coverage fell below the original level
-   * (lossDays) and the days with zero capability (uncoveredDays). Absent for
+   * (lossDays), the days with zero capability (uncoveredDays), and the longest
+   * continuous runs of each (longestLossRun / longestUncoveredRun). Absent for
    * scenarios without dates, where the exposure view falls back to absence
    * durations.
    */
-  coverageLossDaysByTask?: Record<string, { lossDays: number; uncoveredDays: number }>;
+  coverageLossDaysByTask?: Record<
+    string,
+    {
+      lossDays: number;
+      uncoveredDays: number;
+      longestLossRun: number;
+      longestUncoveredRun: number;
+    }
+  >;
+  /**
+   * Per affected task, the capability over time: one segment per interval with
+   * a constant absent set, so periods with full capability (e.g. a day with no
+   * absence) remain visible. Absent for scenarios without calendar dates.
+   */
+  taskTimelines?: Record<string, TaskTimelineSegment[]>;
   /**
    * Greatest number of distinct people actually absent in any single time
    * interval. Reflects real simultaneity for dated scenarios (e.g. 1 for two
@@ -249,6 +277,7 @@ export function simulateScenario(db: Db, absences: ScenarioAbsence[]): ScenarioR
   const uncoveredTaskIds: string[] = [];
   const reducedToSingleTaskIds: string[] = [];
   const coverageLossDaysByTask: ScenarioResult["coverageLossDaysByTask"] = {};
+  const taskTimelines: ScenarioResult["taskTimelines"] = {};
   const taskChanges: TaskChange[] = [];
   const governingAbsencesByTask: Record<string, ResolvedAbsence[]> = {};
 
@@ -269,12 +298,39 @@ export function simulateScenario(db: Db, absences: ScenarioAbsence[]): ScenarioR
     if (hasCalendar) {
       let lossDays = 0;
       let uncoveredDays = 0;
+      let longestLossRun = 0;
+      let longestUncoveredRun = 0;
+      let curLoss = 0;
+      let curUncovered = 0;
+      const segments: TaskTimelineSegment[] = [];
       for (let i = 0; i < intervals.length; i++) {
-        const d = intervals[i]!.days!;
-        if (counts[i]! < before.capableCount) lossDays += d;
-        if (counts[i]! === 0) uncoveredDays += d;
+        const iv = intervals[i]!;
+        const d = iv.days!;
+        const c = counts[i]!;
+        segments.push({
+          startDay: iv.startDay,
+          endDay: iv.endDay,
+          days: d,
+          beforeCount: before.capableCount,
+          capableCount: c,
+        });
+        if (c < before.capableCount) {
+          lossDays += d;
+          curLoss += d;
+          longestLossRun = Math.max(longestLossRun, curLoss);
+        } else {
+          curLoss = 0;
+        }
+        if (c === 0) {
+          uncoveredDays += d;
+          curUncovered += d;
+          longestUncoveredRun = Math.max(longestUncoveredRun, curUncovered);
+        } else {
+          curUncovered = 0;
+        }
       }
-      coverageLossDaysByTask[tid] = { lossDays, uncoveredDays };
+      coverageLossDaysByTask[tid] = { lossDays, uncoveredDays, longestLossRun, longestUncoveredRun };
+      taskTimelines[tid] = segments;
     }
 
     // "after" = the task's dependency at its worst moment in the scenario.
@@ -385,6 +441,7 @@ export function simulateScenario(db: Db, absences: ScenarioAbsence[]): ScenarioR
     taskChanges,
     governingAbsencesByTask,
     coverageLossDaysByTask,
+    taskTimelines,
     maxSimultaneousAbsences,
     vacationCoveredTaskIds: Array.from(vacationCoveredTaskIds),
     vacationCoveredCompetencyIds: Array.from(vacationCoveredCompetencyIds),

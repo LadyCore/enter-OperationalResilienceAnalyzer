@@ -62,6 +62,15 @@ describe("H-018 — planned absences are evaluated per time interval", () => {
     const facts = result.coverageLossDaysByTask!["t_onboard"];
     expect(facts.uncoveredDays).toBe(0);
     expect(facts.lossDays).toBe(23);
+    // The two windows are separated by 15/09, so the longest continuous run is
+    // the single 15-day window — never presented as one uninterrupted 23-day loss.
+    expect(facts.longestLossRun).toBe(15);
+    expect(facts.longestUncoveredRun).toBe(0);
+
+    // The capability timeline keeps the full-capacity day visible: 1 → 2 → 1.
+    const timeline = result.taskTimelines!["t_onboard"];
+    expect(timeline.map((s) => s.capableCount)).toEqual([1, 2, 1]);
+    expect(timeline.map((s) => s.days)).toEqual([8, 1, 15]);
   });
 
   it("genuinely overlapping absences still detect a real simultaneous gap", () => {
@@ -82,6 +91,13 @@ describe("H-018 — planned absences are evaluated per time interval", () => {
     const facts = result.coverageLossDaysByTask!["t_onboard"];
     expect(facts.uncoveredDays).toBe(5);
     expect(facts.lossDays).toBe(14);
+    // The loss is continuous here, so the longest run equals the whole span.
+    expect(facts.longestLossRun).toBe(14);
+    expect(facts.longestUncoveredRun).toBe(5);
+
+    const timeline = result.taskTimelines!["t_onboard"];
+    expect(timeline.map((s) => s.capableCount)).toEqual([1, 0, 1]);
+    expect(timeline.map((s) => s.days)).toEqual([3, 5, 6]);
   });
 
   it("a person with two separate planned absences is handled as two windows", () => {

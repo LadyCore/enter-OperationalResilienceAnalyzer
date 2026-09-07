@@ -79,6 +79,16 @@ function inclusiveDays(startDate: string, endDate: string): number {
   return Math.max(0, Math.round((new Date(endDate).getTime() - new Date(startDate).getTime()) / 86_400_000) + 1);
 }
 
+/** "07/09" from a UTC day number (used by the per-period capability timeline). */
+const dayShort = (day: number) => {
+  const d = new Date(day * 86_400_000);
+  return `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+};
+
+/** "07/09–14/09" for a range, "15/09" for a single day. */
+const formatTimelineRange = (startDay: number, endDay: number) =>
+  startDay === endDay ? dayShort(startDay) : `${dayShort(startDay)}–${dayShort(endDay)}`;
+
 export function SimulationPanel() {
   const { t } = useTranslation();
   const { db, access } = useOra();
@@ -648,6 +658,32 @@ export function SimulationPanel() {
                                       {localizedExposure.note}
                                     </p>
                                   )}
+                                  {(() => {
+                                    const timeline = result.taskTimelines?.[change.taskId];
+                                    if (!timeline) return null;
+                                    return (
+                                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                                        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                          {t("sim.timelineLabel")}
+                                        </span>
+                                        {timeline.map((seg, i) => (
+                                          <span
+                                            key={i}
+                                            className={cn(
+                                              "rounded border px-1.5 py-0.5 text-[11px] tabular-nums",
+                                              seg.capableCount === 0
+                                                ? "border-risk-critical/30 bg-risk-critical/10 text-risk-critical"
+                                                : seg.capableCount < seg.beforeCount
+                                                  ? "border-risk-high/30 bg-risk-high/10 text-risk-high"
+                                                  : "border-risk-low/30 bg-risk-low/10 text-risk-low",
+                                            )}
+                                          >
+                                            {formatTimelineRange(seg.startDay, seg.endDay)} · {seg.capableCount}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    );
+                                  })()}
                                 </div>
                                 {uncovered && (
                                   <Badge className="border-transparent bg-risk-critical/10 text-risk-critical">

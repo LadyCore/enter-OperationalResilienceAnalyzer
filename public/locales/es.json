@@ -465,6 +465,7 @@
   "sim.simulationFootnote": "Esta simulación mide el cambio conjunto en la dependencia operativa cuando todas las personas seleccionadas están no disponibles al mismo tiempo. No evalúa el valor de ninguna persona. La cobertura de vacaciones solo se aplica a ausencias planificadas categorizadas como vacaciones; la guardia pasiva nunca se usa como cobertura de vacaciones.",
   "sim.singleHolder": "Competencias críticas que quedan con una sola persona",
   "sim.tasksWithoutCoverage": "Tareas sin cobertura",
+  "sim.timelineLabel": "Capacidad por período",
   "sim.title": "Escenario de ausencias",
   "sim.titleDescription": "Construye un escenario con una o varias personas no disponibles al mismo tiempo. Cada ausencia se aplica simultáneamente: ORA analiza el estado conjunto de la organización, nunca la suma de resultados individuales.",
   "sim.toggle.permanent": "Permanente",

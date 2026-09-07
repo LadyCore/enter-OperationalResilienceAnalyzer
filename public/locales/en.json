@@ -465,6 +465,7 @@
   "sim.simulationFootnote": "This simulation measures the joint change in operational dependency when all the selected people are unavailable at the same time. It does not evaluate any person's value. Vacation coverage only applies to planned absences categorized as vacations; passive on-call is never used as vacation coverage.",
   "sim.singleHolder": "Critical competencies left with a single holder",
   "sim.tasksWithoutCoverage": "Tasks without coverage",
+  "sim.timelineLabel": "Capability by period",
   "sim.title": "Absence scenario",
   "sim.titleDescription": "Build a scenario with one or several people unavailable at the same time. Every absence applies simultaneously — ORA analyzes the joint state of the organization, never the sum of individual results.",
   "sim.toggle.permanent": "Permanent",
