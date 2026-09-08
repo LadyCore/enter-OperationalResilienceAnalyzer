@@ -125,4 +125,20 @@ describe("H-018 — planned absences are evaluated per time interval", () => {
     expect(facts.lossDays).toBe(23);
     expect(result.maxSimultaneousAbsences).toBe(1);
   });
+
+  it("a critical uncovered task coexists with an empty critical-competency list (competency logic untouched)", () => {
+    // Genuine overlap: the critical task has zero capable people.
+    const result = simulateScenario(db, [
+      { personId: "p_jorge", kind: "planned", startDate: "2026-09-07", endDate: "2026-09-14", days: 8 },
+      { personId: "p_gabriela", kind: "planned", startDate: "2026-09-10", endDate: "2026-09-20", days: 11 },
+    ]);
+
+    // The critical task IS uncovered…
+    expect(result.uncoveredCriticalTaskIds).toContain("t_onboard");
+    expect(result.summary.uncoveredCriticalTasks).toBe(1);
+    // …while no critical competency is left with a single holder: both facts
+    // coexist and are presented independently (the UI calls out the first).
+    expect(result.singleHolderCriticalCompetencyIds).toEqual([]);
+    expect(result.uncoveredCriticalCompetencyIds).toEqual([]);
+  });
 });

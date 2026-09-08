@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowRight, CalendarClock, ListPlus, Lock, Trash2 } from "lucide-react";
+import { ArrowRight, AlertOctagon, CalendarClock, ListPlus, Lock, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,7 @@ import { simulateScenario, type AbsenceKind, type ScenarioAbsence, type Scenario
 import { deriveTaskCriticality } from "@/lib/analysis";
 import { buildExposureReport } from "@/lib/exposure";
 import { localizeExposureDescription } from "@/components/common/exposureI18n";
+import { criticalUncoveredDays } from "./simulationResults";
 import { Field } from "../entities/field";
 import { cn } from "@/lib/utils";
 
@@ -627,9 +628,32 @@ export function SimulationPanel() {
                               taskExposure && taskExposure.level !== "none"
                                 ? localizeExposureDescription(taskExposure.description, taskExposure.days, t)
                                 : null;
+                            const criticalUncovered = task
+                              ? criticalUncoveredDays({
+                                  taskId: change.taskId,
+                                  uncoveredTaskIds: result.uncoveredTaskIds,
+                                  criticality: deriveTaskCriticality(db, task).level,
+                                  exposureDays: taskExposure?.days,
+                                })
+                              : null;
                             return (
                               <li key={change.taskId} className="flex flex-wrap items-center gap-3 px-4 py-3">
                                 <div className="min-w-0 flex-1">
+                                  {criticalUncovered !== null && (
+                                    <div className="mb-2 flex items-start gap-2 rounded-md border border-risk-critical/40 bg-risk-critical/10 px-3 py-2">
+                                      <AlertOctagon className="mt-0.5 h-4 w-4 shrink-0 text-risk-critical" />
+                                      <div className="min-w-0">
+                                        <p className="text-sm font-semibold leading-snug text-risk-critical">
+                                          {criticalUncovered > 0
+                                            ? t("sim.criticalUncoveredTitle", { duration: dayCountLabel(criticalUncovered) })
+                                            : t("sim.criticalUncoveredTitlePlain")}
+                                        </p>
+                                        <p className="text-xs leading-relaxed text-risk-critical/90">
+                                          {t("sim.criticalUncoveredNote")}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  )}
                                   <div className="flex flex-wrap items-center gap-2">
                                     <span className="text-sm font-medium">{change.taskName}</span>
                                     {task && (
