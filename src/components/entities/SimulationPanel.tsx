@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowRight, AlertOctagon, CalendarClock, ListPlus, Lock, Trash2 } from "lucide-react";
+import { ArrowRight, AlertOctagon, CalendarClock, ListPlus, Lock, Trash2, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -762,59 +762,84 @@ export function SimulationPanel() {
                       </div>
                     </div>
 
-                    {/* Uncovered competencies */}
-                    <div>
-                      <h4 className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                        {t("sim.competenciesUncovered")}
-                      </h4>
-                      {result.uncoveredCompetencyIds.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">{t("sim.everyCompetencyCovered")}</p>
-                      ) : (
-                        <div className="flex flex-wrap gap-1.5">
-                          {result.uncoveredCompetencyIds.map((cid) => {
-                            const comp = db.competencies.find((c) => c.id === cid);
-                            const critical = result.uncoveredCriticalCompetencyIds.includes(cid);
-                            return (
-                              <Badge
-                                key={cid}
-                                className={
-                                  critical
-                                    ? "border-transparent bg-risk-critical/10 text-risk-critical"
-                                    : "border-transparent bg-risk-high/10 text-risk-high"
-                                }
-                              >
-                                {comp?.name ?? cid}
-                                {critical ? t("sim.requiredByCritical") : ""}
+                    {/* Critical tasks without coverage — always-visible card */}
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="flex items-center gap-2 text-sm">
+                          <TriangleAlert className="h-4 w-4 shrink-0 text-risk-critical" />
+                          {t("sim.criticalTasksWithoutCoverage")}
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {result.uncoveredCriticalTaskIds.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">{t("sim.noCriticalTaskUncovered")}</p>
+                        ) : (
+                          <div className="flex flex-wrap gap-1.5">
+                            {result.uncoveredCriticalTaskIds.map((tid) => (
+                              <Badge key={tid} className="border-transparent bg-risk-critical/10 text-risk-critical">
+                                {db.tasks.find((t) => t.id === tid)?.name ?? tid}
                               </Badge>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
+                            ))}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
 
-                    {/* Critical competencies left concentrated */}
-                    <div>
-                      <h4 className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                        {t("sim.singleHolder")}
-                      </h4>
-                      {result.singleHolderCriticalCompetencyIds.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">{t("sim.noSingleHolder")}</p>
-                      ) : (
-                        <div className="flex flex-wrap gap-1.5">
-                          {result.singleHolderCriticalCompetencyIds.map((cid) => {
-                            const comp = db.competencies.find((c) => c.id === cid);
-                            return (
-                              <Badge
-                                key={cid}
-                                className="border-transparent bg-risk-high/10 text-risk-high"
-                              >
-                                {comp?.name ?? cid}
-                              </Badge>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
+                    {/* Uncovered competencies — always-visible card */}
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm">{t("sim.competenciesUncovered")}</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {result.uncoveredCompetencyIds.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">{t("sim.everyCompetencyCovered")}</p>
+                        ) : (
+                          <div className="flex flex-wrap gap-1.5">
+                            {result.uncoveredCompetencyIds.map((cid) => {
+                              const comp = db.competencies.find((c) => c.id === cid);
+                              const critical = result.uncoveredCriticalCompetencyIds.includes(cid);
+                              return (
+                                <Badge
+                                  key={cid}
+                                  className={
+                                    critical
+                                      ? "border-transparent bg-risk-critical/10 text-risk-critical"
+                                      : "border-transparent bg-risk-high/10 text-risk-high"
+                                  }
+                                >
+                                  {comp?.name ?? cid}
+                                  {critical ? t("sim.requiredByCritical") : ""}
+                                </Badge>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    {/* Critical competencies left with a single holder — only when there are results */}
+                    {result.singleHolderCriticalCompetencyIds.length > 0 && (
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm">{t("sim.singleHolder")}</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="flex flex-wrap gap-1.5">
+                            {result.singleHolderCriticalCompetencyIds.map((cid) => {
+                              const comp = db.competencies.find((c) => c.id === cid);
+                              return (
+                                <Badge
+                                  key={cid}
+                                  className="border-transparent bg-risk-high/10 text-risk-high"
+                                >
+                                  {comp?.name ?? cid}
+                                </Badge>
+                              );
+                            })}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
 
                     <p className="rounded-md border bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground">
                       {t("sim.simulationFootnote")}

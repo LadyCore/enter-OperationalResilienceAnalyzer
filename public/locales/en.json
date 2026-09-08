@@ -444,6 +444,7 @@
   "sim.kind.temporary": "Temporary absence",
   "sim.nDays": "{{count}} days",
   "sim.noCoverageBadge": "No coverage",
+  "sim.noCriticalTaskUncovered": "No critical task is left without coverage.",
   "sim.noMorePeople": "No more people to add",
   "sim.noOneCanPerform": "No one can perform them anymore",
   "sim.noOtherCapable": "No other capable person",
