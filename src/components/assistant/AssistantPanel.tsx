@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useOra } from "@/store/OraContext";
 import { useAssistantChat, type AssistantMessage } from "@/hooks/useAssistantChat";
 import { buildAssistantScreenContext } from "@/lib/assistant/context";
-import { parseAssistantNavigation } from "@/lib/assistant/navigation";
+import { parseAssistantSegments } from "@/lib/assistant/navigation";
 import { normalizeLanguage } from "@/i18n/config";
 import { cn } from "@/lib/utils";
 
@@ -80,35 +80,45 @@ export function AssistantPanel({ open, onClose }: AssistantPanelProps) {
   };
 
   const renderMessage = (message: AssistantMessage, index: number) => {
-    const parsed = parseAssistantNavigation(message.content);
+    // Ordered segments (text + navigation buttons) so every button is rendered
+    // immediately after the suggestion/text that generated it.
+    const segments = parseAssistantSegments(message.content);
     const isLast = index === messages.length - 1;
     const waiting = message.isStreaming || (isLast && isLoading);
 
     return (
       <div key={`${message.role}-${index}`} className="flex flex-col gap-1.5">
-        {parsed.targets.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 pl-2">
-            {parsed.targets.map((target) => (
-              <button
-                key={target.path}
-                type="button"
-                onClick={() => navigate(target.path)}
-                className="flex items-center gap-1 rounded-full border bg-primary/5 px-3 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
-              >
-                {t("assistant.goTo", { label: target.label })}
-              </button>
-            ))}
-          </div>
-        )}
         <div
           className={cn(
-            "whitespace-pre-wrap rounded-xl px-3 py-2 text-sm leading-relaxed",
+            "rounded-xl px-3 py-2 text-sm leading-relaxed",
             message.role === "user"
               ? "ml-8 rounded-br-sm bg-primary text-primary-foreground"
               : "mr-8 rounded-bl-sm border bg-muted/40",
           )}
         >
-          {parsed.cleanContent || (waiting ? t("assistant.thinking") : "")}
+          {segments.length > 0 ? (
+            <div className="space-y-1.5">
+              {segments.map((segment, i) =>
+                segment.kind === "text" ? (
+                  <p key={i} className="whitespace-pre-wrap">
+                    {segment.text}
+                  </p>
+                ) : (
+                  <div key={i}>
+                    <button
+                      type="button"
+                      onClick={() => navigate(segment.path)}
+                      className="flex items-center gap-1 rounded-full border bg-primary/5 px-3 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
+                    >
+                      {t("assistant.goTo", { label: segment.label })}
+                    </button>
+                  </div>
+                ),
+              )}
+            </div>
+          ) : (
+            waiting && t("assistant.thinking")
+          )}
           {waiting && <Loader2 className="mt-1 h-3.5 w-3.5 animate-spin text-muted-foreground" />}
         </div>
       </div>

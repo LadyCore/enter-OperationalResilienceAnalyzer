@@ -73,3 +73,43 @@ export function parseAssistantNavigation(content: string): ParsedNavigation {
   }
   return { cleanContent: kept.join("\n").replace(/\n{3,}/g, "\n\n").trim(), targets };
 }
+
+/**
+ * One ordered piece of an assistant reply. `target` segments carry a resolved
+ * navigation destination; `text` segments are plain reply content.
+ */
+export type AssistantSegment =
+  | { kind: "text"; text: string }
+  | { kind: "target"; label: string; path: string };
+
+/**
+ * Split an assistant reply into ordered segments so every navigation button can
+ * be rendered immediately after the suggestion/text that generated it, keeping
+ * the chronological order of the reply. `⟶ Go to …` lines that resolve to an
+ * allowed route become `target` segments; everything else stays as `text`.
+ */
+export function parseAssistantSegments(content: string): AssistantSegment[] {
+  const segments: AssistantSegment[] = [];
+  let buffer: string[] = [];
+  const flushText = () => {
+    const text = buffer.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+    if (text) segments.push({ kind: "text", text });
+    buffer = [];
+  };
+
+  for (const line of content.split("\n")) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith(NAVIGATION_MARKER)) {
+      const label = trimmed.slice(NAVIGATION_MARKER.length).trim();
+      const path = resolveAssistantRoute(label);
+      if (path) {
+        flushText();
+        segments.push({ kind: "target", label, path });
+        continue;
+      }
+    }
+    buffer.push(line);
+  }
+  flushText();
+  return segments;
+}
