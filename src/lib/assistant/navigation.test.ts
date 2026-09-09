@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseAssistantSegments } from "./navigation";
+import { assistantDestinationLabel, parseAssistantSegments } from "./navigation";
 
 describe("parseAssistantSegments — buttons keep the chronological order of the reply", () => {
   it("renders the navigation target immediately after the text that generated it", () => {
@@ -46,5 +46,17 @@ Mundo
     expect(segments.map((s) => s.kind)).toEqual(["text", "target"]);
     expect(segments[0]!.kind === "text" && segments[0].text).toBe("Hola\n\nMundo");
     expect(segments[1]!.kind === "target" && segments[1].path).toBe("/tasks");
+  });
+});
+
+describe("assistantDestinationLabel — canonical label per language", () => {
+  it("returns the label for each supported language", () => {
+    expect(assistantDestinationLabel("/analysis", "es")).toBe("Análisis");
+    expect(assistantDestinationLabel("/analysis", "en")).toBe("Analysis");
+    expect(assistantDestinationLabel("/simulation", "es")).toBe("Simulación");
+  });
+
+  it("returns null for an unknown route", () => {
+    expect(assistantDestinationLabel("/not-a-route", "en")).toBeNull();
   });
 });

@@ -7,7 +7,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useOra } from "@/store/OraContext";
 import { useAssistantChat, type AssistantMessage } from "@/hooks/useAssistantChat";
 import { buildAssistantScreenContext } from "@/lib/assistant/context";
-import { parseAssistantSegments } from "@/lib/assistant/navigation";
+import { assistantDestinationLabel, parseAssistantSegments } from "@/lib/assistant/navigation";
+import { detectLanguage, historyButtonLanguage, type AssistantLang } from "@/lib/assistant/language";
 import { normalizeLanguage } from "@/i18n/config";
 import { cn } from "@/lib/utils";
 
@@ -51,16 +52,20 @@ export function AssistantPanel({ open, onClose }: AssistantPanelProps) {
 
   if (!open) return null;
 
-  const language = normalizeLanguage(i18n.resolvedLanguage ?? i18n.language) ?? "en";
+  const language = (normalizeLanguage(i18n.resolvedLanguage ?? i18n.language) ?? "en") as AssistantLang;
 
   const handleSend = async (content: string) => {
     const trimmed = content.trim();
     if (!trimmed || isLoading) return;
     setDraft("");
     lastUserContent.current = trimmed;
+    // The reply follows the language of the user's question; the platform
+    // language is the default when the question language cannot be detected.
+    const replyLanguage = detectLanguage(trimmed) ?? language;
     await sendMessage({
       content: trimmed,
-      language,
+      language: replyLanguage,
+      createdUnderLanguage: language,
       screen: location.pathname,
       screenContext: currentContext,
       organizationId: activeOrganizationId,
@@ -110,7 +115,17 @@ export function AssistantPanel({ open, onClose }: AssistantPanelProps) {
                       onClick={() => navigate(segment.path)}
                       className="flex items-center gap-1 rounded-full border bg-primary/5 px-3 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
                     >
-                      {t("assistant.goTo", { label: segment.label })}
+                      {t("assistant.goTo", {
+                        label:
+                          assistantDestinationLabel(
+                            segment.path,
+                            historyButtonLanguage({
+                              platformLanguage: language,
+                              messageLanguage: message.language,
+                              createdUnderLanguage: message.createdUnderLanguage,
+                            }),
+                          ) ?? segment.label,
+                      })}
                     </button>
                   </div>
                 ),

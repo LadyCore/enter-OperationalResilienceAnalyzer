@@ -13,12 +13,18 @@ export interface AssistantMessage {
   role: "user" | "assistant";
   content: string;
   isStreaming?: boolean;
+  /** Language the assistant reply was generated in (detected question language). */
+  language?: "en" | "es";
+  /** Platform language at the moment the reply was generated. */
+  createdUnderLanguage?: "en" | "es";
 }
 
 export interface AssistantSendInput {
   content: string;
-  /** Current ORA language: "en" | "es". */
+  /** Language the reply should be generated in (detected question language, platform fallback). */
   language: string;
+  /** Platform language at send time (used to re-localize history on switch). */
+  createdUnderLanguage: "en" | "es";
   /** Current route path. */
   screen: string;
   /** Real screen/organization context (aggregates) built by the caller. */
@@ -64,7 +70,13 @@ export function useAssistantChat() {
 
     abortRef.current = new AbortController();
     const userMessage: AssistantMessage = { role: "user", content: input.content };
-    const assistantMessage: AssistantMessage = { role: "assistant", content: "", isStreaming: true };
+    const assistantMessage: AssistantMessage = {
+      role: "assistant",
+      content: "",
+      isStreaming: true,
+      language: (input.language === "es" ? "es" : "en"),
+      createdUnderLanguage: input.createdUnderLanguage,
+    };
     setMessages((prev) => [...prev, userMessage, assistantMessage]);
     setIsLoading(true);
     setError(null);

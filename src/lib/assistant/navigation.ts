@@ -113,3 +113,13 @@ export function parseAssistantSegments(content: string): AssistantSegment[] {
   flushText();
   return segments;
 }
+
+/**
+ * Canonical label of a navigation destination in the requested language. Used
+ * to render navigation buttons coherently with the current chat language,
+ * regardless of the language the model used in the marker line.
+ */
+export function assistantDestinationLabel(path: string, language: "en" | "es"): string | null {
+  const dest = ASSISTANT_NAVIGATION.find((d) => d.path === path);
+  return dest ? dest[language] : null;
+}
