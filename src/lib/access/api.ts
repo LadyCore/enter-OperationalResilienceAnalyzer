@@ -100,6 +100,10 @@ export function describeRpcError(result: RpcResult): string {
         : "This DNI/CUIT is not eligible for a new DEMO yet.";
     case "demo_already_active":
       return "A DEMO is already active for this account.";
+    case "dni_taken":
+      return "This DNI/CUIT is already registered and linked to another ORA account.";
+    case "email_taken":
+      return "This email is already linked to another registered identity in ORA.";
     case "already_licensed":
       return "This account already has an active license.";
     case "owner":

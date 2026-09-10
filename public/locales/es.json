@@ -118,6 +118,8 @@
   "access.couldNotVerifyNote": "ORA no pudo confirmar tu estado de acceso. Vuelve a intentarlo.",
   "access.error.alreadyLicensed": "Esta cuenta ya tiene una licencia activa.",
   "access.error.demoAlreadyActive": "Ya hay una DEMO activa para esta cuenta.",
+  "access.error.dniTaken": "Este DNI/CUIT ya está registrado y asociado a otra cuenta de ORA.",
+  "access.error.emailTaken": "Este email ya está asociado a otra identidad registrada en ORA.",
   "access.error.forbidden": "Solo el propietario de ORA puede realizar esta acción.",
   "access.error.generic": "No se pudo completar la solicitud.",
   "access.error.notEligibleUntil": "Este DNI/CUIT se usó para una DEMO en los últimos 12 meses. Vuelve a ser elegible el {{date}}.",

@@ -19,6 +19,10 @@ export function useRpcError() {
             : t("access.error.notEligibleYet");
         case "demo_already_active":
           return t("access.error.demoAlreadyActive");
+        case "dni_taken":
+          return t("access.error.dniTaken");
+        case "email_taken":
+          return t("access.error.emailTaken");
         case "already_licensed":
           return t("access.error.alreadyLicensed");
         case "owner":

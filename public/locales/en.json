@@ -118,6 +118,8 @@
   "access.couldNotVerifyNote": "ORA could not confirm your access status. Please retry.",
   "access.error.alreadyLicensed": "This account already has an active license.",
   "access.error.demoAlreadyActive": "A DEMO is already active for this account.",
+  "access.error.dniTaken": "This DNI/CUIT is already registered and linked to another ORA account.",
+  "access.error.emailTaken": "This email is already linked to another registered identity in ORA.",
   "access.error.forbidden": "Only the ORA owner can perform this action.",
   "access.error.generic": "The request could not be completed.",
   "access.error.notEligibleUntil": "This DNI/CUIT was used for a DEMO in the last 12 months. It becomes eligible again on {{date}}.",

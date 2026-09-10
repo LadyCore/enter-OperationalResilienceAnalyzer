@@ -1,0 +1,192 @@
+create or replace function public.request_demo(p_tax_type text, p_tax_id text, p_client_name text default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_email text;
+  v_client_id uuid;
+  v_client_email text;
+  v_demo_id uuid;
+  v_used record;
+  v_eligible_after timestamptz;
+  v_duration interval;
+begin
+  if v_uid is null then
+    return jsonb_build_object('ok', false, 'reason', 'unauthorized');
+  end if;
+
+  if public.is_owner() then
+    return jsonb_build_object('ok', false, 'reason', 'owner');
+  end if;
+
+  select email into v_email from public.profiles where id = v_uid;
+
+  v_duration := case when public.is_internal_email(v_email)
+    then interval '15 days' else interval '2 days' end;
+
+  select email into v_client_email
+  from public.clients
+  where tax_id = p_tax_id and tax_type = p_tax_type
+  limit 1;
+  if v_client_email is not null then
+    if lower(v_client_email) <> lower(v_email) then
+      return jsonb_build_object('ok', false, 'reason', 'dni_taken');
+    end if;
+  elsif exists (
+    select 1 from public.clients where lower(email) = lower(v_email)
+  ) then
+    return jsonb_build_object('ok', false, 'reason', 'email_taken');
+  end if;
+
+  if exists (
+    select 1 from public.licenses l
+    join public.license_users lu on lu.license_id = l.id
+    where lu.user_id = v_uid and l.status = 'active'
+  ) then
+    return jsonb_build_object('ok', false, 'reason', 'already_licensed');
+  end if;
+
+  if exists (
+    select 1 from public.demo_sessions where user_id = v_uid and expires_at > now()
+  ) then
+    return jsonb_build_object('ok', false, 'reason', 'demo_already_active');
+  end if;
+
+  select used_at into v_used
+  from public.demo_usage_history
+  where tax_id = p_tax_id and tax_type = p_tax_type
+    and used_at > now() - interval '12 months'
+  order by used_at desc
+  limit 1;
+
+  if v_used.used_at is not null then
+    v_eligible_after := v_used.used_at + interval '12 months';
+    return jsonb_build_object(
+      'ok', false,
+      'reason', 'not_eligible',
+      'eligible_after', v_eligible_after
+    );
+  end if;
+
+  select id into v_client_id
+  from public.clients
+  where tax_id = p_tax_id and tax_type = p_tax_type
+  limit 1;
+
+  if v_client_id is null then
+    insert into public.clients (name, tax_type, tax_id, email)
+    values (coalesce(nullif(p_client_name, ''), v_email), p_tax_type, p_tax_id, v_email)
+    returning id into v_client_id;
+  end if;
+
+  insert into public.demo_sessions (user_id, client_id, started_at, expires_at)
+  values (v_uid, v_client_id, now(), now() + v_duration)
+  returning id into v_demo_id;
+
+  insert into public.demo_usage_history (tax_id, tax_type, client_id, demo_session_id, used_at)
+  values (p_tax_id, p_tax_type, v_client_id, v_demo_id, now());
+
+  return jsonb_build_object(
+    'ok', true,
+    'demo_id', v_demo_id,
+    'expires_at', now() + v_duration,
+    'access', public.get_my_access()
+  );
+end;
+$$;
+grant execute on function public.request_demo(text, text, text) to authenticated;
+
+create or replace function public.admin_grant_demo(p_user_email text, p_tax_type text, p_tax_id text, p_client_name text default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid;
+  v_client_id uuid;
+  v_client_email text;
+  v_demo_id uuid;
+  v_used record;
+  v_duration interval;
+begin
+  if not public.is_owner() then
+    return jsonb_build_object('ok', false, 'reason', 'forbidden');
+  end if;
+
+  select id into v_user_id from public.profiles where lower(email) = lower(p_user_email);
+  if v_user_id is null then
+    return jsonb_build_object('ok', false, 'reason', 'user_not_found');
+  end if;
+
+  v_duration := case when public.is_internal_email(p_user_email)
+    then interval '15 days' else interval '2 days' end;
+
+  select email into v_client_email
+  from public.clients
+  where tax_id = p_tax_id and tax_type = p_tax_type
+  limit 1;
+  if v_client_email is not null then
+    if lower(v_client_email) <> lower(p_user_email) then
+      return jsonb_build_object('ok', false, 'reason', 'dni_taken');
+    end if;
+  elsif exists (
+    select 1 from public.clients where lower(email) = lower(p_user_email)
+  ) then
+    return jsonb_build_object('ok', false, 'reason', 'email_taken');
+  end if;
+
+  if exists (
+    select 1 from public.licenses l
+    join public.license_users lu on lu.license_id = l.id
+    where lu.user_id = v_user_id and l.status = 'active'
+  ) then
+    return jsonb_build_object('ok', false, 'reason', 'already_licensed');
+  end if;
+
+  if exists (
+    select 1 from public.demo_sessions where user_id = v_user_id and expires_at > now()
+  ) then
+    return jsonb_build_object('ok', false, 'reason', 'demo_already_active');
+  end if;
+
+  select used_at into v_used
+  from public.demo_usage_history
+  where tax_id = p_tax_id and tax_type = p_tax_type
+    and used_at > now() - interval '12 months'
+  order by used_at desc
+  limit 1;
+
+  if v_used.used_at is not null then
+    return jsonb_build_object(
+      'ok', false,
+      'reason', 'not_eligible',
+      'eligible_after', v_used.used_at + interval '12 months'
+    );
+  end if;
+
+  select id into v_client_id
+  from public.clients
+  where tax_id = p_tax_id and tax_type = p_tax_type
+  limit 1;
+
+  if v_client_id is null then
+    insert into public.clients (name, tax_type, tax_id, email)
+    values (coalesce(nullif(p_client_name, ''), p_user_email), p_tax_type, p_tax_id, p_user_email)
+    returning id into v_client_id;
+  end if;
+
+  insert into public.demo_sessions (user_id, client_id, started_at, expires_at)
+  values (v_user_id, v_client_id, now(), now() + v_duration)
+  returning id into v_demo_id;
+
+  insert into public.demo_usage_history (tax_id, tax_type, client_id, demo_session_id, used_at)
+  values (p_tax_id, p_tax_type, v_client_id, v_demo_id, now());
+
+  return jsonb_build_object('ok', true, 'demo_id', v_demo_id);
+end;
+$$;
+grant execute on function public.admin_grant_demo(text, text, text, text) to authenticated;
