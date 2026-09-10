@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowRight, AlertOctagon, CalendarClock, ListPlus, Lock, Trash2, TriangleAlert } from "lucide-react";
+import { ArrowRight, AlertOctagon, CalendarClock, Clock3, ListPlus, Lock, Trash2, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,11 @@ import { ExposureBadge } from "@/components/common/ExposureBadge";
 import { exposureBadgeClass } from "@/components/common/exposureBadgeClass";
 import { useOra } from "@/store/OraContext";
 import { isDemoLimited } from "@/lib/access/status";
+import {
+  getPlannedTrialState,
+  startPlannedTrial,
+  validatePlannedTrialExecution,
+} from "@/lib/demoPlannedTrial";
 import { simulateScenario, type AbsenceKind, type ScenarioAbsence, type ScenarioResult } from "@/lib/simulation";
 import { deriveTaskCriticality } from "@/lib/analysis";
 import { buildExposureReport } from "@/lib/exposure";
@@ -92,12 +97,22 @@ const formatTimelineRange = (startDay: number, endDay: number) =>
 
 export function SimulationPanel() {
   const { t } = useTranslation();
-  const { db, access } = useOra();
+  const { db, access, user } = useOra();
   const demoLimited = isDemoLimited(access);
-  // Limited DEMOs keep unplanned (temporary) and permanent absences fully
-  // working. "Planned absence" stays VISIBLE but locked for them (commercial
-  // upgrade prompt); full-license accounts use it normally.
-  const plannedLocked = demoLimited;
+  // DEMO limited accounts get a 2-hour trial of Planned absence simulation,
+  // starting on their FIRST access to Planned. Full licenses are unlimited.
+  // A periodic tick drives the countdown without a page reload.
+  const [clock, setClock] = useState(() => Date.now());
+  useEffect(() => {
+    if (!demoLimited) return;
+    const id = window.setInterval(() => setClock(Date.now()), 30_000);
+    return () => window.clearInterval(id);
+  }, [demoLimited]);
+  const trial = getPlannedTrialState(access, user?.id, clock);
+  const trialActive = trial.status === "active";
+  const trialExpired = trial.status === "expired";
+  // Planned is locked for DEMO only once the 2-hour trial has expired.
+  const plannedBlocked = trialExpired;
   const [rows, setRows] = useState<Row[]>([]);
   const [globalKind, setGlobalKind] = useState<AbsenceKind>("temporary");
   const [globalDays, setGlobalDays] = useState(60);
@@ -119,6 +134,16 @@ export function SimulationPanel() {
   const dayCountLabel = (n: number) => (n === 1 ? t("sim.oneDay") : t("sim.nDays", { count: n }));
   const categoryLabel = (cat?: string) =>
     cat ? (CATEGORY_LABEL_KEYS[cat] ? t(CATEGORY_LABEL_KEYS[cat]) : cat) : "";
+
+  /** "1 h 42 min" / "18 min" from the remaining trial time. */
+  const formatTrialRemaining = (ms: number): string => {
+    const totalMinutes = Math.max(1, Math.ceil(ms / 60_000));
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return hours > 0
+      ? t("sim.durationHoursMinutes", { hours, minutes })
+      : t("sim.durationMinutes", { minutes });
+  };
 
   /** Absence list passed to the engine (only rows with a chosen person). */
   const buildAbsences = (list: Row[]): ScenarioAbsence[] =>
@@ -171,10 +196,16 @@ export function SimulationPanel() {
       toast.error(t("sim.errorEmpty"));
       return;
     }
-    // Defense in depth: a limited DEMO must never run planned absences, even if
-    // a planned row somehow reached the included set.
-    if (plannedLocked && rows.some((r) => r.kind === "planned")) {
-      toast(t("sim.plannedRequiresLicense"));
+    // Defense in depth: a limited DEMO may run Planned only while its 2-hour
+    // trial is active. This check is enforced at execution time, not only in
+    // the interface, so a Planned scenario is rejected even if reached by
+    // another access path once the trial has ended.
+    if (
+      demoLimited &&
+      rows.some((r) => r.kind === "planned") &&
+      !validatePlannedTrialExecution(access, user?.id, clock)
+    ) {
+      toast(t("sim.plannedTrialExpired"));
       return;
     }
     const invalid = rows.find(
@@ -199,11 +230,17 @@ export function SimulationPanel() {
           <CardDescription>{t("sim.titleDescription")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Limited DEMO: planned absences need a full license */}
-          {demoLimited && (
+          {/* DEMO Planned-absence trial: countdown while active, lock message once expired */}
+          {demoLimited && trialActive && (
+            <p className="flex items-start gap-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs leading-relaxed text-primary">
+              <Clock3 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              {t("sim.plannedTrialRemaining", { remaining: formatTrialRemaining(trial.remainingMs) })}
+            </p>
+          )}
+          {demoLimited && trialExpired && (
             <p className="flex items-start gap-2 rounded-md border border-risk-medium/30 bg-risk-medium/5 px-3 py-2 text-xs leading-relaxed text-risk-medium">
               <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              {t("sim.demoPlannedLocked")}
+              {t("sim.plannedTrialExpired")}
             </p>
           )}
 
@@ -211,20 +248,26 @@ export function SimulationPanel() {
           <div className="grid gap-4 rounded-lg border bg-muted/40 p-4 sm:grid-cols-[1fr_auto_auto] sm:items-end">
             <Field
               label={t("sim.defaultType")}
-              hint={plannedLocked ? t("sim.plannedLockedHint") : t("sim.defaultHint")}
+              hint={t("sim.defaultHint")}
             >
               <div className="flex h-10 items-center gap-1 rounded-md border bg-card p-1">
                 {ABSENCE_KINDS.map((key) => {
-                  const isLocked = plannedLocked && key === "planned";
+                  const isLocked = plannedBlocked && key === "planned";
                   return (
                     <button
                       key={key}
                       type="button"
                       onClick={() => {
+                        if (key === "planned" && demoLimited && trial.status === "not-started") {
+                          // First access to Planned starts the 2-hour DEMO trial.
+                          startPlannedTrial(user?.id);
+                          setGlobalKind(key);
+                          setResult(null);
+                          return;
+                        }
                         if (isLocked) {
-                          // Visible-but-disabled for the DEMO plan: a clear
-                          // commercial message instead of selecting the kind.
-                          toast(t("sim.plannedRequiresLicense"));
+                          // Trial expired: clear commercial message.
+                          toast(t("sim.plannedTrialExpired"));
                           return;
                         }
                         setGlobalKind(key);
@@ -232,7 +275,7 @@ export function SimulationPanel() {
                       }}
                       aria-pressed={globalKind === key}
                       aria-disabled={isLocked || undefined}
-                      title={isLocked ? t("sim.plannedRequiresLicense") : undefined}
+                      title={isLocked ? t("sim.plannedTrialExpired") : undefined}
                       className={cn(
                         "flex h-7 items-center gap-1.5 rounded px-3 text-xs font-medium transition-colors",
                         isLocked
@@ -349,7 +392,7 @@ export function SimulationPanel() {
                         </SelectTrigger>
                         <SelectContent>
                           {(Object.keys(KIND_LABEL_KEYS) as AbsenceKind[])
-                            .filter((k) => !demoLimited || k !== "planned")
+                            .filter((k) => !plannedBlocked || k !== "planned")
                             .map((k) => (
                               <SelectItem key={k} value={k}>
                                 {t(KIND_LABEL_KEYS[k])}
